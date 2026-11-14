@@ -46,7 +46,23 @@ extension Graph {
             pruneEdges(of: node, keeping: cursor)
             table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
                 | NodeState.hasValue
-            if outcome.changed { table.versions[n] &+= 1 }
+            if outcome.changed {
+                globalVersion &+= 1
+                table.versions[n] &+= 1
+            } else {
+                for dependent in table.outputs[n] {
+                    let dep = Int(dependent)
+                    if table.state[dep] & NodeState.dirty != 0,
+                       table.state[dep] & (NodeState.pending | NodeState.stateful) == 0,
+                       table.inputs[dep].count == 1,
+                       table.inputs[dep][0].source == node,
+                       table.inputs[dep][0].seenVersion == table.versions[n] {
+                        table.state[dep] &= ~NodeState.dirty
+                        table.lastVerified[dep] = globalVersion
+                    }
+                }
+            }
+            table.lastVerified[n] = globalVersion
             frames.removeLast()
         }
     }

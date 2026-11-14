@@ -14,6 +14,9 @@ public final class Graph {
     var subgraphs = SubgraphTable()
     var currentSubgraph: SubgraphID
 
+    /// Global epoch counter bumped every time an attribute value in the graph changes.
+    public internal(set) var globalVersion: UInt32 = 1
+
     // Subgraph invalidation (see `Graph+Invalidation.swift`).
     var subgraphObservers: [UInt32: [Observer]] = [:]
     /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.

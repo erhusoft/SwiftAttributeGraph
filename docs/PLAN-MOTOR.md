@@ -1,6 +1,6 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)) y M5 ([§9](#9-resultados-de-m5)).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)) y M5 ([§9](#9-resultados-de-m5)).
 M4 sigue parcial: el [camino reanudable aditivo](INTEGRACION-M4.md) ya se integra en el almacén real y pasa los
 presupuestos de rendimiento en Mac ([§11](#11-integración-aditiva-de-m4-en-mac)); falta decidir y validar la migración
 de las lecturas dinámicas síncronas. El [prototipo aislado](#10-prototipo-aislado-de-m4) queda como referencia.
@@ -42,7 +42,7 @@ una pieza descubra otra cosa.
 | # | Pieza | Qué incluye | Criterio de terminado | Estado |
 |---|---|---|---|---|
 | M0 | **Núcleo** | `Graph`, tabla de ranuras, `AttributeID`, **subgrafo plano** (los atributos nacen en el subgrafo actual; invalidarlo libera lo suyo), nodos de valor y de regla, aristas de entrada **con versión vista**, **versión por nodo**, propagación de sucio, recálculo perezoso con pila explícita, rastreo de lecturas, poda, lotes y observación. Comparación: solo `bits` y «siempre distinto» | Detalle en [DISENO-M0.md](DISENO-M0.md): 21 tests antiguos de SwiftGraph traducidos o adaptados (7 descartados con motivo), más los de **paridad** con SwiftUI real, oráculo de valores y de ejecuciones, profundidad ≥ 20.000, vida y rendimiento | ✅ ([resultados](#6-resultados-de-m0)) |
-| M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | 🔴 |
+| M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | ✅ ([resultados](#12-resultados-de-m1)) |
 | M2 | **Políticas de comparación por atributo** | Cuatro políticas más `bits`, resueltas una vez por tipo y política al crear el atributo (caché por grafo): `viewValue` (por defecto), `environment`, `stateWrite`, `alwaysDifferent`. Reglas medidas en SwiftUI real en [DISENO-M2.md](DISENO-M2.md) §2 (campo a campo; hoja trivial por bytes en la vista y `==` en `@State`; existenciales por su tipo dinámico) | Cada política reproduce las filas medidas en SwiftUI real (caliente); sin `as? any Equatable` en el camino de escritura; medida de escrituras; el relleno no se compara | ✅ ([resultados](#7-resultados-de-m2)) |
 | M3 | **Reglas con estado** | `StatefulRule` y `RuleContext`: valor anterior, poder no cambiarlo, `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)` y estado propio (`mutating`); forma de tipo y de cierre | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta; profundidad 20.000; el estado se libera con el subgrafo | ✅ ([resultados](#8-resultados-de-m3)) |
 | M4 | **Actualización sin recursión total** | [Camino aditivo integrado](INTEGRACION-M4.md): reglas reanudables sobre el almacén, comparadores y subgrafos reales; validado en Mac hasta 100.000 niveles y dentro del presupuesto. Las APIs síncronas siguen con su límite | Resolver la migración y compatibilidad de lecturas dinámicas síncronas; cerrar la garantía de no recursión sin cambiar de hilo | 🟡 Parcial ([§11](#11-integración-aditiva-de-m4-en-mac)) |
@@ -406,3 +406,30 @@ TDD adicional: se vio fallar la inicialización adelantada y se corrigió; una m
 **Pendiente:** las reglas síncronas no se han migrado y pueden mantener recursión nativa en sus lecturas nuevas.
 Por eso no se declara M4 completo. Falta definir su contrato de convivencia, memoria total y cargas representativas,
 y completar las demás piezas en Mac. Windows sigue aplazado hasta completar el motor en Mac.
+
+## 12. Resultados de M1
+
+Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño: [DISENO-M1.md](DISENO-M1.md).
+
+**Hecho:**
+- Contador de época global `globalVersion: UInt32` en `Graph`, incrementado únicamente cuando un valor cambia de verdad (en `setValue` o cuando una regla publica un valor distinto según su política de comparación).
+- Arreglo paralelo `lastVerified: [UInt32]` en `NodeTable`, que registra la época global en la que cada ranura fue verificada y limpiada.
+- Atajo de corte en dependientes monádicos (una sola entrada): cuando una regla recomputa al mismo valor (`changed == false`), sus dependientes con una sola entrada se desmarcan directamente como limpios sin necesidad de apilar y desapilar marcos redundantes en la pila de actualización.
+- Cobertura completa en el camino síncrono (`run`) y reanudable (`advanceResumable`).
+- Tests en `VersionCutTests`:
+  1. La versión global no sube en escrituras idénticas ni en reglas que devuelven el mismo valor; sube en cambios reales.
+  2. Cadena lineal de reglas: una regla intermedia produce el mismo valor $\to$ ninguna regla aguas abajo se ejecuta.
+  3. Grafo en diamante: dos ramas intermedias convergen en una regla final. Las dos ramas recalculan al mismo valor $\to$ la regla final no corre.
+  4. Abanico de 50 dependientes: la regla compartida recalcula al mismo valor $\to$ ninguno de los 50 dependientes corre.
+  5. Reglas con estado (`StatefulRule`): una regla que no modifica `context.value` preserva su versión y corta la ejecución de sus dependientes.
+  6. Reglas reanudables (`ResumableRule`): corte idéntico en el camino reanudable.
+- Batería completa: 191 tests en 23 suites en verde en depuración y en release (conservando los 2 «known issues» documentados de M2). 0 avisos.
+
+**Medidas** (release, Swift 6.2.4 en Mac M1):
+- Escribir en la raíz y actualizar una cadena de 20.000 reglas: **5,63 ms**.
+- La misma cadena, cuando el corte por versión para el cambio en la primera regla: **0,73 ms** (aceleración de **7,7×** gracias al corte).
+- 50 ciclos de escribir + actualizar 1.000 dependientes: **19,53 ms**.
+- Sin regresiones en las demás métricas de rendimiento existentes.
+
+**Límites y no verificado:**
+- El atajo de limpieza directa hacia delante se limita a dependientes de entrada única no pendientes ni con estado; para grafos con dependencias múltiples, la verificación sigue haciéndose al tirar del dependiente.

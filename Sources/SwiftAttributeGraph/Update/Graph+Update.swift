@@ -53,7 +53,9 @@ extension Graph {
         let index = Int(attribute.id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
         guard typedNode(attribute).store(value) else { return }
+        globalVersion &+= 1
         table.versions[index] &+= 1
+        table.lastVerified[index] = globalVersion
         if table.state[index] & NodeState.observed != 0 { queueNotification(UInt32(index)) }
         propagateDirty(from: UInt32(index))
         flushNotifications()
@@ -110,6 +112,7 @@ extension Graph {
                 run(node)
             } else {
                 table.state[n] &= ~(NodeState.dirty | NodeState.evaluating)
+                table.lastVerified[n] = globalVersion
             }
             frames.removeLast()
         }
@@ -159,7 +162,23 @@ extension Graph {
         pruneEdges(of: node, keeping: cursor)
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
             | NodeState.hasValue
-        if changed { table.versions[n] &+= 1 }
+        if changed {
+            globalVersion &+= 1
+            table.versions[n] &+= 1
+        } else {
+            for dependent in table.outputs[n] {
+                let dep = Int(dependent)
+                if table.state[dep] & NodeState.dirty != 0,
+                   table.state[dep] & (NodeState.pending | NodeState.stateful) == 0,
+                   table.inputs[dep].count == 1,
+                   table.inputs[dep][0].source == node,
+                   table.inputs[dep][0].seenVersion == table.versions[n] {
+                    table.state[dep] &= ~NodeState.dirty
+                    table.lastVerified[dep] = globalVersion
+                }
+            }
+        }
+        table.lastVerified[n] = globalVersion
     }
 
     /// Where what a rule creates is born: the subgraph that owns the rule, or its nearest ancestor that is not being
