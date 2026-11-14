@@ -1,0 +1,62 @@
+# Plan del motor SwiftAttributeGraph
+
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Nada está implementado todavía salvo el esqueleto del paquete.
+
+## 1. Objetivo y criterio de «motor al 100 %»
+
+Un motor de grafo de atributos **completo y verificado** antes de conectarle una UI. «Al 100 %» significa:
+1. Todas las piezas M0–M9 de §3 están hechas, con sus tests en verde.
+2. La batería de especificación (M9) pasa: oráculos de comportamiento, profundidad ≥ 20.000 sin recursión, vuelta
+   de `nodeCount` a la base y rendimiento medido.
+3. Cubre lo que una capa de vistas tipo SwiftUI necesita, según `ESTUDIO-OPENSWIFTUI-VISTAS.md` en el repositorio
+   SwiftGraph: atributos persistentes con dueño, `body` como regla que se salta si nada cambió, subgrafos para ramas y
+   colecciones, y entradas y salidas como atributos.
+
+**Fuera de alcance:** vistas, layout, dibujo, ventanas, accesibilidad e hilos múltiples sobre un mismo grafo.
+
+## 2. Decisiones de diseño de partida (de los estudios y de las medidas en SwiftGraph)
+
+| Tema | Decisión | Por qué |
+|---|---|---|
+| Identidad | `AttributeID` = índice de 32 bits + generación de 32 bits | Salsa; medido en SwiftGraph (G1) |
+| Almacén | Tabla de ranuras con lista libre; la generación invalida los IDs viejos | G1 |
+| Nodo | Parte común no genérica (estado, aristas, banderas) separada del valor tipado | G2/G3: 3,8× en propagación |
+| Aristas | Arreglos de enteros; la de entrada es un registro `(fuente, versión vista, banderas)` | Compute, Signals |
+| Sucio | Separar «posiblemente sucio» (empuje) de «cambió de verdad» (versión) | Las cuatro fuentes coinciden |
+| Corte | Versión por nodo, que sube solo si el valor cambió; se verifica en orden de lectura | Signals; Salsa y Compute equivalentes |
+| Rastreo | Contexto actual en almacenamiento por hilo nativo, sin diccionarios | G5: 18× |
+| Actualización | Pila explícita con índice de reanudación por marco, también para lecturas dinámicas | Compute `UpdateStack`; P1 |
+| Vida | El subgrafo es el dueño: jerárquico y con invalidación diferida durante una actualización | Compute, OpenSwiftUI |
+| Lenguaje | Swift puro | Ver la discusión en SwiftGraph: la ganancia está en la estructura de datos, no en el lenguaje |
+
+## 3. Piezas
+
+Cada pieza sigue el proceso de `AGENTS.md` §4. **Orden:** M0 primero; el resto en el orden de la tabla salvo que
+una pieza descubra otra cosa.
+
+| # | Pieza | Qué incluye | Criterio de terminado | Estado |
+|---|---|---|---|---|
+| M0 | **Núcleo** | `Graph`, tabla de ranuras, `AttributeID`, nodos de valor y de regla, aristas, propagación de sucio, recálculo perezoso con pila explícita, rastreo de lecturas, poda | Los tests del grafo actual de SwiftGraph (`GraphTests`, `GraphOracleTests`, `GraphStructuralOracleTests`, `NodeLifecycleTests`, `NodeStorageTests`, `TrackingContextStorageTests`), traducidos a la API nueva, en verde | 🔴 |
+| M1 | **Corte por versiones** | Versión por nodo; versión vista por arista; un nodo sucio no ejecuta su regla si ninguna entrada cambió de versión | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; las entradas se verifican en orden de lectura | 🔴 |
+| M2 | **Comparador por tipo** | Igualdad resuelta una vez por tipo al crear el nodo (`Equatable`, tipos triviales o «siempre distinto») | Sin `as? any Equatable` en el camino caliente; medida de escrituras | 🔴 |
+| M3 | **Reglas con estado** | Acceso al valor anterior y a qué entradas cambiaron (equivalente a `StatefulRule` y `anyInputsChanged`) | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta | 🔴 |
+| M4 | **Actualización sin recursión total** | Las lecturas dinámicas dentro de una regla tampoco usan la pila nativa; reentrada (actualización anidada) | Cadena de 20.000 lecturas dinámicas no declaradas sin desbordar; test de reentrada | 🔴 |
+| M5 | **Subgrafos** | Jerarquía padre-hijo; los atributos nacen en el subgrafo actual; invalidar un subgrafo libera todo lo suyo; diferido si hay una actualización en curso | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización | 🔴 |
+| M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | 🔴 |
+| M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🔴 |
+| M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | 🔴 |
+| M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🔴 |
+
+## 4. Decisiones abiertas (se resuelven en la pieza que las necesite)
+
+- **API pública:** ¿un `Attribute<Value>` ligero (solo el ID, como en AttributeGraph) o un objeto nodo como el
+  `GraphNode` actual? Se decide en M0 con un test de uso y una medida.
+- **Dónde vive el valor:** en el objeto nodo (como hoy) o en almacenes por tipo. Se decide en M0 midiendo.
+- **Reglas:** ¿cierre (`() -> Value`) o tipo con `value` (como `Rule`)? Un tipo evita reservar un cierre por nodo.
+  Se decide en M0.
+
+## 5. Conexión con la UI (después, no ahora)
+
+Cuando M0–M9 estén hechas, el proyecto SwiftGraph pasará a depender de este paquete. Entonces se decidirá cómo
+conectar las vistas (opciones O2 y O3 de `DECISION-ARQUITECTURA-VISTAS.md` en SwiftGraph). Hasta entonces **no se
+toca la UI** por este trabajo.
