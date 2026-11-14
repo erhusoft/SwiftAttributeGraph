@@ -130,7 +130,9 @@ extension Graph {
         let previousGraph = ThreadLocalGraph.install(self)
         let previousSubgraph = currentSubgraph
         let owner = table.owner(at: node)
-        if currentSubgraph.index != owner { currentSubgraph = subgraphForCreating(in: owner) }
+        if currentSubgraph.index != owner || subgraphs.isFalling(index: owner) {
+            currentSubgraph = subgraphForCreating(in: owner)
+        }
 
         let changed = table.box(at: node).evaluate(in: self, node: node)
 

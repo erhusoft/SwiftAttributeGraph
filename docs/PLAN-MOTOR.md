@@ -275,6 +275,20 @@ El criterio era no empeorar más del ≈ 10 % lo de M0: **se cumple salvo en «2
 trabajo nuevo por subgrafo (seis arreglos de enlaces en vez de dos, el recorrido en posorden y el reparto de avisos).
 Se probó evitar reservas en el recorrido y no instalar el subgrafo actual si ya es el del propietario; la mejora fue mínima.
 
+**Correcciones tras la revisión (2026-11-14):**
+- La pertenencia al conjunto que se libera se comprueba con un `Set` local del posorden. El indicador «cayendo» no
+  sirve para ello: también marca otros conjuntos pendientes. Antes quedaban aristas hacia nodos muertos entre dos
+  invalidaciones diferidas, y un aviso podía leer un resultado obsoleto. Ahora se desprenden las aristas en ambos
+  sentidos y se ensucia al lector que sigue vivo antes de entregar su aviso posterior.
+- Si una regla invalida su dueño y lee otra regla del mismo dueño, la segunda instala el ancestro vivo para crear
+  atributos y subgrafos. La optimización por igualdad del subgrafo actual ya no omite comprobar si está cayendo.
+- TDD: tres pruebas nuevas fallaron antes de corregir (desprendimiento en cada dirección y creación anidada con el
+  mismo dueño cayendo); después pasan las 21 pruebas de `SubgraphTests`. La batería de depuración sin rendimiento
+  pasa 146 pruebas; la batería completa de release, 159. Ambas conservan los dos problemas conocidos de M2.
+- Medidas tras corregir (mismo Mac y Swift 6.2.4, medianas del test release): 2.000 subgrafos, **6,92 ms**;
+  árbol de 111.111 subgrafos, **56,85 ms**; 20 rondas de 1.000 filas, **36,01 ms**; 50 ciclos de 1.000 reglas,
+  **18,85 ms**. Son medidas de la batería, no una comparación estadística aislada; no se atribuyen mejoras al cambio.
+
 **Límites y no verificado:**
 - **Orden entre hermanos no prometido.** SwiftUI lo muestra inverso en una rama y directo en un `ForEach`; el motor usa
   el orden de creación.

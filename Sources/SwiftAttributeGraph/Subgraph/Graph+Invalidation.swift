@@ -87,15 +87,17 @@ extension Graph {
         }
 
         // 2. Detach the owned attributes from their neighbours outside the set before any slot is freed.
+        // Falling also includes separately queued invalidations; only this set is freed by this call.
+        let freeing = Set(order)
         var owned: [UInt32] = []
         for index in order { owned += subgraphs.takeMembers(of: index) }
         var affected: [UInt32] = []
         for node in owned {
             let n = Int(node)
-            for edge in table.inputs[n] where !subgraphs.isFalling(index: table.owner(at: edge.source)) {
+            for edge in table.inputs[n] where !freeing.contains(table.owner(at: edge.source)) {
                 removeOutput(node, from: edge.source)
             }
-            for dependent in table.outputs[n] where !subgraphs.isFalling(index: table.owner(at: dependent)) {
+            for dependent in table.outputs[n] where !freeing.contains(table.owner(at: dependent)) {
                 table.inputs[Int(dependent)].removeAll { $0.source == node }
                 table.state[Int(dependent)] |= NodeState.pending       // it lost an input: it must run again
                 affected.append(dependent)

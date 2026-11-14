@@ -1,4 +1,4 @@
-# Diseño M5: subgrafos jerárquicos e invalidación diferida (borrador, pendiente de aprobación)
+# Diseño M5: subgrafos jerárquicos e invalidación diferida
 
 Fecha: 2026-11-14. Parte de [PLAN-MOTOR.md](PLAN-MOTOR.md) §3 (M5), [DISENO-M0.md](DISENO-M0.md) (subgrafo plano) y de la
 paridad con SwiftUI medida (E7, E8, E19 en `parity/ANALISIS.md`, y la ronda 7 de esta nota, §1).
@@ -91,9 +91,11 @@ atributos de M0 siguen igual.
 1. `SubgraphTable` gana `parents`, `firstChild`, `nextSibling`, `prevSibling` (UInt32, `noSubgraph`) y un indicador
    `dying`/«cayendo». `allocate(parent:)` y `unlink` en O(1).
 2. `Graph.invalidate`: recogida del conjunto con pila explícita, avisos, desprendimiento de aristas con «fuera del
-   conjunto» según el indicador (no la igualdad de propietario), liberación. La cola `deferredInvalidations` se vacía al
+   conjunto» según la pertenencia al conjunto que se libera (no la igualdad de propietario ni el indicador global de
+   «cayendo», que también incluye otras invalidaciones pendientes), liberación. La cola `deferredInvalidations` se vacía al
    final de la actualización más externa (`update`, y en `read` si no hubo actualización).
-3. `run(node)` instala el subgrafo del propietario como actual y lo restaura.
+3. `run(node)` instala el subgrafo del propietario como actual y lo restaura. Si el propietario está cayendo, instala
+   su ancestro vivo incluso si el subgrafo actual ya coincide con el propietario (una lectura anidada del mismo dueño).
 4. `observe(_ subgraph:)` y su token, separados de los de atributo.
 5. Introspección interna: `parent(of:)`, `children(of:)`, `liveSubgraphCount`.
 

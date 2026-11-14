@@ -112,6 +112,53 @@ import Testing
         #expect(!graph.isLive(b) && graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
     }
 
+    @Test func separatelyQueuedInvalidationsDetachReadersBeforeTheirNotice() {
+        let graph = Graph()
+        let a = graph.makeSubgraph(), b = graph.makeSubgraph()
+        let source = graph.withCurrent(a) { graph.makeInput(7) }
+        let reader = graph.withCurrent(b) {
+            graph.makeRule { graph.contains(source.id) ? source.value : 99 }
+        }
+        #expect(graph.value(of: reader) == 7)
+        let log = Log()
+        graph.observe(b) {
+            #expect(!graph.contains(source.id))
+            #expect(graph.inputs(of: reader.id).isEmpty)
+            #expect(graph.isDirty(reader.id))
+            log.events.append("value=\(graph.value(of: reader))")
+        }
+        let trigger = graph.makeRule { () -> Int in
+            graph.invalidate(a)
+            graph.invalidate(b)
+            return 0
+        }
+        _ = graph.value(of: trigger)
+        #expect(log.events == ["value=99"])
+        #expect(graph.nodeCount == 1 && graph.liveSubgraphCount == 1)
+    }
+
+    @Test func separatelyQueuedInvalidationsDetachSourcesBeforeTheirNotice() {
+        let graph = Graph()
+        let a = graph.makeSubgraph(), b = graph.makeSubgraph()
+        let source = graph.withCurrent(b) { graph.makeInput(7) }
+        let reader = graph.withCurrent(a) { graph.makeRule { source.value } }
+        _ = graph.value(of: reader)
+        let log = Log()
+        graph.observe(b) {
+            #expect(!graph.contains(reader.id))
+            #expect(graph.table.outputs[Int(source.id.index)].isEmpty)
+            log.events.append("detached")
+        }
+        let trigger = graph.makeRule { () -> Int in
+            graph.invalidate(a)
+            graph.invalidate(b)
+            return 0
+        }
+        _ = graph.value(of: trigger)
+        #expect(log.events == ["detached"])
+        #expect(graph.nodeCount == 1 && graph.liveSubgraphCount == 1)
+    }
+
     // MARK: Invalidating from inside a rule (deferred)
 
     @Test func theAttributesOfASubgraphInvalidatedByARuleStayReadableUntilTheUpdateEnds() {
@@ -251,5 +298,30 @@ import Testing
         }
         _ = graph.value(of: invalidator)
         #expect(kept.events == ["true"])
+    }
+
+    @Test func aNestedRuleOfTheSameFallingOwnerCreatesInTheLiveAncestor() async {
+        await #expect(processExitsWith: .success) {
+            let graph = Graph()
+            let sub = graph.makeSubgraph()
+            let inner = graph.withCurrent(sub) {
+                graph.makeRule { () -> Int in
+                    let made = graph.makeInput(9)
+                    let child = graph.makeSubgraph()
+                    precondition(graph.subgraph(of: made.id) == graph.rootSubgraph)
+                    precondition(graph.parent(of: child) == graph.rootSubgraph)
+                    return made.value
+                }
+            }
+            let outer = graph.withCurrent(sub) {
+                graph.makeRule { () -> Int in
+                    graph.invalidate(sub)
+                    return inner.value
+                }
+            }
+            precondition(graph.value(of: outer) == 9)
+            precondition(!graph.isLive(sub))
+            precondition(graph.nodeCount == 1 && graph.liveSubgraphCount == 2)
+        }
     }
 }
