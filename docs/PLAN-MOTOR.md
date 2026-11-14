@@ -1,8 +1,9 @@
 # Plan del motor SwiftAttributeGraph
 
 Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)) y M5 ([§9](#9-resultados-de-m5)).
-M4 sigue pendiente: la [propuesta revisada](DISENO-M4.md) plantea reglas reanudables en el hilo original y requiere
-decidir la migración de API; no se implementa el cambio a hilos auxiliares.
+M4 sigue pendiente: la [propuesta revisada](DISENO-M4.md) tiene un prototipo aislado autorizado y validado en Mac
+([§10](#10-prototipo-aislado-de-m4)); faltan rendimiento e integración y decidir la migración de API. No se implementa
+el cambio a hilos auxiliares.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
 y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md)).
 
@@ -44,7 +45,7 @@ una pieza descubra otra cosa.
 | M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | 🔴 |
 | M2 | **Políticas de comparación por atributo** | Cuatro políticas más `bits`, resueltas una vez por tipo y política al crear el atributo (caché por grafo): `viewValue` (por defecto), `environment`, `stateWrite`, `alwaysDifferent`. Reglas medidas en SwiftUI real en [DISENO-M2.md](DISENO-M2.md) §2 (campo a campo; hoja trivial por bytes en la vista y `==` en `@State`; existenciales por su tipo dinámico) | Cada política reproduce las filas medidas en SwiftUI real (caliente); sin `as? any Equatable` en el camino de escritura; medida de escrituras; el relleno no se compara | ✅ ([resultados](#7-resultados-de-m2)) |
 | M3 | **Reglas con estado** | `StatefulRule` y `RuleContext`: valor anterior, poder no cambiarlo, `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)` y estado propio (`mutating`); forma de tipo y de cierre | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta; profundidad 20.000; el estado se libera con el subgrafo | ✅ ([resultados](#8-resultados-de-m3)) |
-| M4 | **Actualización sin recursión total** | Las lecturas dinámicas dentro de una regla tampoco usan la pila nativa; reentrada (actualización anidada). [Diseño revisado](DISENO-M4.md): propuesta de reglas reanudables, con migración de API pendiente de decisión; se mantiene el hilo original | Cadena de 20.000 lecturas dinámicas no declaradas sin desbordar; test de reentrada; resolver la compatibilidad de las reglas síncronas actuales | 🔴 |
+| M4 | **Actualización sin recursión total** | Las lecturas dinámicas dentro de una regla tampoco usan la pila nativa; reentrada (actualización anidada). [Diseño revisado](DISENO-M4.md): prototipo aislado de reglas reanudables validado en Mac ([§10](#10-prototipo-aislado-de-m4)); integración y migración de API pendientes; se mantiene el hilo original | Cadena de 20.000 lecturas dinámicas no declaradas sin desbordar; test de reentrada; resolver la compatibilidad de las reglas síncronas actuales | 🔴 |
 | M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | 🔴 |
 | M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🔴 |
@@ -300,3 +301,40 @@ Se probó evitar reservas en el recorrido y no instalar el subgrafo actual si ya
 - La creación de lo nuevo antes de invalidar lo viejo (E7) es cosa de la capa de vistas: el motor lo permite.
 - **No cubre** subgrafos con varios padres, mover un subgrafo de padre, ni invalidar desde otro hilo.
 - Medido en una sola versión de macOS (15.7.9); una lectura nueva dentro de una regla sigue usando la pila nativa (M4).
+
+## 10. Prototipo aislado de M4
+
+Fecha: 2026-11-14. Autorizado por el dueño para explorar la API reanudable. Código, comandos y límites en
+[Prototypes/ResumableGraph](../Prototypes/ResumableGraph/README.md). **M4 no está completo ni integrado.**
+
+**Validado en Mac M1, Swift 6.2.4:**
+- 21 pruebas en depuración; release separado en 18 funcionales y 3 de rendimiento, todas en verde.
+- Cadenas frías de 20.000 y 100.000 reglas, incluida una de 100.000 en un hilo con pila solicitada de 512 KB.
+  No se precalientan; cada paso comprueba el hilo original y solo hay un paso de regla activo a la vez.
+- Cadena de 20.000 reglas con estado; valor propuesto conservado entre suspensiones; escrituras agrupadas;
+  corte por versión, lecturas opcionales y repetidas, poda y dependencias elegidas dinámicamente.
+- Oráculo iterativo independiente y recálculo completo: 12 semillas × 100 operaciones, comparando valores,
+  ejecuciones completas, versiones y aristas. Liberación de estado al invalidar el dueño y autoinvalidación diferida.
+- Contexto con referencia débil al grafo y token de paso. Una mutación que quitó la comprobación del token fue
+  detectada por su prueba; se restauró antes de la batería final.
+
+**Medidas release** (suite de rendimiento sola; medianas de 5 muestras, o 7 en la comparación caliente):
+
+| Caso | Prototipo | Motor actual |
+|---|---|---|
+| Evaluar cadena fría de 20.000, sin crearla | 32,62 ms | No medido: el caso frío desborda el motor actual |
+| Ídem, 100.000 | 164,75 ms | No medido |
+| 50 ciclos × 1.000 reglas con estado, 2 entradas, sin creación ni precalentamiento | 109,66 ms | 33,26 ms |
+| 1 millón de lecturas limpias | 116,50 ms | No medido en esta suite |
+
+La actualización caliente cuesta **3,30×** el motor actual. El prototipo usa clases, diccionarios y conjuntos y
+mantiene comprobaciones de hilo, tipo y vigencia en release; esta comparación no aísla el coste de reanudar. El
+mecanismo es viable en los casos probados, pero falta identificar y reducir el coste antes de integrar. No es una
+comparación con SwiftUI/AttributeGraph ni demuestra rendimiento próximo al nativo.
+
+Memoria de elementos reservados para marcos (capacidad × tamaño, no memoria total): **1.048.520 bytes** para 20.000
+reglas y **4.194.240 bytes** para 100.000. Excluye nodos, valores, estado, diccionarios y sobrecoste del asignador.
+
+**Pendiente:** integración con el almacén y comparadores de producción, M5 completo, convivencia y migración de
+reglas síncronas, perfiles de asignaciones, percentiles, cargas reales de UI y Windows ARM64. El prototipo solo
+compara con `Equatable`, tiene dueños planos y no reutiliza ranuras. La API del motor principal no cambia.

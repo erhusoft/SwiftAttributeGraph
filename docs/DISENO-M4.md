@@ -1,7 +1,8 @@
 # Diseño M4: evaluación reanudable en el hilo del grafo (propuesta revisada)
 
 Fecha: 2026-11-14. Sustituye la propuesta de segmentos mediante hilos auxiliares del commit `1e6f041`.
-**Estado: propuesta revisada, sin implementar.** M4 sigue pendiente. La implementación de producción conserva el
+**Estado: prototipo aislado autorizado y validado en Mac; integración pendiente.** Resultados y órdenes en
+[Prototypes/ResumableGraph](../Prototypes/ResumableGraph/README.md). M4 sigue pendiente. La implementación de producción conserva el
 contrato actual hasta decidir la migración de API descrita en §6. No se cambian los principios de `AGENTS.md`.
 
 ## 1. Problema y garantías que se conservan
@@ -156,8 +157,9 @@ Para la futura UI hay que comprobar que las reglas internas pueden expresarse po
 automáticamente un `body` arbitrario ni todas sus lecturas implícitas en una máquina de estados. Si conservar esa
 sintaxis en cualquier profundidad es un requisito, sigue abierta la investigación de otra estrategia.
 
-**Decisión pendiente del dueño:** aceptar la adaptación de API para prototipar esta alternativa o mantener la API
-síncrona sin cambios y seguir investigando. Hasta entonces, no se implementa el cambio de contrato ni se marca M4 hecho.
+**Decisión del dueño (2026-11-14):** aprobada la exploración de esta API mediante un prototipo aislado. No equivale a
+aprobar la sustitución de las APIs de producción ni su migración. El prototipo está en
+`Prototypes/ResumableGraph`; antes de integrar se debe resolver el coste caliente y concretar la convivencia de APIs.
 
 ## 7. Validación y criterio de terminado
 
@@ -176,6 +178,19 @@ Primero un prototipo aislado, sin sustituir el motor; después, si se acepta la 
    memoria de los marcos. Comparar con la base anterior de este Mac; fijar umbrales después del prototipo.
 7. Compilar y ejecutar los casos de profundidad y afinidad en Windows ARM64 antes de afirmar portabilidad verificada.
 
-**No verificado:** no hay prototipo ni implementación de esta alternativa, cifras de rendimiento ni migración probada.
+## 8. Resultado del prototipo aislado
+
+Mac M1, Swift 6.2.4: 21 pruebas de depuración; 18 funcionales y 3 de rendimiento en release. Pasan cadenas frías de
+20.000 y 100.000 reglas, 100.000 en un hilo con pila solicitada de 512 KB, 20.000 reglas con estado, poda condicional,
+oráculo de 12 semillas × 100 operaciones, corte por igualdad, vida del dueño, autoinvalidación y protección del contexto.
+Cada paso comprueba el hilo original; la profundidad máxima de pasos simultáneos es 1.
+
+Medianas release: cadena fría de 20.000, **32,62 ms**; de 100.000, **164,75 ms** (solo evaluación). En 50 ciclos de
+1.000 reglas con estado y dos entradas: prototipo **109,66 ms**, motor actual **33,26 ms** (sin creación). El coste
+caliente es **3,30×**: aún no satisface un objetivo de integración de alto rendimiento y no aísla el coste de la API.
+Detalle de la comparación, memoria parcial y límites en el [README del prototipo](../Prototypes/ResumableGraph/README.md).
+
+**No verificado:** integración con el motor, políticas de M2, M5 completo, migración de APIs, perfil de asignaciones,
+percentiles, cargas reales de UI y Windows. El prototipo usa `Equatable`, dueños planos y no reutiliza ranuras.
 Los estudios externos enumerados en `AGENTS.md` §5 no están disponibles en las rutas locales consultadas; esta revisión
 parte del código y los diseños de este repositorio. Deben contrastarse antes de cerrar el diseño de implementación.
