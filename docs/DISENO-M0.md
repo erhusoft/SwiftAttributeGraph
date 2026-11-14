@@ -2,7 +2,11 @@
 
 Fecha: 2026-11-14. Sustituye a la primera versión de esta nota. Parte de [FUNDAMENTOS.md](FUNDAMENTOS.md),
 [PREGUNTAS.md](PREGUNTAS.md) y, sobre todo, de la **paridad medida con SwiftUI real** en
-`parity/ANALISIS.md` (macOS 15.7.9). **Estado: propuesta; no hay código.**
+`parity/ANALISIS.md` (macOS 15.7.9). **Estado: implementada** (resultados, límites y lo no verificado en
+[PLAN-MOTOR.md](PLAN-MOTOR.md) §6). Desviaciones respecto a esta nota: se añadió el bit `pending` (una regla que
+pierde una arista por invalidación debe ejecutarse aunque ninguna versión haya cambiado); no hay `dirtyStamp` (basta
+el bit `dirty`); el subgrafo actual vive en el grafo y solo el grafo en ejecución va al almacenamiento por hilo;
+la comparación del valor P4 y la opción B de P3/P4 no se construyeron.
 
 > `parity/` (programa de pruebas y resultados de SwiftUI real) es una carpeta **local, no versionada**: sirve para
 > otras pruebas, no forma parte del paquete. Los hechos que usa esta nota se citan por su identificador (E1…E19,

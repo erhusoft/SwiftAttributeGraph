@@ -38,7 +38,7 @@ una pieza descubra otra cosa.
 
 | # | Pieza | Qué incluye | Criterio de terminado | Estado |
 |---|---|---|---|---|
-| M0 | **Núcleo** | `Graph`, tabla de ranuras, `AttributeID`, **subgrafo plano** (los atributos nacen en el subgrafo actual; invalidarlo libera lo suyo), nodos de valor y de regla, aristas de entrada **con versión vista**, **versión por nodo**, propagación de sucio, recálculo perezoso con pila explícita, rastreo de lecturas, poda, lotes y observación. Comparación: solo `bits` y «siempre distinto» | Detalle en [DISENO-M0.md](DISENO-M0.md): 21 tests antiguos de SwiftGraph traducidos o adaptados (7 descartados con motivo), más los de **paridad** con SwiftUI real, oráculo de valores y de ejecuciones, profundidad ≥ 20.000, vida y rendimiento | 🔴 |
+| M0 | **Núcleo** | `Graph`, tabla de ranuras, `AttributeID`, **subgrafo plano** (los atributos nacen en el subgrafo actual; invalidarlo libera lo suyo), nodos de valor y de regla, aristas de entrada **con versión vista**, **versión por nodo**, propagación de sucio, recálculo perezoso con pila explícita, rastreo de lecturas, poda, lotes y observación. Comparación: solo `bits` y «siempre distinto» | Detalle en [DISENO-M0.md](DISENO-M0.md): 21 tests antiguos de SwiftGraph traducidos o adaptados (7 descartados con motivo), más los de **paridad** con SwiftUI real, oráculo de valores y de ejecuciones, profundidad ≥ 20.000, vida y rendimiento | ✅ ([resultados](#6-resultados-de-m0)) |
 | M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | 🔴 |
 | M2 | **Políticas de comparación por atributo** | Tres políticas resueltas una vez al crear el atributo, según el tipo: `viewValue` (todos los bytes), `environment` (bits **o** `==`), `stateWrite` (trivial: bits **y** `==`; `Equatable` no trivial: `==`; resto: bits). SwiftUI **no** usa `==` para el valor de una vista (medido) | Cada política reproduce las filas medidas en SwiftUI real; sin `as? any Equatable` en el camino caliente; medida de escrituras y del relleno entre campos | 🔴 |
 | M3 | **Reglas con estado** | Acceso al valor anterior y a qué entradas cambiaron (equivalente a `StatefulRule` y `anyInputsChanged`) | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta | 🔴 |
@@ -84,3 +84,64 @@ paridad aún no las mide.
 Cuando M0–M9 estén hechas, el proyecto SwiftGraph pasará a depender de este paquete. Entonces se decidirá cómo
 conectar las vistas (opciones O2 y O3 de `DECISION-ARQUITECTURA-VISTAS.md` en SwiftGraph). Hasta entonces **no se
 toca la UI** por este trabajo.
+
+## 6. Resultados de M0
+
+Fecha: 2026-11-14. Windows 11 ARM64 (máquina virtual, con ruido), Swift 6.4.1.
+
+**Hecho:** `Graph`, `AttributeID` (índice + generación), tabla de ranuras con lista libre, subgrafo plano
+(crear, fijar actual, invalidar), nodos de valor y de regla (cierre y tipo `Rule`), aristas de entrada en orden de
+lectura con versión vista, versión por nodo con corte, política `bits` y `alwaysDifferent`, propagación de sucio y
+actualización con pila explícita, rastreo con poda, ciclos, lotes y observación, contexto por hilo nativo
+(`TlsAlloc`) aislado en un archivo. 87 tests en 11 suites, todos en verde en depuración: unidad (identidad, valores,
+reglas, propagación, observación, rastreo), **paridad** con SwiftUI real, **oráculo** de valores y de ejecuciones
+(12 semillas × 80 pasos, con lecturas condicionales), **profundidad** de 20.000 niveles en cada recorrido, **vida**
+(`nodeCount` vuelve a la base) y rendimiento. Se comprobó con una mutación (desactivar el corte por versión) que el
+oráculo y los tests de paridad la detectan.
+
+**Medidas** (mediana de 7 ejecuciones; `swift test -Xswiftc -O -Xswiftc -DSAG_UNCHECKED --filter Performance`; ver
+«No verificado» sobre por qué no es `-c release`):
+
+| Caso | Con exclusividad dinámica | `-enforce-exclusivity=unchecked` |
+|---|---|---|
+| 100.000 entradas creadas + 10 lecturas cada una | 172 ms | 140 ms |
+| Crear 100.000 reglas, forma cierre / forma tipo `Rule` | 32 / 26 ms | 26 / 23 ms |
+| Crear y ejecutar por primera vez 20.000 reglas que leen una entrada | 22 ms | 13 ms |
+| 500 escrituras con 1.000 dependientes que siguen sucios | 4,6 ms | 1,4 ms |
+| 50 ciclos de «escribir + actualizar las 1.000 reglas» (50.000 ejecuciones) | 23–31 ms | 17 ms |
+| 100 lotes de 32 escrituras + actualizar 1.000 reglas compartidas (3,2 M lecturas) | 526–569 ms | 437 ms |
+| Escribir en la raíz y actualizar una cadena de 20.000 reglas | 7,8 ms | 5,4 ms |
+| La misma, si el corte por versión la para en la primera regla | 1,4 ms | 0,6 ms |
+| 2.000 subgrafos × 5 atributos: crear e invalidar | 5,5 ms | 4,9 ms |
+| Regla de 20.000 entradas que pierde la mitad | 108 ms | 56 ms |
+
+- **P3 (forma de la regla):** el tipo `Rule` crea reglas ≈ 20 % más rápido que el cierre. Las dos formas existen.
+- **P4 (dónde vive el valor):** solo se construyó la opción A (una clase caja por nodo). Las lecturas cuestan ≈ 150 ns
+  y no hay presión que justifique construir B ahora; **queda sin comparar**, no descartada.
+- Las cifras de SwiftGraph (500 escrituras / 1.000 dependientes: 22,5 ms; ámbitos vacíos: 1,71 ms) **no son
+  comparables punto por punto**: aquel test no se tradujo igual. El orden de magnitud es el mismo o mejor.
+- **Presupuesto propuesto (~1,6 ms por frame para el motor):** una actualización de 1.000 reglas con una lectura cada
+  una cuesta ≈ 0,5 ms. Cabe, pero **falta el caso real de la UI** para confirmarlo.
+
+**Límites y candidatos a optimizar** (apuntados, no resueltos en M0):
+- Las comprobaciones dinámicas de exclusividad pesan: sin ellas, las escrituras van ≈ 3× más rápido. Es una opción
+  de compilación (`unsafeFlags` impide usarlo como dependencia), así que lo sensato es reestructurar el acceso a
+  `NodeTable`, no activar la bandera. Pendiente.
+- `recordRead` busca duplicados con una búsqueda lineal: una regla de 20.000 entradas tarda 3,2 s en depuración
+  (≈ 0,1 s optimizada). Lo cubre M7.
+- La primera ejecución de una regla que lee otra regla **nunca ejecutada** anida en la pila nativa (el motor no puede
+  saber qué va a leer); las cadenas de los tests de profundidad se calientan nodo a nodo. Lo quita M4.
+- Borrar una arista cuesta O(grado) (M7). Invalidar durante una actualización no está permitido (M5).
+- Las reglas no lanzan y no pueden escribir en el grafo (`precondition`); la paridad no los mide aún.
+- Relleno entre campos: `bits` compara todos los bytes, así que el relleno de un tipo puede dar un «cambió» falso
+  (se ejecuta de más, nunca de menos). No se midió la frecuencia (M2).
+
+**No verificado:**
+- **`swift test -c release` no descubre ningún test de Swift Testing** con este toolchain en Windows (0 tests, con
+  y sin `-enable-testing`, `--enable-swift-testing` y `/OPT:NOREF`). Por eso las medidas usan la configuración de
+  depuración con `-O`; `-DSAG_UNCHECKED` apaga las comprobaciones de hilo y el *cast* comprobado, que solo existen
+  en depuración. La orden de `AGENTS.md` §3 no funciona tal cual; hay que revisarla.
+- La rama `pthread` de `Tracking/ThreadLocalGraph.swift` no se ha compilado (solo se probó Windows).
+- Los tests de salida (`processExitsWith`) funcionan en este toolchain; no se probaron en otros.
+- Un fallo de `precondition` en un hilo **secundario** tarda ≈ 30 s en terminar en Windows (manejador de fallos),
+  por eso el control de hilo se prueba por su predicado y no estrellando el proceso.

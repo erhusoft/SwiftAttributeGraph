@@ -1,0 +1,190 @@
+import Testing
+@testable import SwiftAttributeGraph
+
+/// Measurements for `docs/PLAN-MOTOR.md`. Run in release, several times:
+///
+///     swift test -c release -Xswiftc -enable-testing --filter Performance
+///
+/// Each case reports the median of several runs. The assertions are generous ceilings that only catch a disaster;
+/// the numbers that matter are printed and copied into the plan.
+@Suite(.serialized) struct PerformanceTests {
+    private static func median(runs: Int = 7, _ body: () -> Void) -> Double {
+        var samples: [Double] = []
+        let clock = ContinuousClock()
+        for _ in 0..<runs {
+            let elapsed = clock.measure(body)
+            samples.append(Double(elapsed.components.seconds) * 1_000 + Double(elapsed.components.attoseconds) / 1e15)
+        }
+        samples.sort()
+        return samples[samples.count / 2]
+    }
+
+    private static func report(_ name: String, _ milliseconds: Double, _ detail: String = "") {
+        let rounded = (milliseconds * 100).rounded() / 100
+        print("PERF \(name): \(rounded) ms\(detail.isEmpty ? "" : " (\(detail))")")
+    }
+
+    @Test func createAndReadOneHundredThousandInputs() {
+        var checksum = 0
+        let ms = Self.median {
+            let graph = Graph()
+            let inputs = (0..<100_000).map { graph.makeInput($0) }
+            for _ in 0..<10 { for input in inputs { checksum &+= graph.value(of: input) } }
+        }
+        Self.report("P4 create 100k inputs + 10 reads each", ms, "checksum \(checksum & 1)")
+        #expect(ms < 5_000)
+    }
+
+    @Test func createOneHundredThousandRulesAsClosuresAndAsTypes() {
+        struct Plus: Rule { let source: Attribute<Int>; var value: Int { source.value + 1 } }
+        let closures = Self.median {
+            let graph = Graph()
+            let root = graph.makeInput(1)
+            for _ in 0..<100_000 { _ = graph.makeRule { root.value + 1 } }
+        }
+        let types = Self.median {
+            let graph = Graph()
+            let root = graph.makeInput(1)
+            for _ in 0..<100_000 { _ = graph.makeRule(Plus(source: root)) }
+        }
+        Self.report("P3 create 100k rules, closure form", closures)
+        Self.report("P3 create 100k rules, Rule-type form", types)
+        #expect(closures < 5_000 && types < 5_000)
+    }
+
+    @Test func firstRunOfTwentyThousandRules() {
+        let ms = Self.median {
+            let graph = Graph()
+            let input = graph.makeInput(1)
+            let rules = (0..<20_000).map { _ in graph.makeRule { input.value + 1 } }
+            for rule in rules { _ = graph.value(of: rule) }
+        }
+        Self.report("create + first run of 20k rules reading one input", ms)
+        #expect(ms < 5_000)
+    }
+
+    @Test func fiveHundredDistinctWritesWithOneThousandDependents() {
+        let graph = Graph()
+        let input = graph.makeInput(0)
+        let rules = (0..<1_000).map { _ in graph.makeRule { input.value + 1 } }
+        for rule in rules { _ = graph.value(of: rule) }
+        var next = 0
+        // The dependents are already dirty after the first write, so this measures the cost of a write when the
+        // propagation has nothing new to mark, plus one full re-mark after a read of every dependent each 50 writes.
+        let writesOnly = Self.median {
+            for _ in 0..<500 { next += 1; graph.setValue(next, for: input) }
+        }
+        let withUpdates = Self.median {
+            for _ in 0..<500 {
+                next += 1
+                graph.setValue(next, for: input)
+                _ = graph.value(of: rules[next % rules.count])
+            }
+        }
+        let fullCycle = Self.median(runs: 5) {
+            for _ in 0..<50 {
+                next += 1
+                graph.setValue(next, for: input)
+                for rule in rules { _ = graph.value(of: rule) }
+            }
+        }
+        Self.report("500 writes, dependents stay dirty", writesOnly)
+        Self.report("500 writes + read one dependent each", withUpdates)
+        Self.report("50 cycles: write + update all 1,000 dependents", fullCycle, "= 50,000 rule runs")
+        #expect(writesOnly < 2_000 && withUpdates < 2_000 && fullCycle < 5_000)
+    }
+
+    @Test func aBatchOfThirtyTwoWritesWithSharedDependents() {
+        let graph = Graph()
+        let inputs = (0..<32).map { graph.makeInput($0) }
+        let rules = (0..<1_000).map { _ in graph.makeRule { inputs.reduce(0) { $0 + $1.value } } }
+        for rule in rules { _ = graph.value(of: rule) }
+        var next = 100
+        let ms = Self.median {
+            for _ in 0..<100 {
+                graph.withBatch { for input in inputs { next += 1; graph.setValue(next, for: input) } }
+                for rule in rules { _ = graph.value(of: rule) }
+            }
+        }
+        Self.report("100 batches of 32 writes + update 1,000 shared dependents", ms)
+        #expect(ms < 20_000)
+    }
+
+    @Test func updateAWarmChainOfTwentyThousandRules() {
+        let graph = Graph()
+        let root = graph.makeInput(0)
+        var last = graph.makeRule { root.value + 1 }
+        _ = graph.value(of: last)
+        for _ in 1..<20_000 {
+            let previous = last
+            last = graph.makeRule { previous.value + 1 }
+            _ = graph.value(of: last)
+        }
+        var next = 0
+        let ms = Self.median {
+            next += 1
+            graph.setValue(next, for: root)
+            _ = graph.value(of: last)
+        }
+        Self.report("write at the root + update a 20,000-rule chain", ms)
+        #expect(ms < 2_000)
+    }
+
+    @Test func aWriteThatTheCutStopsAtTheFirstRule() {
+        let graph = Graph()
+        let root = graph.makeInput(0)
+        let parity = graph.makeRule { root.value % 2 }
+        var last = parity
+        for _ in 0..<20_000 {
+            let previous = last
+            last = graph.makeRule { previous.value + 1 }
+            _ = graph.value(of: last)
+        }
+        var next = 0
+        let ms = Self.median {
+            next += 2                                  // stays even: only the first rule runs
+            graph.setValue(next, for: root)
+            _ = graph.value(of: last)
+        }
+        Self.report("write + update when the cut stops at rule 1 of 20,000", ms)
+        #expect(ms < 2_000)
+    }
+
+    @Test func invalidateThousandsOfSmallSubgraphs() {
+        let ms = Self.median {
+            let graph = Graph()
+            let base = graph.makeInput(0)
+            let subgraphs = (0..<2_000).map { _ in graph.makeSubgraph() }
+            for subgraph in subgraphs {
+                graph.withCurrent(subgraph) {
+                    let state = graph.makeInput(1)
+                    let body = graph.makeRule { state.value + base.value }
+                    _ = graph.value(of: body)
+                    for _ in 0..<3 { _ = graph.makeInput(2) }
+                }
+            }
+            for subgraph in subgraphs { graph.invalidate(subgraph) }
+        }
+        Self.report("2,000 subgraphs x 5 attributes: create + invalidate", ms)
+        #expect(ms < 10_000)
+    }
+
+    @Test func aRuleThatReadsManyInputsAndLosesHalfOfThem() {
+        let graph = Graph()
+        let inputs = (0..<20_000).map { graph.makeInput($0) }
+        let limit = graph.makeInput(20_000)
+        let sum = graph.makeRule {
+            var total = 0
+            for i in 0..<limit.value { total &+= inputs[i].value }
+            return total
+        }
+        let ms = Self.median(runs: 3) {
+            graph.setValue(20_000, for: limit)
+            _ = graph.value(of: sum)
+            graph.setValue(10_000, for: limit)         // half of the edges are pruned
+            _ = graph.value(of: sum)
+        }
+        Self.report("20,000-input rule loses half of its edges (M7 target)", ms)
+        #expect(ms < 60_000)
+    }
+}
