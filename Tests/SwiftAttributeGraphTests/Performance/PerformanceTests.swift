@@ -299,4 +299,42 @@ import Testing
         Self.report("M5 20 rounds of replacing 1,000 rows (2 attributes each)", ms)
         #expect(ms < 5_000)
     }
+
+    // MARK: M7: efficient edge removal
+
+    /// A node with 100,000 dependents (outputs) that loses half of them.
+    /// Each removal searches the dependent in the source's output list; without O(1) removal
+    /// this is quadratic in the degree (100,000 × 50,000). With O(1) removal it is linear.
+    @Test func removingHalfOfOneHundredThousandOutputsIsLinear() {
+        let ms = Self.median(runs: 3) {
+            let graph = Graph()
+            let root = graph.makeInput(0)
+            let middle = graph.makeRule { root.value + 1 }
+            _ = graph.value(of: middle)
+
+            // 100,000 children that read `middle` conditionally (based on a flag).
+            // Reading `flag` first then `middle` means: when the flag is false, `middle` is
+            // not read and its edge is pruned on the next run.
+            var flags: [Attribute<Bool>] = []
+            var children: [Attribute<Int>] = []
+            for _ in 0..<100_000 {
+                let flag = graph.makeInput(true)
+                flags.append(flag)
+                children.append(graph.makeRule {
+                    _ = flag.value
+                    return flag.value ? middle.value + 1 : 0
+                })
+            }
+            // Run all children: each reads `middle`, so outputs[middle] gains 100,000 entries.
+            for child in children { _ = graph.value(of: child) }
+
+            // Flip half the flags to false and re-run those children: each prunes its edge to
+            // `middle`, calling removeOutput(child, from: middle) while outputs[middle] still
+            // has ~100,000 entries. Without O(1) removal each search is O(degree).
+            for i in 0..<50_000 { graph.setValue(false, for: flags[i]) }
+            for i in 0..<50_000 { _ = graph.value(of: children[i]) }
+        }
+        Self.report("M7 remove half of 100k outputs (edge removal O(1))", ms)
+        #expect(ms < 5_000)
+    }
 }

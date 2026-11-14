@@ -239,25 +239,48 @@ extension Graph {
             return
         }
 
-        table.inputs[consumer].insert(InputEdge(source: source, seenVersion: version, read: true), at: trackCursor)
-        trackCursor += 1
         table.outputs[Int(source)].append(evaluatingNode)
+        let position = UInt32(table.outputs[Int(source)].count - 1)
+        table.inputs[consumer].insert(InputEdge(source: source, seenVersion: version, read: true,
+                                                positionInOutputs: position), at: trackCursor)
+        trackCursor += 1
     }
 
     /// Removes the edges after `cursor`: the ones the rule did not read in its last run.
     func pruneEdges(of node: UInt32, keeping cursor: Int) {
         let n = Int(node)
         guard cursor < table.inputs[n].count else { return }
-        for edge in table.inputs[n][cursor...] { removeOutput(node, from: edge.source) }
+        for edge in table.inputs[n][cursor...] {
+            removeOutput(node, from: edge.source, at: edge.positionInOutputs)
+        }
         table.inputs[n].removeSubrange(cursor...)
     }
 
-    /// Removes `dependent` from the output list of `source` (swap with the last: the list has no order).
-    func removeOutput(_ dependent: UInt32, from source: UInt32) {
+    /// Removes `dependent` from the output list of `source` at the given position (swap with the last: the list has
+    /// no order). The position must be the position of `dependent` in `outputs[source]`, as recorded in the edge's
+    /// `positionInOutputs`. O(1) instead of O(degree).
+    func removeOutput(_ dependent: UInt32, from source: UInt32, at position: UInt32) {
         let s = Int(source)
-        if let position = table.outputs[s].firstIndex(of: dependent) {
-            table.outputs[s].swapAt(position, table.outputs[s].count - 1)
-            table.outputs[s].removeLast()
+        let p = Int(position)
+        guard p < table.outputs[s].count else { return }
+        let last = table.outputs[s].count - 1
+        if p != last {
+            let movedNode = table.outputs[s][last]
+            table.outputs[s][p] = movedNode
+            // Keep the moved node's edge position up to date.
+            updatePositionInOutputs(movedNode, from: source, to: UInt32(p))
+        }
+        table.outputs[s].removeLast()
+    }
+
+    /// Finds the edge of `node` that reads `source` and updates its `positionInOutputs` to `position`.
+    /// O(number of inputs of `node`), which is normally small; the costly part (searching `outputs[source]`) is gone.
+    @inline(__always)
+    func updatePositionInOutputs(_ node: UInt32, from source: UInt32, to position: UInt32) {
+        let n = Int(node)
+        for i in table.inputs[n].indices where table.inputs[n][i].source == source {
+            table.inputs[n][i].positionInOutputs = position
+            return
         }
     }
 }

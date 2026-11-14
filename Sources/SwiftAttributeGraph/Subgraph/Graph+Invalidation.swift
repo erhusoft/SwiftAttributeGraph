@@ -95,7 +95,7 @@ extension Graph {
         for node in owned {
             let n = Int(node)
             for edge in table.inputs[n] where !freeing.contains(table.owner(at: edge.source)) {
-                removeOutput(node, from: edge.source)
+                removeOutput(node, from: edge.source, at: edge.positionInOutputs)
             }
             for dependent in table.outputs[n] where !freeing.contains(table.owner(at: dependent)) {
                 table.inputs[Int(dependent)].removeAll { $0.source == node }

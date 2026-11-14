@@ -1,11 +1,11 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)) y M5 ([§9](#9-resultados-de-m5)).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M5 ([§9](#9-resultados-de-m5)) y M7 ([§13](#13-resultados-de-m7)).
 M4 sigue parcial: el [camino reanudable aditivo](INTEGRACION-M4.md) ya se integra en el almacén real y pasa los
 presupuestos de rendimiento en Mac ([§11](#11-integración-aditiva-de-m4-en-mac)); falta decidir y validar la migración
 de las lecturas dinámicas síncronas. El [prototipo aislado](#10-prototipo-aislado-de-m4) queda como referencia.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
-y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md)).
+y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M7.md](DISENO-M7.md)).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -48,7 +48,7 @@ una pieza descubra otra cosa.
 | M4 | **Actualización sin recursión total** | [Camino aditivo integrado](INTEGRACION-M4.md): reglas reanudables sobre el almacén, comparadores y subgrafos reales; validado en Mac hasta 100.000 niveles y dentro del presupuesto. Las APIs síncronas siguen con su límite | Resolver la migración y compatibilidad de lecturas dinámicas síncronas; cerrar la garantía de no recursión sin cambiar de hilo | 🟡 Parcial ([§11](#11-integración-aditiva-de-m4-en-mac)) |
 | M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | 🔴 |
-| M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🔴 |
+| M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🟡 Parcial ([§13](#13-resultados-de-m7)) |
 | M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | 🔴 |
 | M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🔴 |
 
@@ -433,3 +433,28 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño: [DISENO-M
 
 **Límites y no verificado:**
 - El atajo de limpieza directa hacia delante se limita a dependientes de entrada única no pendientes ni con estado; para grafos con dependencias múltiples, la verificación sigue haciéndose al tirar del dependiente.
+
+## 13. Resultados de M7
+
+Fecha: 2026-11-14. Diseño: [DISENO-M7.md](DISENO-M7.md).
+
+**Hecho:**
+- `InputEdge` guarda `positionInOutputs`: la posición del nodo consumidor en `outputs[source]`, establecida por `recordRead`.
+- `removeOutput(_:from:at:)` hace swap-with-last en O(1) en lugar de buscar linealmente con `firstIndex(of:)` (O(grado)).
+- `updatePositionInOutputs(_:from:to:)` mantiene al día la posición del nodo que `removeOutput` mueve con swap-with-last.
+- `recordRead` registra `positionInOutputs` al crear una arista; `pruneEdges` y `perform` (invalidación) pasan la posición guardada a `removeOutput`.
+- `outputs` sigue siendo `[[UInt32]]` (sin orden, como antes); solo cambia cómo se borra de él.
+- Tests en `EdgeRemovalTests`:
+  1. Una lectura condicional poda exactamente la arista no leída; escribir en la fuente podada no vuelve a ensuciar al dependiente.
+  2. Una lectura condicional que vuelve atrás reañade la arista.
+  3. Invalidar un subgrafo desprende las aristas en ambos sentidos (hacia nodos fuera y hacia dentro).
+- Test de rendimiento en `PerformanceTests`: `removingHalfOfOneHundredThousandOutputsIsLinear` — 100.000 dependientes sobre un mismo nodo, se pierden la mitad; debe ser lineal en el grado.
+
+**Medidas (pendiente de validar en Mac M1, Swift 6.2.4):**
+- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2). Las medidas se apuntarán al validar en el Mac de desarrollo.
+- Objetivo: borrar la mitad de 100.000 salidas en tiempo lineal (muy por debajo de los 5 s; sin M7 el borrado lineal es O(100.000 × 50.000)).
+
+**Límites y no verificado:**
+- `updatePositionInOutputs` busca la arista del nodo movido entre sus entradas: O(entradas del nodo movido), normalmente pequeño. En el peor caso (nodo con muchas entradas hacia la misma fuente —imposible en la práctica, una regla no lee dos veces al mismo atributo—) no ocurre.
+- El `positionInOutputs` se asume válido: `recordRead` lo establece al crear la arista, y `removeOutput` lo mantiene al hacer swap-with-last. Si se desactualizara, el `guard` en `removeOutput` evita borrar el nodo equivocado (simplemente no borra).
+- Aún sin medir: impacto en las métricas existentes de M0-M5 (propagación, invalidación de subgrafos).
