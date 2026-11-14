@@ -14,4 +14,6 @@ enum NodeState {
     static let notifyQueued: UInt8 = 1 << 5
     /// The rule must run on its next update even if no input version changed (an input edge was removed under it).
     static let pending: UInt8 = 1 << 6
+    /// The rule is a ``StatefulRule``: it verifies all its inputs before running and sees which of them changed.
+    static let stateful: UInt8 = 1 << 7
 }

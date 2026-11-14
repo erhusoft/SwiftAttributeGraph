@@ -1,8 +1,8 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)) y M2 ([§7](#7-resultados-de-m2)).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M2 ([§7](#7-resultados-de-m2)) y M3 ([§8](#8-resultados-de-m3)).
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
-y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md)).
+y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md)).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -41,7 +41,7 @@ una pieza descubra otra cosa.
 | M0 | **Núcleo** | `Graph`, tabla de ranuras, `AttributeID`, **subgrafo plano** (los atributos nacen en el subgrafo actual; invalidarlo libera lo suyo), nodos de valor y de regla, aristas de entrada **con versión vista**, **versión por nodo**, propagación de sucio, recálculo perezoso con pila explícita, rastreo de lecturas, poda, lotes y observación. Comparación: solo `bits` y «siempre distinto» | Detalle en [DISENO-M0.md](DISENO-M0.md): 21 tests antiguos de SwiftGraph traducidos o adaptados (7 descartados con motivo), más los de **paridad** con SwiftUI real, oráculo de valores y de ejecuciones, profundidad ≥ 20.000, vida y rendimiento | ✅ ([resultados](#6-resultados-de-m0)) |
 | M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | 🔴 |
 | M2 | **Políticas de comparación por atributo** | Cuatro políticas más `bits`, resueltas una vez por tipo y política al crear el atributo (caché por grafo): `viewValue` (por defecto), `environment`, `stateWrite`, `alwaysDifferent`. Reglas medidas en SwiftUI real en [DISENO-M2.md](DISENO-M2.md) §2 (campo a campo; hoja trivial por bytes en la vista y `==` en `@State`; existenciales por su tipo dinámico) | Cada política reproduce las filas medidas en SwiftUI real (caliente); sin `as? any Equatable` en el camino de escritura; medida de escrituras; el relleno no se compara | ✅ ([resultados](#7-resultados-de-m2)) |
-| M3 | **Reglas con estado** | Acceso al valor anterior y a qué entradas cambiaron (equivalente a `StatefulRule` y `anyInputsChanged`) | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta | 🔴 |
+| M3 | **Reglas con estado** | `StatefulRule` y `RuleContext`: valor anterior, poder no cambiarlo, `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)` y estado propio (`mutating`); forma de tipo y de cierre | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta; profundidad 20.000; el estado se libera con el subgrafo | ✅ ([resultados](#8-resultados-de-m3)) |
 | M4 | **Actualización sin recursión total** | Las lecturas dinámicas dentro de una regla tampoco usan la pila nativa; reentrada (actualización anidada) | Cadena de 20.000 lecturas dinámicas no declaradas sin desbordar; test de reentrada | 🔴 |
 | M5 | **Subgrafos** | Jerarquía padre-hijo; los atributos nacen en el subgrafo actual; invalidar un subgrafo libera todo lo suyo; diferido si hay una actualización en curso | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización | 🔴 |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | 🔴 |
@@ -199,3 +199,43 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño y datos me
 - La rama de Windows de `TypeLayout` (las funciones de reflexión existen en `libswiftCore` en Windows; no se
   compiló ni probó allí). El nombre de las funciones es ABI privada de Swift 6.2.
 - Que el relleno nunca llegue a SwiftUI con bytes distintos (no se pudo forzar).
+
+## 8. Resultados de M3
+
+Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño: [DISENO-M3.md](DISENO-M3.md).
+
+**Hecho:**
+- `StatefulRule` (tipo con `mutating func updateValue(_:)` y `initialValue`) y `RuleContext` (`value`, `hasValue`,
+  `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)`), más `makeStatefulRule` con la forma de tipo y de cierre.
+- Una regla con estado que no escribe `value` no cambia: la versión no sube y los dependientes se saltan. Lo que
+  escribe pasa por la política de comparación de M2.
+- «Cambió» es la diferencia de versión por arista, calculada al empezar la ejecución (`InputEdge.changed`, sin coste para
+  las reglas normales: cabe en el relleno).
+- Una regla con estado **verifica todas sus entradas antes de ejecutar** (bit `NodeState.stateful`), así `hasChanged` no
+  provoca actualizaciones anidadas en la pila nativa.
+- **Un fallo real que encontró el oráculo, no los tests de unidad:** al dejar el bucle sin salida temprana, un marco que
+  se abandonaba para actualizar una entrada posterior olvidaba el cambio ya encontrado en una anterior y saltaba la
+  regla. Solución: `UpdateFrame.inputChanged`. Hay un test mínimo del caso.
+- Tests: 17 en `StatefulRuleTests` (los dos del plan, `initialValue`, `hasValue`, `anyInputsChanged`, `changedValue`,
+  cambio olvidado, política, estado propio, 20.000 reglas sin recursión, el estado se libera con el subgrafo y
+  `precondition` en los errores de programación) y el oráculo de M0 ampliado: un tercio de las reglas con estado, con el modelo
+  sin salida temprana y comparando `hasChanged` de cada ejecución. Mutación comprobada: volver a la salida temprana
+  desborda la pila en el test de 20.000. Depuración: 129 tests; release: 128; 0 avisos.
+
+**Medidas** (release, mediana de 5 ejecuciones, este Mac):
+
+| Caso | Normal | Con estado |
+|---|---|---|
+| 50 ciclos × 1.000 reglas de 2 entradas (50.000 ejecuciones) | 24,3 ms | 33,8 ms (**×1,39**) |
+| ídem en depuración | 180 ms | 226 ms (×1,25) |
+
+El criterio de la nota era ≤ +30 %: **no se cumple** (+39 %). Ya se bajó de ×1,6 con `@inline(__always)` y evitando
+conteo de referencias en el contexto. El resto es el coste de la función: recorrer todas las aristas, la instantánea de
+`changed` y el contexto. Unos 0,2 µs por ejecución. Sin cambios en el resto de las medidas de M0/M2.
+
+**Límites y no verificado:**
+- Una lectura **nueva** dentro de `updateValue` sigue usando la pila nativa (límite de M0; lo quita M4).
+- `hasChanged` busca la arista de forma lineal (M7).
+- Las aristas que la regla no volverá a leer siguen contando en `anyInputsChanged` hasta que termina la ejecución.
+- No se midió contra SwiftUI ni contra AttributeGraph: «cambió» como diferencia de versión por arista es un supuesto.
+- No cubre reglas que lanzan ni escribir dentro de una regla.

@@ -2,7 +2,7 @@
 /// only the typed value (and the rule, if any) lives here.
 class NodeBox {
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
-    func evaluate() -> Bool { fatalError("evaluate() called on a node that is not a rule") }
+    func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
 }
 
 /// A box holding a value of a known type.
@@ -39,7 +39,7 @@ final class ClosureRuleNode<Value>: TypedNode<Value> {
         super.init(value: nil, isEqual: isEqual)
     }
 
-    override func evaluate() -> Bool { store(body()) }
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool { store(body()) }
 }
 
 /// A rule given as a type that conforms to ``Rule``.
@@ -51,5 +51,55 @@ final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
         super.init(value: nil, isEqual: isEqual)
     }
 
-    override func evaluate() -> Bool { store(rule.value) }
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool { store(rule.value) }
+}
+
+/// A rule given as a type that conforms to ``StatefulRule``.
+final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
+    var rule: R
+
+    init(rule: R, isEqual: @escaping (R.Value, R.Value) -> Bool) {
+        self.rule = rule
+        super.init(value: nil, isEqual: isEqual)
+    }
+
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        var context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
+        rule.updateValue(&context)
+        return finish(context)
+    }
+}
+
+/// A stateful rule given as a closure.
+final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
+    let body: (inout RuleContext<Value>) -> Void
+    let initialValue: Value?
+
+    init(initialValue: Value?, body: @escaping (inout RuleContext<Value>) -> Void, isEqual: @escaping (Value, Value) -> Bool) {
+        self.body = body
+        self.initialValue = initialValue
+        super.init(value: nil, isEqual: isEqual)
+    }
+
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        var context = RuleContext<Value>(graph: graph, node: node, value: value ?? initialValue)
+        body(&context)
+        return finish(context)
+    }
+}
+
+extension TypedNode {
+    /// Takes the outcome of a stateful rule: a written value goes through the comparison; without a write the value
+    /// stays (the initial one, on the first run) and the attribute did not change.
+    @inline(__always)
+    final func finish(_ context: RuleContext<Value>) -> Bool {
+        if context.wasWritten { return store(context.result.unsafelyUnwrapped) }
+        if value == nil {
+            guard let initial = context.result else {
+                preconditionFailure("a stateful rule must write a value on its first run when it has no initialValue")
+            }
+            value = initial
+        }
+        return false
+    }
 }

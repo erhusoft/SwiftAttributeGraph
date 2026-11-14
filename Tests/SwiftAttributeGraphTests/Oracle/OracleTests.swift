@@ -17,6 +17,7 @@ import Testing
         }
     }
 
+    private final class ChangeLog { var log: [[Bool]]; init(_ n: Int) { log = Array(repeating: [], count: n) } }
     private final class Calls { var counts: [Int]; init(_ n: Int) { counts = Array(repeating: 0, count: n) } }
 
     /// A rule reads `selector`; if its value is even it reads `left`, otherwise `right`; the result adds a bias.
@@ -31,10 +32,15 @@ import Testing
         var hasRun: [Bool]
         var reads: [[(node: Int, seen: Int)]]
         var runs: [Int]
+        /// Rules with state verify all their inputs before running (no early exit) and log whether the selector changed.
+        let stateful: (Int) -> Bool
+        var changedLog: [[Bool]]
 
-        init(inputs: [Int], specs: [Spec]) {
+        init(inputs: [Int], specs: [Spec], stateful: @escaping (Int) -> Bool) {
             inputCount = inputs.count
             self.specs = specs
+            self.stateful = stateful
+            changedLog = Array(repeating: [], count: inputs.count + specs.count)
             values = inputs + Array(repeating: 0, count: specs.count)
             versions = Array(repeating: 1, count: inputs.count + specs.count)
             hasRun = Array(repeating: false, count: inputs.count + specs.count)
@@ -54,7 +60,7 @@ import Testing
             if !mustRun {
                 for (source, seen) in reads[node] {
                     update(source)
-                    if versions[source] != seen { mustRun = true; break }
+                    if versions[source] != seen { mustRun = true; if !stateful(node) { break } }
                 }
             }
             if mustRun { run(node) }
@@ -69,6 +75,10 @@ import Testing
         private mutating func run(_ node: Int) {
             runs[node] += 1
             let spec = specs[node - inputCount]
+            if stateful(node) {
+                // `hasChanged(selector)` before reading: the first read of the previous run against what it saw.
+                changedLog[node].append(reads[node].first.map { versions[$0.node] != $0.seen } ?? false)
+            }
             var list: [(node: Int, seen: Int)] = []
             let selector = read(spec.selector, into: &list)
             let picked = read(selector % 2 == 0 ? spec.left : spec.right, into: &list)
@@ -88,6 +98,7 @@ import Testing
             var random = Generator(state: UInt64(seed) &* 104729)
             let graph = Graph()
             let calls = Calls(inputCount + ruleCount)
+            let changes = ChangeLog(inputCount + ruleCount)
 
             var inputValues: [Int] = []
             var nodes: [Attribute<Int>] = []
@@ -102,14 +113,24 @@ import Testing
                 let spec = Spec(selector: random.next(index), left: random.next(index), right: random.next(index),
                                 bias: random.next(11) - 5)
                 specs.append(spec)
-                nodes.append(graph.makeRule {
-                    calls.counts[index] += 1
-                    let selector = nodes[spec.selector].value
-                    let picked = selector % 2 == 0 ? nodes[spec.left].value : nodes[spec.right].value
-                    return selector &+ picked &+ spec.bias
-                })
+                if index % 3 == 0 {
+                    nodes.append(graph.makeStatefulRule { (c: inout RuleContext<Int>) in
+                        calls.counts[index] += 1
+                        changes.log[index].append(c.hasChanged(nodes[spec.selector]))
+                        let selector = nodes[spec.selector].value
+                        let picked = selector % 2 == 0 ? nodes[spec.left].value : nodes[spec.right].value
+                        c.value = selector &+ picked &+ spec.bias
+                    })
+                } else {
+                    nodes.append(graph.makeRule {
+                        calls.counts[index] += 1
+                        let selector = nodes[spec.selector].value
+                        let picked = selector % 2 == 0 ? nodes[spec.left].value : nodes[spec.right].value
+                        return selector &+ picked &+ spec.bias
+                    })
+                }
             }
-            var model = Model(inputs: inputValues, specs: specs)
+            var model = Model(inputs: inputValues, specs: specs, stateful: { $0 % 3 == 0 })
 
             func fullRecalculation() -> [Int] {
                 var all = inputValues
@@ -135,6 +156,7 @@ import Testing
                 model.update(target)
                 #expect(graph.value(of: nodes[target]) == expected[target], "seed \(seed) step \(step) node \(target)")
                 #expect(calls.counts == model.runs, "seed \(seed) step \(step): executions differ from the model")
+                #expect(changes.log == model.changedLog, "seed \(seed) step \(step): `hasChanged` differs from the model")
 
                 let after = calls.counts
                 #expect(graph.value(of: nodes[target]) == expected[target])

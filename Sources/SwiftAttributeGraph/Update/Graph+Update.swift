@@ -4,6 +4,9 @@
 struct UpdateFrame {
     var node: UInt32
     var next: Int
+    /// A stateful rule keeps scanning after it found an input that changed; if it then has to bring a later input up
+    /// to date, the frame is left and resumed, so what it found is kept here.
+    var inputChanged = false
 }
 
 extension Graph {
@@ -66,18 +69,23 @@ extension Graph {
             let node = frames[top].node
             let n = Int(node)
             var mustRun = table.state[n] & NodeState.hasValue == 0 || table.state[n] & NodeState.pending != 0
+                || frames[top].inputChanged
+            // A stateful rule needs every input up to date (to know what changed), so it does not stop at the first
+            // input that changed and it does not skip the scan when it must run anyway.
+            let stateful = table.state[n] & NodeState.stateful != 0
 
-            if !mustRun {
+            if !mustRun || stateful {
                 var i = frames[top].next
                 while i < table.inputs[n].count {
                     let edge = table.inputs[n][i]
                     let source = Int(edge.source)
                     if table.state[source] & NodeState.dirty != 0 {
                         frames[top].next = i
+                        frames[top].inputChanged = mustRun
                         push(edge.source)
                         continue outer
                     }
-                    if table.versions[source] != edge.seenVersion { mustRun = true; break }
+                    if table.versions[source] != edge.seenVersion { mustRun = true; if !stateful { break } }
                     i += 1
                 }
             }
@@ -102,7 +110,16 @@ extension Graph {
     /// Runs the rule of a node, rebuilds its input edges from what it read and bumps its version if the value changed.
     private func run(_ node: UInt32) {
         let n = Int(node)
-        for i in table.inputs[n].indices { table.inputs[n][i].read = false }
+        let stateful = table.state[n] & NodeState.stateful != 0
+        if stateful {
+            for i in table.inputs[n].indices {
+                let edge = table.inputs[n][i]
+                table.inputs[n][i].read = false
+                table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion
+            }
+        } else {
+            for i in table.inputs[n].indices { table.inputs[n][i].read = false }
+        }
 
         let previousNode = evaluatingNode
         let previousCursor = trackCursor
@@ -110,7 +127,7 @@ extension Graph {
         trackCursor = 0
         let previousGraph = ThreadLocalGraph.install(self)
 
-        let changed = table.box(at: node).evaluate()
+        let changed = table.box(at: node).evaluate(in: self, node: node)
 
         _ = ThreadLocalGraph.install(previousGraph)
         let cursor = trackCursor
@@ -121,6 +138,23 @@ extension Graph {
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
             | NodeState.hasValue
         if changed { table.versions[n] &+= 1 }
+    }
+
+    // MARK: What changed (for stateful rules)
+
+    /// Whether the edge from `source` into `node` was changed when the node's run began; `nil` if there is no such edge.
+    @inline(__always)
+    func inputChanged(of node: UInt32, source: UInt32) -> Bool? {
+        for edge in table.inputs[Int(node)] where edge.source == source { return edge.changed }
+        return nil
+    }
+
+    /// Whether any input edge of `node` was changed, ignoring `excluded`. Every input counts on the first run.
+    func anyInputChanged(of node: UInt32, excluding excluded: [UInt32]) -> Bool {
+        let n = Int(node)
+        if table.state[n] & NodeState.hasValue == 0 { return true }
+        for edge in table.inputs[n] where edge.changed && !excluded.contains(edge.source) { return true }
+        return false
     }
 
     // MARK: Tracking

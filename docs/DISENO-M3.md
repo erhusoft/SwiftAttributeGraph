@@ -2,7 +2,7 @@
 
 Fecha: 2026-11-14. Parte de [PLAN-MOTOR.md](PLAN-MOTOR.md) §3 (M3), [FUNDAMENTOS.md](FUNDAMENTOS.md) (nombres de
 AttributeGraph: `StatefulRule`) y de [PREGUNTAS.md](PREGUNTAS.md) (`DynamicBody` necesita «qué propiedades cambiaron»).
-**Estado: propuesta. No se implementa nada hasta que el dueño la apruebe.**
+**Estado: aprobada e implementada** (resultados, límites y lo no verificado en [PLAN-MOTOR.md](PLAN-MOTOR.md) §8). Desviación: el criterio de rendimiento (≤ +30 %) no se cumple (×1,39); y el bucle de actualización necesitó guardar en el marco el cambio ya encontrado (`UpdateFrame.inputChanged`), no previsto en §4.2.
 
 ## 1. Qué es y qué falta
 

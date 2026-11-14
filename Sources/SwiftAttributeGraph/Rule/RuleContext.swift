@@ -1,0 +1,55 @@
+/// What a ``StatefulRule`` sees while it runs: its value so far and which inputs changed since its previous run.
+///
+/// "Changed" means the version of the source differs from the one the rule saw the last time it ran. An attribute the
+/// rule reads for the first time counts as changed, and so does every input on the first run. The context lives for one
+/// call of `updateValue` and must not be kept.
+public struct RuleContext<Value> {
+    private unowned(unsafe) let graph: Graph
+    private let node: UInt32
+    private var current: Value?
+    private(set) var wasWritten = false
+
+    init(graph: Graph, node: UInt32, value: Value?) {
+        self.graph = graph
+        self.node = node
+        self.current = value
+    }
+
+    /// The value the attribute has: the previous one when the rule starts. Writing it makes the attribute take the
+    /// new value, which raises its version only if it counts as different under the attribute's comparison policy.
+    public var value: Value {
+        get {
+            guard let current else { preconditionFailure("RuleContext.value: the rule has no value yet (first run without an initialValue)") }
+            return current
+        }
+        set {
+            current = newValue
+            wasWritten = true
+        }
+    }
+
+    /// The value after the rule ran, or `nil` if it never had one.
+    var result: Value? { current }
+
+    /// Whether the attribute has a value to read: false only on a first run without an `initialValue`.
+    public var hasValue: Bool { current != nil }
+
+    /// Whether `attribute`, which the rule read in its previous run (or already in this one), changed. An attribute the
+    /// rule never read gives `false` and does not become a dependency.
+    @inline(__always)
+    public func hasChanged<T>(_ attribute: Attribute<T>) -> Bool {
+        precondition(graph.contains(attribute.id), "hasChanged: the attribute is dead")
+        return graph.inputChanged(of: node, source: attribute.id.index) ?? false
+    }
+
+    /// Whether any input changed, except the ones listed. True on the first run.
+    public func anyInputsChanged(excluding excluded: [AnyAttribute] = []) -> Bool {
+        graph.anyInputChanged(of: node, excluding: excluded.map { $0.id.index })
+    }
+
+    /// Reads `attribute` (it becomes a dependency) and reports whether it changed since the previous run.
+    public func changedValue<T>(of attribute: Attribute<T>) -> (value: T, changed: Bool) {
+        let value = graph.read(attribute)
+        return (value, graph.inputChanged(of: node, source: attribute.id.index) ?? true)
+    }
+}

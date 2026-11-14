@@ -228,4 +228,36 @@ import Testing
             #expect(ms < 10_000)
         }
     }
+
+    // MARK: M3: rules with state
+
+    /// 1,000 rules that read one input (and, the stateful ones, ask what changed) over 50 cycles of write + update.
+    @Test func statefulRulesAgainstPlainRules() {
+        func cycles(stateful: Bool) -> Double {
+            Self.median(runs: 5) {
+                let graph = Graph()
+                let input = graph.makeInput(0)
+                let other = graph.makeInput(0)
+                let rules: [Attribute<Int>] = (0..<1_000).map { _ in
+                    if stateful {
+                        return graph.makeStatefulRule(initialValue: 0) { (c: inout RuleContext<Int>) in
+                            let v = input.value
+                            _ = other.value
+                            if c.hasChanged(input) { c.value = v &+ 1 }
+                        }
+                    }
+                    return graph.makeRule { _ = other.value; return input.value &+ 1 }
+                }
+                for rule in rules { _ = graph.value(of: rule) }
+                for step in 1...50 {
+                    graph.setValue(step, for: input)
+                    for rule in rules { _ = graph.value(of: rule) }
+                }
+            }
+        }
+        let plain = cycles(stateful: false), stateful = cycles(stateful: true)
+        Self.report("M3 50 cycles x 1,000 plain rules (2 inputs)", plain)
+        Self.report("M3 50 cycles x 1,000 stateful rules (2 inputs, hasChanged)", stateful, "x\(((stateful / plain) * 100).rounded() / 100) of plain")
+        #expect(stateful < 5_000)
+    }
 }

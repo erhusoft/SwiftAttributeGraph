@@ -110,6 +110,24 @@ public final class Graph {
         return Attribute(id: id)
     }
 
+    /// Creates a stateful rule from a type that conforms to ``StatefulRule``, in the current subgraph.
+    public func makeStatefulRule<R: StatefulRule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
+        assertOwnThread()
+        let id = allocate(StatefulRuleNode(rule: rule, isEqual: comparators.comparator(comparison, for: R.Value.self)),
+                          state: NodeState.isRule | NodeState.dirty | NodeState.stateful)
+        return Attribute(id: id)
+    }
+
+    /// Creates a stateful rule from a closure, in the current subgraph. `initialValue` is the value before the first run.
+    public func makeStatefulRule<Value>(initialValue: Value? = nil, comparison: Comparison = .viewValue,
+                                        _ body: @escaping (inout RuleContext<Value>) -> Void) -> Attribute<Value> {
+        assertOwnThread()
+        let id = allocate(ClosureStatefulRuleNode(initialValue: initialValue, body: body,
+                                                  isEqual: comparators.comparator(comparison, for: Value.self)),
+                          state: NodeState.isRule | NodeState.dirty | NodeState.stateful)
+        return Attribute(id: id)
+    }
+
     private func allocate(_ box: NodeBox, state: UInt8) -> AttributeID {
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
