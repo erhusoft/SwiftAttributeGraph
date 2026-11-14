@@ -1,6 +1,8 @@
 # Plan del motor SwiftAttributeGraph
 
 Fecha: 2026-11-14. **Fuente de verdad del estado.** Nada está implementado todavía salvo el esqueleto del paquete.
+Hecho hasta ahora: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
+y la nota de diseño de M0 ([DISENO-M0.md](DISENO-M0.md), propuesta pendiente de aprobación).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -49,6 +51,12 @@ una pieza descubra otra cosa.
 
 ## 4. Decisiones
 
+**Uso del motor y criterio de «correcto» (dueño, 2026-11-14):** aplicaciones de escritorio en Swift con la sintaxis
+de SwiftUI y **paridad** con SwiftUI. Por eso el modelo de grano fino (construir una vez, actualizar por atributos)
+es núcleo y no opcional, y «correcto» significa **paridad observable**: qué se ejecuta y cuándo. Se mide en un Mac
+con SwiftUI real (macOS 15.7.9, 4 rondas, 19 experimentos); el material vive en una carpeta local `parity/` no
+versionada. Preguntas previas y respuestas: [PREGUNTAS.md](PREGUNTAS.md).
+
 **Tomadas por el dueño (2026-11-14; detalle en [FUNDAMENTOS.md](FUNDAMENTOS.md)):**
 - API pública: `Attribute<Value>` ligero, un *struct* con solo el ID.
 - Nombres de AttributeGraph donde coincida el concepto.
@@ -62,6 +70,14 @@ una pieza descubra otra cosa.
 - **Dónde vive el valor:** en el objeto nodo (lo probado en G2) o en almacenes por tipo.
 - **Forma de la regla:** tipo que cumple `Rule` (sin reservar un cierre por nodo) y cierre como atajo; se mide el
   coste de cada una.
+- **Comparación por bits en Swift:** coste de `memcmp` frente a `==` y frecuencia de «cambió» falso por el relleno
+  entre campos (SwiftUI no se pudo comprobar en este punto).
+
+**Supuesto de trabajo, a revisar antes de codificar M0:** `Attribute.value` dentro de una regla lee del grafo actual
+de forma implícita, como AttributeGraph (alternativa: pasar un contexto a la regla).
+
+**Aplazadas:** reglas que lanzan o se cancelan, escribir dentro de una regla, y lectura prestada de valores: la
+paridad aún no las mide.
 
 ## 5. Conexión con la UI (después, no ahora)
 
