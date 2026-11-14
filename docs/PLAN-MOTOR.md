@@ -47,13 +47,21 @@ una pieza descubra otra cosa.
 | M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | 🔴 |
 | M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🔴 |
 
-## 4. Decisiones abiertas (se resuelven en la pieza que las necesite)
+## 4. Decisiones
 
-- **API pública:** ¿un `Attribute<Value>` ligero (solo el ID, como en AttributeGraph) o un objeto nodo como el
-  `GraphNode` actual? Se decide en M0 con un test de uso y una medida.
-- **Dónde vive el valor:** en el objeto nodo (como hoy) o en almacenes por tipo. Se decide en M0 midiendo.
-- **Reglas:** ¿cierre (`() -> Value`) o tipo con `value` (como `Rule`)? Un tipo evita reservar un cierre por nodo.
-  Se decide en M0.
+**Tomadas por el dueño (2026-11-14; detalle en [FUNDAMENTOS.md](FUNDAMENTOS.md)):**
+- API pública: `Attribute<Value>` ligero, un *struct* con solo el ID.
+- Nombres de AttributeGraph donde coincida el concepto.
+- Tests con Swift Testing.
+- `precondition` para los errores de programación; `throws` solo para lo recuperable.
+- Un grafo por hilo.
+- El tiempo y las animaciones quedan fuera del motor.
+- Sin compatibilidad con el `GraphNode` actual.
+
+**Abiertas, se miden en M0:**
+- **Dónde vive el valor:** en el objeto nodo (lo probado en G2) o en almacenes por tipo.
+- **Forma de la regla:** tipo que cumple `Rule` (sin reservar un cierre por nodo) y cierre como atajo; se mide el
+  coste de cada una.
 
 ## 5. Conexión con la UI (después, no ahora)
 

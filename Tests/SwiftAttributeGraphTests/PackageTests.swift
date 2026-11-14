@@ -1,8 +1,6 @@
-import XCTest
+import Testing
 @testable import SwiftAttributeGraph
 
-final class PackageTests: XCTestCase {
-    func testVersionIsBelowOneUntilThePlanIsDone() {
-        XCTAssertTrue(SwiftAttributeGraph.version.hasPrefix("0."))
-    }
+@Test func versionIsBelowOneUntilThePlanIsDone() {
+    #expect(SwiftAttributeGraph.version.hasPrefix("0."))
 }
