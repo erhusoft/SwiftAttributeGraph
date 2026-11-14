@@ -29,7 +29,7 @@ public final class Graph {
     var trackCursor = 0
     var isResumingStep = false
     /// Number of times a rule has been executed (recalculations) since the graph was created.
-    var recalculationCount = 0
+    public internal(set) var recalculationCount = 0
 
     // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
     var dirtyStack: [UInt32] = []
