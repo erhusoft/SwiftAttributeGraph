@@ -1,6 +1,6 @@
-# Diseño M2: políticas de comparación por atributo (versión 2, pendiente de aprobación)
+# Diseño M2: políticas de comparación por atributo (versión 3, pendiente de aprobación)
 
-Fecha: 2026-11-14. Sustituye a la versión 1 de esta nota (commit `1f89f95`), que se basaba en las rondas 1–4 de
+Fecha: 2026-11-14. Sustituye a las versiones 1 y 2 (commits `1f89f95`, `9d0d5f3`); parte de las rondas 1–4 de
 `parity/ANALISIS.md`. **Estado: propuesta. No se implementa nada hasta que el dueño la apruebe.**
 
 ## 0. Qué cambió y por qué (versión 3)
