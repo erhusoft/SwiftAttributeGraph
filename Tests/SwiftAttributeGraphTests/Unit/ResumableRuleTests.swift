@@ -259,7 +259,7 @@ import Testing
     @Test func aResumableRuleReadingADirtyInputSynchronouslyStopsTheProgram() async {
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
-            let source = graph.makeInput(0)
+            let source = graph.makeRule { 1 }
             struct ReadDirty: ResumableRule {
                 weak var graph: Graph?
                 let source: Attribute<Int>
@@ -271,7 +271,6 @@ import Testing
                 }
             }
             let rule = graph.makeResumableRule(ReadDirty(graph: graph, source: source))
-            graph.setValue(1, for: source)   // makes `source` dirty
             _ = graph.value(of: rule)         // resumes; the step tries the forbidden synchronous read
         }
     }

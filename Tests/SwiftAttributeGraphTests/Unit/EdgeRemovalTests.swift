@@ -11,7 +11,7 @@ import Testing
 
     /// Source attribute ID of the input edge at a given position (internal access for testing).
     private static func inputSource(of rule: Attribute<Int>, at position: Int, in graph: Graph) -> AttributeID {
-        graph.table.inputs[Int(rule.id.index)][position].source
+        graph.inputs(of: rule.id)[position]
     }
 
     // MARK: - Conditional reads prune exactly the unread edges
@@ -29,16 +29,17 @@ import Testing
         }
         #expect(graph.value(of: rule) == 3)
 
-        // Both edges exist.
-        #expect(Self.inputsCount(of: rule, in: graph) == 2)
+        // Selector and both value edges exist.
+        #expect(Self.inputsCount(of: rule, in: graph) == 3)
 
         // Flip the flag and re-run: `b` is no longer read, its edge must be pruned.
         graph.setValue(false, for: flag)
         #expect(graph.value(of: rule) == 1)
-        #expect(Self.inputsCount(of: rule, in: graph) == 1)
+        #expect(Self.inputsCount(of: rule, in: graph) == 2)
 
-        // The remaining edge is `a`.
-        #expect(Self.inputSource(of: rule, at: 0, in: graph) == a.id)
+        // The selector and `a` remain in read order.
+        #expect(Self.inputSource(of: rule, at: 0, in: graph) == flag.id
+                && Self.inputSource(of: rule, at: 1, in: graph) == a.id)
 
         // Writing to `b` must no longer dirty the rule (its edge was pruned).
         graph.setValue(99, for: b)
@@ -60,12 +61,12 @@ import Testing
         // Switch to false: prune `b`.
         graph.setValue(false, for: flag)
         #expect(graph.value(of: rule) == 1)
-        #expect(Self.inputsCount(of: rule, in: graph) == 1)
+        #expect(Self.inputsCount(of: rule, in: graph) == 2)
 
         // Switch back to true: re-add `b`.
         graph.setValue(true, for: flag)
         #expect(graph.value(of: rule) == 11)
-        #expect(Self.inputsCount(of: rule, in: graph) == 2)
+        #expect(Self.inputsCount(of: rule, in: graph) == 3)
     }
 
     // MARK: - removeOutput detaches the dependent from the source's output list
@@ -113,7 +114,7 @@ import Testing
 
         // Writing to `root` must not crash or resurrect `inside`.
         graph.setValue(9, for: root)
-        #expect(true)
+        #expect(graph.table.outputs[Int(root.id.index)].isEmpty)
     }
 
     @Test func invalidatingASubgraphDetachesOutsideParentsFromItsAttributes() {
@@ -135,6 +136,6 @@ import Testing
 
         // `outside` lost its input (`inside`) and is now dirty/pending. We only check that
         // invalidation itself did not crash; reading `outside` would hit the dead attribute.
-        #expect(true)
+        #expect(graph.isDirty(outside.id) && graph.inputs(of: outside.id).isEmpty)
     }
 }

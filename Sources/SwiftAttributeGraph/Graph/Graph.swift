@@ -140,7 +140,7 @@ public final class Graph {
         precondition(table.isLive(source.id), "makeIndirect: the source attribute is dead")
         precondition(table.state[Int(source.id.index)] & NodeState.isRule == 0,
                      "makeIndirect: cannot redirect to a rule")
-        let id = allocate(IndirectNode<Value>(source: source.id), state: NodeState.hasValue)
+        let id = allocate(IndirectNode<Value>(source: source.id), state: NodeState.hasValue | NodeState.indirect)
         return Attribute(id: id)
     }
 

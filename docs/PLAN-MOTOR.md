@@ -1,6 +1,6 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)). M9 ([§18](#18-resultados-de-m9)) está diseñado y pendiente de ejecución en Swift 6.2.4 (este entorno tiene 6.1.2 y no ejecuta `swift test`).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)). M9 ([§18](#18-resultados-de-m9)) está diseñado y pendiente de ejecución en Swift 6.2.4 (Swift por omisión es 6.1.2, pero Xcode incluye 6.2.4 y se usa para validar).
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
 y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md), [DISENO-M9.md](DISENO-M9.md)).
 
@@ -572,3 +572,22 @@ las medidas de rendimiento finales aquí.
 - Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2).
 - La paridad con SwiftUI se midió en macOS 15.7.9 (M1).
 - Windows aplazado hasta completar el motor en Mac.
+
+## Corrección de bloqueos tras revisión (2026-11-14)
+
+Se corrigió el helper de M7 que devolvía UInt32 como AttributeID y bloqueaba toda la compilación. Los tests de poda
+ahora cuentan también la dependencia del selector y verifican aristas reales en vez de aserciones constantes.
+La prueba de lectura síncrona sucia de M4 usa una regla nunca evaluada: escribir una entrada no la deja sucia.
+
+M6 marca las cajas indirectas correctamente. Una resolución iterativa común valida toda la cadena y conserva las
+lecturas de aliases para respetar su vida. Lecturas, escrituras y `poll` resuelven el terminal sin recursión ligada a
+la profundidad; `hasChanged` consulta su cambio sin crear nuevas dependencias ni confundir aliases no leídos.
+
+TDD: se observó fallar el indicador indirecto y la consulta de cambios (el acumulador devolvía 1 en vez de 3), y se
+verificó el verde tras corregir. Prueba de 20.000 aliases: lectura, escritura, seguimiento reanudable, cambio de fuente
+con `hasChanged` y vuelta de nodeCount a cero al invalidar el dueño.
+
+Validado con Swift 6.2.4 de Xcode: **202 pruebas funcionales de depuración y 201 de release**, con los dos problemas
+conocidos de M2. Rendimiento ejecutado en suites separadas: 20.000 aliases, escritura más lectura, **0,970 ms**
+(mediana de siete); presupuesto M4 **34,96 / 36,91 ms = 0,947**, por debajo de 1,30. Pasan las tres pruebas de
+rendimiento seleccionadas. Esto no sustituye toda la batería final de M9 ni su caso objetivo de UI; M9 sigue pendiente.

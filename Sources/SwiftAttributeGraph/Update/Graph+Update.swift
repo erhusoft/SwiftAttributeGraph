@@ -37,10 +37,7 @@ extension Graph {
         // An indirect attribute redirects to another attribute: reading it reads the source,
         // so the rule that reads it depends on the source too.
         if table.state[n] & NodeState.indirect != 0 {
-            let box = table.box(at: index) as! IndirectNode<Value>
-            precondition(table.isLive(box.source), "reading an indirect attribute whose source is dead")
-            if evaluatingNode != Graph.noNode { recordRead(of: index) }
-            return read(Attribute<Value>(id: box.source))
+            return read(resolveIndirect(attribute, tracking: evaluatingNode != Graph.noNode))
         }
 
         if table.state[n] & NodeState.dirty != 0 {
@@ -66,9 +63,7 @@ extension Graph {
 
         // An indirect attribute redirects to another attribute: writing it writes to the source.
         if table.state[index] & NodeState.indirect != 0 {
-            let box = table.box(at: UInt32(index)) as! IndirectNode<Value>
-            precondition(table.isLive(box.source), "writing an indirect attribute whose source is dead")
-            setValue(value, for: Attribute<Value>(id: box.source))
+            setValue(value, for: resolveIndirect(attribute, tracking: false))
             return
         }
 

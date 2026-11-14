@@ -39,7 +39,7 @@ public struct RuleContext<Value> {
     @inline(__always)
     public func hasChanged<T>(_ attribute: Attribute<T>) -> Bool {
         precondition(graph.contains(attribute.id), "hasChanged: the attribute is dead")
-        return graph.inputChanged(of: node, source: attribute.id.index) ?? false
+        return graph.inputChanged(of: node, attribute: attribute)
     }
 
     /// Whether any input changed, except the ones listed. True on the first run.

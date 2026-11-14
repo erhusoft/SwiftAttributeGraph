@@ -1,7 +1,7 @@
 # Diseño M9: especificación completa (batería final)
 
 Fecha: 2026-11-14. Parte de [PLAN-MOTOR.md](PLAN-MOTOR.md) §3 (M9) y §1 «Motor al 100 %». **Estado: definido, pendiente de
-validación en Swift 6.2.4** (este entorno tiene 6.1.2 y no ejecuta `swift test`).
+validación en Swift 6.2.4** (Swift por omisión es 6.1.2, pero Xcode incluye 6.2.4 y se usa para validar).
 
 ## 1. Qué es M9
 

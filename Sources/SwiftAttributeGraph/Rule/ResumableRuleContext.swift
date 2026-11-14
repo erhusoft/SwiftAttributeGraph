@@ -43,17 +43,18 @@ public struct ResumableRuleContext<Value> {
     /// Reads a current attribute and records a dependency, or reports that an input update must be requested first.
     @inlinable public func poll<T>(_ attribute: Attribute<T>) -> ReadResult<T> {
         let graph = checkedGraph()
-        let source = attribute.id.index
-        if graph.resumableInputIsDirty(attribute.id) { return .pending }
+        let resolved = graph.resolveIndirect(attribute, tracking: true)
+        let source = resolved.id.index
+        if graph.resumableInputIsDirty(resolved.id) { return .pending }
         graph.recordRead(of: source)
-        return .ready(graph.typedNode(attribute).value.unsafelyUnwrapped)
+        return .ready(graph.typedNode(resolved).value.unsafelyUnwrapped)
     }
 
     /// Whether an input changed since the previous evaluation. Asking does not create a dependency.
     @inlinable public func hasChanged<T>(_ attribute: Attribute<T>) -> Bool {
         let graph = checkedGraph()
         precondition(graph.contains(attribute.id), "hasChanged: the attribute is dead")
-        return graph.inputChanged(of: evaluation.node.index, source: attribute.id.index) ?? false
+        return graph.inputChanged(of: evaluation.node.index, attribute: attribute)
     }
 
     /// Whether any previous or newly read input changed, except the attributes listed. True on the first evaluation.
