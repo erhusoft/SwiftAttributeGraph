@@ -9,7 +9,14 @@ final class RuleNode<R: ResumableRule>: TypedNode<R.Value> {
     }
 
     override func begin(in graph: PrototypeGraph, index: Int) {
-        evaluation = Evaluation(graph: graph, node: index, value: value)
+        if let evaluation {
+            // The monotonically increasing token keeps all earlier contexts invalid when storage is reused.
+            evaluation.proposed = value
+            evaluation.written = false
+            evaluation.firstStep = true
+        } else {
+            evaluation = Evaluation(graph: graph, node: index, value: value)
+        }
     }
 
     override func step() -> RuleStep {
@@ -23,7 +30,8 @@ final class RuleNode<R: ResumableRule>: TypedNode<R.Value> {
 
     override func finish() -> Bool {
         let evaluation = evaluation!
-        defer { self.evaluation = nil }
+        // Keep the owned storage, but do not retain a proposed value after the evaluation ends.
+        defer { evaluation.proposed = nil }
         guard let result = evaluation.proposed else { preconditionFailure("the first evaluation must produce a value") }
         return evaluation.written ? store(result) : false
     }

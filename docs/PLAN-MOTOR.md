@@ -66,6 +66,8 @@ versionada. Preguntas previas y respuestas: [PREGUNTAS.md](PREGUNTAS.md).
 - Tests con Swift Testing.
 - `precondition` para los errores de programación; `throws` solo para lo recuperable.
 - Un grafo por hilo.
+- Completar primero el motor en Mac; la validación y adaptación a Windows se aplazan hasta entonces (dueño,
+  2026-11-14). La falta de esa validación se registra, pero no bloquea el cierre de las piezas en Mac.
 - El tiempo y las animaciones quedan fuera del motor.
 - Sin compatibilidad con el `GraphNode` actual.
 
@@ -338,3 +340,37 @@ reglas y **4.194.240 bytes** para 100.000. Excluye nodos, valores, estado, dicci
 **Pendiente:** integración con el almacén y comparadores de producción, M5 completo, convivencia y migración de
 reglas síncronas, perfiles de asignaciones, percentiles, cargas reales de UI y Windows ARM64. El prototipo solo
 compara con `Equatable`, tiene dueños planos y no reutiliza ranuras. La API del motor principal no cambia.
+
+### Perfil y optimización del prototipo (Mac)
+
+Detalle reproducible: [PERFIL.md](../Prototypes/ResumableGraph/PERFIL.md). Windows queda aplazado hasta completar el
+motor en Mac, por decisión del dueño; no se trabaja allí en esta etapa.
+
+Se recogieron muestras de CPU con Instruments Time Profiler, solo del ejecutable de carga del prototipo. En la base,
+`swift_beginAccess` ocupa un 21,11 % inclusivo de las muestras de actualización; `swift_weakLoadStrong`, un 5,32 %
+propio; `_swift_getGenericMetadata`, un 13,20 % inclusivo. Los porcentajes se solapan; no son contadores de reservas.
+
+Cambios conservados: una evaluación reutilizable por regla (sin reiniciar el token), diccionario de cambios con
+capacidad retenida, intercambio de buffers de aristas, eliminación de una resolución duplicada en `poll`, cursor
+local en la verificación y especialización de operaciones del contexto entre módulos. Las comprobaciones de hilo,
+tipo, ID, grafo y vigencia siguen activas; no se desactiva la exclusividad. Separar el control en una clase no genérica
+no mejoró el caso medido y se descartó.
+
+| Mediana release | Base repetida de esta sesión | Tras optimizar |
+|---|---|---|
+| 50 ciclos × 1.000 reglas con estado, 2 entradas | 111,99 ms | **76,17 ms** |
+| Motor actual en la misma comparación | 33,32 ms | **33,20 ms** |
+| Factor frente al motor actual | 3,36× | **2,29×** |
+
+Reducción aproximada del **32 %** en esa carga. Los contadores comprueban cero reservas nuevas de objetos de
+evaluación y cero suspensiones durante los ciclos calientes: no es una medida del coste aislado de suspender.
+Siguen pendientes el coste del almacén de clases, el acceso comprobado y su comparación con el almacén real.
+
+Batería final: **24 pruebas de depuración**; **21 funcionales y 3 de rendimiento en release**, todo en verde. TDD:
+la prueba de 50 evaluaciones pasó de fallar con 50 reservas a pasar con una; nuevas pruebas comprueban que los
+contextos de evaluaciones anteriores no reviven y que el almacenamiento reutilizado muere con el dueño.
+
+Medidas finales adicionales (medianas de cinco): cadena fría de 20.000, **30,36 ms**; de 100.000, **152,73 ms**;
+un millón de lecturas limpias, **118,81 ms**. Se conserva más memoria por regla (objeto y buffers) para reducir
+reservas; el valor propuesto se vacía al terminar. No se ha medido la memoria total. La medición fría no incluye la
+destrucción del dueño, a la que ahora se traslada la liberación del objeto de evaluación. **M4 sigue pendiente.**

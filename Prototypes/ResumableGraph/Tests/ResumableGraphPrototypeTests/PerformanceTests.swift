@@ -67,6 +67,8 @@ import class SwiftAttributeGraph.Graph
             let input = graph.makeInput(0), other = graph.makeInput(1)
             let rules = (0..<1_000).map { _ in graph.makeRule(Sum(first: input, second: other)) }
             for rule in rules { _ = graph.value(of: rule) }
+            let allocations = graph.evaluationAllocationCount
+            let suspensions = graph.suspensionCount
             prototype.append(milliseconds {
                 for value in 1...50 {
                     graph.setValue(value, for: input)
@@ -74,6 +76,8 @@ import class SwiftAttributeGraph.Graph
                 }
             })
             #expect(graph.value(of: rules[0]) == 51)
+            #expect(graph.evaluationAllocationCount == allocations)
+            #expect(graph.suspensionCount == suspensions)
 
             let native = Graph()
             let a = native.makeInput(0), b = native.makeInput(1)
@@ -94,6 +98,7 @@ import class SwiftAttributeGraph.Graph
         }
         report("prototype 50 cycles x 1,000 stateful rules, 2 inputs, excludes creation", prototype)
         report("production 50 cycles x 1,000 stateful rules, 2 inputs, excludes creation", production)
+        print("COUNTERS warm prototype cycles: 0 evaluation allocations, 0 suspensions")
     }
 
     @Test func cleanReads() {

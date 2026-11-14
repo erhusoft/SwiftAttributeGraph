@@ -1,5 +1,6 @@
+@usableFromInline
 class TypedNode<Value: Equatable>: Node {
-    var value: Value?
+    @usableFromInline var value: Value?
 
     init(owner: Int, value: Value?) {
         self.value = value

@@ -1,5 +1,6 @@
+@usableFromInline
 struct Attribute<Value: Equatable> {
-    let index: Int
-    let graph: GraphIdentity
-    var erased: AnyAttribute { AnyAttribute(index: index, graph: graph) }
+    @usableFromInline let index: Int
+    @usableFromInline let graph: GraphIdentity
+    @inlinable var erased: AnyAttribute { AnyAttribute(index: index, graph: graph) }
 }

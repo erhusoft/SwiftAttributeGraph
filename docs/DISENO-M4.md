@@ -178,6 +178,9 @@ Primero un prototipo aislado, sin sustituir el motor; después, si se acepta la 
    memoria de los marcos. Comparar con la base anterior de este Mac; fijar umbrales después del prototipo.
 7. Compilar y ejecutar los casos de profundidad y afinidad en Windows ARM64 antes de afirmar portabilidad verificada.
 
+**Prioridad del dueño (2026-11-14):** primero completar el motor en Mac. El punto 7 queda para la etapa posterior;
+no se trabaja en Windows ahora ni se exige esa validación para cerrar M4 en Mac.
+
 ## 8. Resultado del prototipo aislado
 
 Mac M1, Swift 6.2.4: 21 pruebas de depuración; 18 funcionales y 3 de rendimiento en release. Pasan cadenas frías de
@@ -189,6 +192,12 @@ Medianas release: cadena fría de 20.000, **32,62 ms**; de 100.000, **164,75 ms*
 1.000 reglas con estado y dos entradas: prototipo **109,66 ms**, motor actual **33,26 ms** (sin creación). El coste
 caliente es **3,30×**: aún no satisface un objetivo de integración de alto rendimiento y no aísla el coste de la API.
 Detalle de la comparación, memoria parcial y límites en el [README del prototipo](../Prototypes/ResumableGraph/README.md).
+
+**Perfil y optimización posteriores:** [informe](../Prototypes/ResumableGraph/PERFIL.md). 24 pruebas en verde; el caso
+caliente baja de 111,99 ms (base repetida de la sesión) a **76,17 ms**, frente a **33,20 ms** del motor actual:
+aproximadamente **32 %** menos, todavía **2,29×**. Se reutilizan evaluaciones y buffers y se especializan operaciones
+del contexto entre módulos, conservando comprobaciones. La carga caliente no suspende; la diferencia restante no
+puede atribuirse al acto de suspender. La memoria retenida por regla aumenta y aún no se ha cuantificado en total.
 
 **No verificado:** integración con el motor, políticas de M2, M5 completo, migración de APIs, perfil de asignaciones,
 percentiles, cargas reales de UI y Windows. El prototipo usa `Equatable`, dueños planos y no reutiliza ranuras.

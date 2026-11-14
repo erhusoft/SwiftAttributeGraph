@@ -2,6 +2,58 @@ import Testing
 @testable import ResumableGraphPrototype
 
 @Suite struct StateTests {
+    @Test func repeatedEvaluationsReuseTheirOwnedContextStorage() {
+        let graph = PrototypeGraph()
+        let input = graph.makeInput(0)
+        let rule = graph.makeRule(PrototypeTests.PlusOne(source: input, counter: .init()))
+        for value in 0..<50 {
+            graph.setValue(value, for: input)
+            #expect(graph.value(of: rule) == value + 1)
+        }
+        #expect(graph.evaluationAllocationCount == 1)
+    }
+
+    @Test func reusableEvaluationStorageDiesWithItsOwner() {
+        let graph = PrototypeGraph()
+        let owner = graph.makeOwner()
+        let rule = graph.withOwner(owner) {
+            graph.makeRule(PrototypeTests.PlusOne(source: graph.makeInput(0), counter: .init()))
+        }
+        _ = graph.value(of: rule)
+        weak var storage = (graph.nodes[rule.index] as! RuleNode<PrototypeTests.PlusOne>).evaluation
+        #expect(storage != nil)
+        graph.invalidate(owner)
+        #expect(storage == nil && graph.nodeCount == 0)
+    }
+
+    struct UseContextFromAnEarlierEvaluation: ResumableRule {
+        let input: Attribute<Int>
+        let saved: PrototypeTests.Saved
+        var runs = 0
+        mutating func resume(_ context: inout RuleContext<Int>) -> RuleStep {
+            switch context.poll(input) {
+            case .pending: return .needsInput(input.erased)
+            case .ready(let value):
+                if runs == 0 { saved.context = context }
+                else { _ = saved.context!.hasValue }
+                runs += 1
+                context.value = value
+                return .finished
+            }
+        }
+    }
+
+    @Test func aContextFromAnEarlierEvaluationStaysInvalidDuringTheNextEvaluation() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = PrototypeGraph()
+            let input = graph.makeInput(0)
+            let rule = graph.makeRule(UseContextFromAnEarlierEvaluation(input: input, saved: .init()))
+            _ = graph.value(of: rule)
+            graph.setValue(1, for: input)
+            _ = graph.value(of: rule)
+        }
+    }
+
     struct Parity: ResumableRule {
         let source: Attribute<Int>
         mutating func resume(_ context: inout RuleContext<Int>) -> RuleStep {

@@ -1,13 +1,15 @@
+@usableFromInline
 final class Evaluation<Value: Equatable> {
-    weak var graph: PrototypeGraph?
-    let node: Int
-    var proposed: Value?
-    var written = false
-    var firstStep = true
-    var active = false
-    var token: UInt64 = 0
+    @usableFromInline weak var graph: PrototypeGraph?
+    @usableFromInline let node: Int
+    @usableFromInline var proposed: Value?
+    @usableFromInline var written = false
+    @usableFromInline var firstStep = true
+    @usableFromInline var active = false
+    @usableFromInline var token: UInt64 = 0
 
     init(graph: PrototypeGraph, node: Int, value: Value?) {
+        graph.evaluationAllocationCount += 1
         self.graph = graph
         self.node = node
         proposed = value

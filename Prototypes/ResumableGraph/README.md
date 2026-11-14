@@ -4,6 +4,9 @@ Fecha: 2026-11-14. Experimento de la [propuesta de M4](../../docs/DISENO-M4.md),
 la API. **No sustituye el motor ni completa M4.** El paquete principal no depende de este módulo. El único paquete
 que usa el experimento es el motor local (`../..`), exclusivamente desde los benchmarks de comparación.
 
+**Actualización:** [perfil y optimización](PERFIL.md): el caso caliente baja a **76,17 ms**, frente a **33,20 ms** del
+motor actual (**2,29×**). Pasan 24 pruebas. Windows queda aplazado hasta completar el motor en Mac.
+
 ## Qué demuestra
 
 Una regla devuelve `.needsInput` cuando necesita un atributo sucio. Su método ya ha retornado cuando el bucle del
@@ -50,12 +53,12 @@ usa la biblioteca estándar y una función nativa de identidad de hilo aislada e
 
 - Tests primero: la compilación de las primeras ocho pruebas falló por la API aún inexistente; después se implementó
   el módulo y se amplió la especificación. No se presenta ese rojo como una mutación de comportamiento del motor.
-- Resultado final: **21 pruebas en depuración**; en release, **18 funcionales y 3 de rendimiento**, ejecutadas por
+- Resultado tras optimizar: **24 pruebas en depuración**; en release, **21 funcionales y 3 de rendimiento**, ejecutadas por
   separado para medir sin las otras suites. Sin problemas conocidos ni errores en el prototipo.
 - Mutación comprobada: quitar la comparación del identificador de paso permitió reutilizar un contexto anterior;
   `aContextFromThePreviousStepCannotBeReused` falló. Se restauró la protección y la batería volvió a pasar.
 
-## Medidas en release
+## Medidas iniciales en release (antes del perfil)
 
 Mac M1, Swift 6.2.4. Medianas de 5 muestras para cadenas y lecturas; 7 para ciclos calientes. Se ejecutó la suite de
 rendimiento sola. Las aserciones quedan fuera del intervalo medido; las comprobaciones del motor siguen activas.
@@ -89,6 +92,7 @@ SwiftUI ni con AttributeGraph de Apple. **No hay evidencia todavía de rendimien
 - Las medidas son medianas de este Mac, sin análisis de percentiles ni perfil de asignaciones. No representan una
   UI real ni permiten asegurar el presupuesto de un fotograma.
 
-La viabilidad funcional del bucle está demostrada en los casos descritos. Antes de integrar, hay que medir qué parte
-del coste caliente procede del almacenamiento y de las comprobaciones, diseñar la convivencia con las reglas
-síncronas y adaptar los marcos al almacén real. M4 seguirá pendiente hasta validar también M2, M5 y Windows.
+La viabilidad funcional del bucle está demostrada en los casos descritos. El [perfil posterior](PERFIL.md) identifica
+costes y reduce la carga caliente, pero antes de integrar hay que contrastar con el almacén real y diseñar la
+convivencia con las reglas síncronas. M4 sigue pendiente de integración y validación completa de M2 y M5 en Mac.
+Windows se validará después de completar el motor en Mac.

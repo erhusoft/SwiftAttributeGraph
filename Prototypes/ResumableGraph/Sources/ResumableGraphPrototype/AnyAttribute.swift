@@ -1,4 +1,9 @@
+@usableFromInline
 struct AnyAttribute: Equatable {
-    let index: Int
-    let graph: GraphIdentity
+    @usableFromInline let index: Int
+    @usableFromInline let graph: GraphIdentity
+    @usableFromInline init(index: Int, graph: GraphIdentity) {
+        self.index = index
+        self.graph = graph
+    }
 }

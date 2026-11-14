@@ -1,3 +1,4 @@
+@usableFromInline
 final class PrototypeGraph {
     private struct Owner {
         var live = true
@@ -12,23 +13,27 @@ final class PrototypeGraph {
         var waiting: Int?
     }
 
-    var nodes: [Node?] = []
-    private let identity = GraphIdentity()
+    @usableFromInline var nodes: [Node?] = []
+    @usableFromInline let identity = GraphIdentity()
     private var owners: [Owner] = [Owner()]
     private var currentOwner = 0
     private var deferredOwners: [Int] = []
     private var frames: [Frame] = []
     let owningThread = threadIdentity()
-    private(set) var runningNode: Int?
+    @usableFromInline private(set) var runningNode: Int?
     private var activeSteps = 0
     private(set) var maximumActiveSteps = 0
     private(set) var maximumFrameCount = 0
     private(set) var maximumFrameCapacity = 0
     private(set) var nodeCount = 0
+    var evaluationAllocationCount = 0
+    private(set) var suspensionCount = 0
     var liveOwnerCount: Int { owners.filter(\.live).count }
     var frameCount: Int { frames.count }
     var frameStorageBytes: Int { maximumFrameCapacity * MemoryLayout<Frame>.stride }
 
+    @inline(__always)
+    @usableFromInline
     func checkThread() { precondition(threadIdentity() == owningThread, "the graph must stay on its original thread") }
 
     func makeOwner() -> Int {
@@ -64,6 +69,7 @@ final class PrototypeGraph {
         return Attribute(index: index, graph: identity)
     }
 
+    @inlinable
     func checkedNode(_ attribute: AnyAttribute) -> Node {
         precondition(attribute.graph === identity, "an attribute belongs to another graph")
         precondition(nodes.indices.contains(attribute.index), "invalid attribute")
@@ -71,6 +77,7 @@ final class PrototypeGraph {
         return node
     }
 
+    @inlinable
     func typedNode<T>(_ attribute: Attribute<T>) -> TypedNode<T> {
         guard let node = checkedNode(attribute.erased) as? TypedNode<T> else { preconditionFailure("wrong attribute type") }
         return node
@@ -119,19 +126,26 @@ final class PrototypeGraph {
 
     private func update(_ root: Int) {
         push(root)
-        while !frames.isEmpty {
+        outer: while !frames.isEmpty {
             let top = frames.count - 1
             let index = frames[top].node
             let node = nodes[index]!
             if !frames[top].started {
-                if frames[top].nextInput < node.inputs.count {
-                    let edge = node.inputs[frames[top].nextInput]
-                    if nodes[edge.source]!.dirty { push(edge.source); continue }
-                    frames[top].changed = frames[top].changed || nodes[edge.source]!.version != edge.version
-                    frames[top].nextInput += 1
-                    continue
+                var next = frames[top].nextInput
+                var changed = frames[top].changed
+                while next < node.inputs.count {
+                    let edge = node.inputs[next]
+                    let source = nodes[edge.source]!
+                    if source.dirty {
+                        frames[top].nextInput = next
+                        frames[top].changed = changed
+                        push(edge.source)
+                        continue outer
+                    }
+                    changed = changed || source.version != edge.version
+                    next += 1
                 }
-                if node.hasRun && !node.forceRun && !frames[top].changed {
+                if node.hasRun && !node.forceRun && !changed {
                     node.dirty = false
                     node.evaluating = false
                     frames.removeLast()
@@ -139,9 +153,10 @@ final class PrototypeGraph {
                 }
                 node.reads.removeAll(keepingCapacity: true)
                 node.readSet.removeAll(keepingCapacity: true)
-                node.changes = Dictionary(uniqueKeysWithValues: node.inputs.map {
-                    ($0.source, nodes[$0.source]!.version != $0.version)
-                })
+                node.changes.removeAll(keepingCapacity: true)
+                for edge in node.inputs {
+                    node.changes[edge.source] = nodes[edge.source]!.version != edge.version
+                }
                 node.begin(in: self, index: index)
                 frames[top].started = true
             }
@@ -154,6 +169,7 @@ final class PrototypeGraph {
             case .needsInput(let attribute):
                 let source = checkedNode(attribute)
                 precondition(source.dirty, "a step must poll a ready input rather than repeatedly request it")
+                suspensionCount += 1
                 frames[top].waiting = attribute.index
                 push(attribute.index)
             case .finished:
@@ -162,8 +178,9 @@ final class PrototypeGraph {
                     nodes[edge.source]!.outputs.remove(index)
                 }
                 for edge in node.reads { nodes[edge.source]!.outputs.insert(index) }
-                node.inputs = node.reads
-                node.reads = []
+                // Alternate the two buffers instead of discarding one on every evaluation.
+                swap(&node.inputs, &node.reads)
+                node.reads.removeAll(keepingCapacity: true)
                 node.readSet.removeAll(keepingCapacity: true)
                 node.changes.removeAll(keepingCapacity: true)
                 node.hasRun = true
@@ -188,6 +205,7 @@ final class PrototypeGraph {
         return nodes[index]!.step()
     }
 
+    @inlinable
     func recordRead(_ source: Int, into consumer: Int) {
         let node = nodes[consumer]!
         if node.readSet.insert(source).inserted {
