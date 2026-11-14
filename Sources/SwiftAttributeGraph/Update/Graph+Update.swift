@@ -41,7 +41,7 @@ extension Graph {
         precondition(table.isLive(attribute.id), "setValue(_:for:): the attribute is dead (its subgraph was invalidated)")
         let index = Int(attribute.id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
-        guard typedNode(attribute).store(value, comparison: table.comparisons[index]) else { return }
+        guard typedNode(attribute).store(value) else { return }
         table.versions[index] &+= 1
         if table.state[index] & NodeState.observed != 0 { queueNotification(UInt32(index)) }
         propagateDirty(from: UInt32(index))
@@ -110,7 +110,7 @@ extension Graph {
         trackCursor = 0
         let previousGraph = ThreadLocalGraph.install(self)
 
-        let changed = table.box(at: node).evaluate(comparison: table.comparisons[n])
+        let changed = table.box(at: node).evaluate()
 
         _ = ThreadLocalGraph.install(previousGraph)
         let cursor = trackCursor

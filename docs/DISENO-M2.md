@@ -1,7 +1,7 @@
 # Diseño M2: políticas de comparación por atributo (versión 4, pendiente de aprobación)
 
 Fecha: 2026-11-14. Sustituye a las versiones 1 a 3 (commits `1f89f95`, `9d0d5f3`, `d89e20a`); parte de las rondas 1–4 de
-`parity/ANALISIS.md`. **Estado: propuesta. No se implementa nada hasta que el dueño la apruebe.**
+`parity/ANALISIS.md`. **Estado: aprobada e implementada** (resultados, límites y lo no verificado en [PLAN-MOTOR.md](PLAN-MOTOR.md) §7). Desviación: no se pudo usar `_forEachField` (no es accesible desde fuera de la biblioteca estándar); se usan las funciones de reflexión del runtime que la sustentan, aisladas en `TypeLayout.swift`.
 
 ## 0. Qué cambió y por qué (versión 4)
 

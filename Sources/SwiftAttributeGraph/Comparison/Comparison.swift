@@ -1,28 +1,28 @@
 /// How the engine decides whether a new value of an attribute counts as a change.
 ///
-/// Parity measurements against SwiftUI show that the comparison is not one function: the value of a view is compared
-/// by its bits and ignores `==`, while the environment and `@State` writes use other rules (see
-/// `docs/DISENO-M0.md` §5). M0 provides the two policies that need no type information; M2 adds the rest.
+/// SwiftUI does not compare with one function. The measured rules (macOS 15.7.9, steady state; see
+/// `docs/DISENO-M2.md` §2) are resolved once, when the attribute is created, from the type of its value:
 public enum Comparison: Sendable {
-    /// Equal when every byte of the value is equal (references by identity). The default.
-    case bits
+    /// The properties of a view, and the default. A trivial value is compared by its bytes (an `==` of its own is
+    /// ignored); otherwise each field by its own rule: `Equatable` fields with `==`, references by identity.
+    case viewValue
+    /// An environment value: equal if the bytes are equal or if the `@State` rule says equal.
+    case environment
+    /// A `@State` write: `Equatable` values (and the `Equatable` fields of the rest, trivial ones included) with `==`;
+    /// references by identity.
+    case stateWrite
     /// Every new value counts as a change.
     case alwaysDifferent
-
-    /// Whether `old` and `new` are the same under this policy.
-    @inline(__always)
-    func isEqual<Value>(_ old: Value, _ new: Value) -> Bool {
-        switch self {
-        case .alwaysDifferent: return false
-        case .bits: return bitwiseEqual(old, new)
-        }
-    }
+    /// Only the bytes of the value (references by identity), without looking at the type: the policy of M0. A safe
+    /// floor: it can run a rule that SwiftUI would skip, never skip one that SwiftUI would run.
+    case bits
 }
 
 /// Compares the bytes of two values of the same type, eight at a time.
 ///
-/// Padding bytes are not guaranteed to be equal for equal values, so a type with padding can report "changed" when
-/// nothing changed. That error is on the safe side: a rule runs once more, never once less.
+/// Padding bytes (and the unused words of an existential) are not guaranteed to be equal for equal values, so this
+/// can report "changed" when nothing changed. That is on the safe side: a rule runs once more, never once less. The
+/// policies other than `.bits` use a ``ComparisonPlan``, which never reads padding.
 @inline(__always)
 func bitwiseEqual<Value>(_ a: Value, _ b: Value) -> Bool {
     withUnsafeBytes(of: a) { left in
@@ -41,4 +41,20 @@ func bitwiseEqual<Value>(_ a: Value, _ b: Value) -> Bool {
             return true
         }
     }
+}
+
+/// Whether two ranges of memory hold the same bytes.
+@inline(__always)
+func bytesEqual(_ left: UnsafeRawPointer, _ right: UnsafeRawPointer, _ count: Int) -> Bool {
+    var offset = 0
+    while offset + 8 <= count {
+        if left.loadUnaligned(fromByteOffset: offset, as: UInt64.self)
+            != right.loadUnaligned(fromByteOffset: offset, as: UInt64.self) { return false }
+        offset += 8
+    }
+    while offset < count {
+        if left.load(fromByteOffset: offset, as: UInt8.self) != right.load(fromByteOffset: offset, as: UInt8.self) { return false }
+        offset += 1
+    }
+    return true
 }

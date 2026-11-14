@@ -9,7 +9,6 @@ struct NodeTable {
     var inputs: [[InputEdge]] = []
     var outputs: [[UInt32]] = []
     private(set) var owners: [UInt32] = []
-    var comparisons: [Comparison] = []
     private(set) var boxes: [NodeBox?] = []
     private var freeList: [UInt32] = []
     private(set) var liveCount = 0
@@ -18,15 +17,13 @@ struct NodeTable {
     var slotCount: Int { generations.count }
 
     /// Reserves a slot (reusing a freed one if any) and stores the node in it.
-    mutating func allocate(owner: UInt32, box: NodeBox, state initialState: UInt8, version: UInt32,
-                           comparison: Comparison) -> AttributeID {
+    mutating func allocate(owner: UInt32, box: NodeBox, state initialState: UInt8, version: UInt32) -> AttributeID {
         liveCount += 1
         if let index = freeList.popLast() {
             let i = Int(index)
             state[i] = initialState
             versions[i] = version
             owners[i] = owner
-            comparisons[i] = comparison
             boxes[i] = box
             return AttributeID(index: index, generation: generations[i])
         }
@@ -36,7 +33,6 @@ struct NodeTable {
         inputs.append([])
         outputs.append([])
         owners.append(owner)
-        comparisons.append(comparison)
         boxes.append(box)
         return AttributeID(index: UInt32(generations.count - 1), generation: 1)
     }

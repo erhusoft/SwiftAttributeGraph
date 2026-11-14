@@ -187,4 +187,45 @@ import Testing
         Self.report("20,000-input rule loses half of its edges (M7 target)", ms)
         #expect(ms < 60_000)
     }
+
+    // MARK: M2: cost of a write under each policy
+
+    /// One million writes of a value that alternates between two values (so each write is a change), per policy. A
+    /// policy costs a function call and, for the plan, a walk over its operations.
+    private static func writes<V>(_ name: String, _ a: V, _ b: V, policies: [(String, Comparison)]) {
+        for (label, policy) in policies {
+            let ms = median(runs: 5) {
+                let graph = Graph()
+                let input = graph.makeInput(a, comparison: policy)
+                for i in 0..<500_000 { graph.setValue(i & 1 == 0 ? b : a, for: input) }
+            }
+            report("M2 \(name) x 500k alternating writes, \(label)", ms)
+            #expect(ms < 10_000)
+        }
+    }
+
+    @Test func writesUnderEachPolicy() {
+        let all: [(String, Comparison)] = [("bits", .bits), ("viewValue", .viewValue), ("environment", .environment), ("stateWrite", .stateWrite)]
+        Self.writes("Int", 1, 2, policies: all)
+        Self.writes("Double", 1.0, 2.0, policies: all)
+        Self.writes("String short", "abc", "abd", policies: all)
+        Self.writes("String long", String(repeating: "abcdefghij", count: 5), String(repeating: "x", count: 50), policies: all)
+        struct Mixed { var d: Double; var s: String; var n: Int }
+        Self.writes("struct{Double,String,Int}", Mixed(d: 1, s: "a", n: 1), Mixed(d: 2, s: "b", n: 2), policies: all)
+        Self.writes("Any holding Int", 1 as Any, 2 as Any, policies: all)
+    }
+
+    /// The same writes where the value does not change (the common case: nothing to do).
+    @Test func unchangedWritesUnderEachPolicy() {
+        for (label, policy) in [("bits", Comparison.bits), ("viewValue", .viewValue), ("stateWrite", .stateWrite)] {
+            let long = String(repeating: "abcdefghij", count: 5)
+            let ms = Self.median(runs: 5) {
+                let graph = Graph()
+                let input = graph.makeInput(long, comparison: policy)
+                for _ in 0..<500_000 { graph.setValue(long, for: input) }
+            }
+            Self.report("M2 String long x 500k identical writes, \(label)", ms)
+            #expect(ms < 10_000)
+        }
+    }
 }

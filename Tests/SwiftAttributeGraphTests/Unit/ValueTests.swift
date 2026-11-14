@@ -63,11 +63,12 @@ import Testing
         #expect(graph.version(of: a.id) == before + 1)
     }
 
+    /// The M0 policy: only bytes. (The default policy since M2 compares a `String` with `==`; see `ComparisonPolicyTests`.)
     @Test func aLongStringRebuiltIsDifferentButTheSameBufferIsEqual() {
         let graph = Graph()
         let make = { String(repeating: "abcdefghij", count: 5) }
         let stored = make()
-        let a = graph.makeInput(stored)
+        let a = graph.makeInput(stored, comparison: .bits)
         let before = graph.version(of: a.id)
         let copy = stored
         graph.setValue(copy, for: a)          // same buffer

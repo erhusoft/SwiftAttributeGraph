@@ -9,6 +9,8 @@ public final class Graph {
     static let noNode = UInt32.max
 
     var table = NodeTable()
+    /// Comparators resolved so far, one per value type and policy (see `ValueComparator.Cache`).
+    var comparators = ValueComparator.Cache()
     var subgraphs = SubgraphTable()
     var currentSubgraph: SubgraphID
 
@@ -86,29 +88,31 @@ public final class Graph {
     func contains(_ id: AttributeID) -> Bool { table.isLive(id) }
 
     /// Creates a leaf attribute holding `value`, in the current subgraph.
-    public func makeInput<Value>(_ value: Value, comparison: Comparison = .bits) -> Attribute<Value> {
+    public func makeInput<Value>(_ value: Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
         assertOwnThread()
-        let id = allocate(InputNode(value: value), state: NodeState.hasValue, comparison: comparison)
+        let id = allocate(InputNode(value: value, isEqual: comparators.comparator(comparison, for: Value.self)), state: NodeState.hasValue)
         return Attribute(id: id)
     }
 
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
-    public func makeRule<R: Rule>(_ rule: R, comparison: Comparison = .bits) -> Attribute<R.Value> {
+    public func makeRule<R: Rule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()
-        let id = allocate(TypeRuleNode(rule: rule), state: NodeState.isRule | NodeState.dirty, comparison: comparison)
+        let id = allocate(TypeRuleNode(rule: rule, isEqual: comparators.comparator(comparison, for: R.Value.self)),
+                         state: NodeState.isRule | NodeState.dirty)
         return Attribute(id: id)
     }
 
     /// Creates a rule attribute from a closure, in the current subgraph. The closure runs lazily.
-    public func makeRule<Value>(_ body: @escaping () -> Value, comparison: Comparison = .bits) -> Attribute<Value> {
+    public func makeRule<Value>(_ body: @escaping () -> Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
         assertOwnThread()
-        let id = allocate(ClosureRuleNode(body: body), state: NodeState.isRule | NodeState.dirty, comparison: comparison)
+        let id = allocate(ClosureRuleNode(body: body, isEqual: comparators.comparator(comparison, for: Value.self)),
+                         state: NodeState.isRule | NodeState.dirty)
         return Attribute(id: id)
     }
 
-    private func allocate(_ box: NodeBox, state: UInt8, comparison: Comparison) -> AttributeID {
+    private func allocate(_ box: NodeBox, state: UInt8) -> AttributeID {
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
-        let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1, comparison: comparison)
+        let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
         subgraphs.add(member: id.index, to: currentSubgraph)
         return id
     }

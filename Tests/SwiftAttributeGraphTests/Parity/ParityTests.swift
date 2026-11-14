@@ -60,21 +60,30 @@ import Testing
         #expect(childRuns.runs == 2)
     }
 
-    /// E3 / E16: an array rebuilt on every evaluation is a different buffer, so the child runs; the same stored array
-    /// is skipped.
-    @Test func anArrayRebuiltOnEveryEvaluationChangesTheViewValueButAStoredOneDoesNot() {
+    /// E3 / E16, steady state: an array rebuilt on every evaluation with the same content is skipped (`Array` is
+    /// `Equatable` and the property of a view uses `==` for such a field), and so is the same stored array. Round 1
+    /// measured "a rebuilt array runs" in a fresh process (the cold state, `docs/DISENO-M2.md` §0); `.bits` keeps that.
+    @Test func anArrayRebuiltWithTheSameContentIsSkippedUnderTheDefaultPolicy() {
+        #expect(arrayRuns(comparison: .viewValue) == (1, 1))
+    }
+
+    @Test func anArrayRebuiltOnEveryEvaluationRunsTheChildUnderBitsAndAStoredOneDoesNot() {
+        #expect(arrayRuns(comparison: .bits) == (2, 1))
+    }
+
+    private func arrayRuns(comparison: Comparison) -> (Int, Int) {
         let graph = Graph()
         let tick = graph.makeInput(0)
         let stored = [Int](repeating: 7, count: 16)
         let rebuiltRuns = Counter(), storedRuns = Counter()
-        let rebuilt = graph.makeRule { _ = tick.value; return [Int](repeating: 7, count: 16) }
-        let keeps = graph.makeRule { _ = tick.value; return stored }
+        let rebuilt = graph.makeRule({ _ = tick.value; return [Int](repeating: 7, count: 16) }, comparison: comparison)
+        let keeps = graph.makeRule({ _ = tick.value; return stored }, comparison: comparison)
         let childRebuilt = graph.makeRule { rebuiltRuns.runs += 1; return rebuilt.value.count }
         let childStored = graph.makeRule { storedRuns.runs += 1; return keeps.value.count }
         _ = graph.value(of: childRebuilt); _ = graph.value(of: childStored)
         graph.setValue(1, for: tick)
         _ = graph.value(of: childRebuilt); _ = graph.value(of: childStored)
-        #expect((rebuiltRuns.runs, storedRuns.runs) == (2, 1))
+        return (rebuiltRuns.runs, storedRuns.runs)
     }
 
     /// E7: leaving a branch destroys its state; coming back starts from the initial value and the old state is gone.
