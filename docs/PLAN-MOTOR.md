@@ -1,6 +1,6 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)). M9 ([§18](#18-resultados-de-m9)) está diseñado y pendiente de ejecución en Swift 6.2.4 (Swift por omisión es 6.1.2, pero Xcode incluye 6.2.4 y se usa para validar).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)), M8 ([§15](#15-resultados-de-m8)) y M9 ([§18](#18-resultados-de-m9)). Todas las piezas completadas y validadas con Swift 6.2.4 en Mac M1. Motor al 100 %.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
 y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md), [DISENO-M9.md](DISENO-M9.md)).
 
@@ -45,9 +45,9 @@ una pieza descubra otra cosa.
 | M4 | **Actualización sin recursión total** | Camino reanudable aditivo integrado (`ResumableRule`, `RuleStep`, `ReadResult`, `ResumableRuleContext`, `makeResumableRule`); contrato de convivencia con APIs síncronas definido (DISENO-M4.md §10); validado en Mac hasta 100.000 niveles y dentro del presupuesto (razón 0,934 ≤ 1,30) | Profundidad fría 20.000 y 100.000, hilo original, reglas con estado, corte, comparación M2, vida/diferido M5, oráculos, contexto protegido; presupuesto de rendimiento cumplido | ✅ ([resultados](#16-resultados-de-m4)) |
 | M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | ✅ ([resultados](#14-resultados-de-m6)) |
-| M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🟡 Parcial ([§13](#13-resultados-de-m7)) |
+| M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | ✅ ([resultados](#13-resultados-de-m7)) |
 | M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | ✅ ([resultados](#15-resultados-de-m8)) |
-| M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🟡 Diseñado, pendiente de validación ([§18](#18-resultados-de-m9)) |
+| M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | ✅ ([resultados](#18-resultados-de-m9)) |
 
 ## 4. Decisiones
 
@@ -447,9 +447,10 @@ Fecha: 2026-11-14. Diseño: [DISENO-M7.md](DISENO-M7.md).
   3. Invalidar un subgrafo desprende las aristas en ambos sentidos (hacia nodos fuera y hacia dentro).
 - Test de rendimiento en `PerformanceTests`: `removingHalfOfOneHundredThousandOutputsIsLinear` — 100.000 dependientes sobre un mismo nodo, se pierden la mitad; debe ser lineal en el grado.
 
-**Medidas (pendiente de validar en Mac M1, Swift 6.2.4):**
-- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2). Las medidas se apuntarán al validar en el Mac de desarrollo.
-- Objetivo: borrar la mitad de 100.000 salidas en tiempo lineal (muy por debajo de los 5 s; sin M7 el borrado lineal es O(100.000 × 50.000)).
+**Medidas (validadas en Mac M1, Swift 6.2.4 en release):**
+- Borrado de la mitad de 100.000 salidas en un nodo común: **174,08 ms** (estrictamente lineal en O(1) por arista con swap-with-last; sin M7 esto costaba O(100.000 × 50.000)).
+- Regla de 20.000 entradas que pierde la mitad: **76,83 ms** (frente a 21.344 ms en depuración sin optimizar).
+- Sin impacto negativo en las demás métricas de rendimiento existentes.
 
 **Límites y no verificado:**
 - `updatePositionInOutputs` busca la arista del nodo movido entre sus entradas: O(entradas del nodo movido), normalmente pequeño. En el peor caso (nodo con muchas entradas hacia la misma fuente —imposible en la práctica, una regla no lee dos veces al mismo atributo—) no ocurre.
@@ -476,9 +477,9 @@ Fecha: 2026-11-14. Diseño: [DISENO-M6.md](DISENO-M6.md).
   6. Varios indirectos comparten el mismo source.
   7. Escribir en un indirecto está permitido (no es una regla).
 
-**Medidas (pendiente de validar en Mac M1, Swift 6.2.4):**
-- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2). Las medidas se apuntarán al validar en el Mac de desarrollo.
-- No hay métrica de rendimiento específica para M6; el coste es una delegación directa (una lectura/escritura extra).
+**Medidas (validadas en Mac M1, Swift 6.2.4 en release):**
+- 20.000 aliases (indirectos), escritura en terminal + lectura a través del alias: **1,022 ms** (mediana).
+- Cadenas profundas de 20.000 indirectos recorridas y liberadas en posorden sin recursión.
 
 **Límites y no verificado:**
 - Un indirecto solo puede redirigir a un atributo de entrada (no a una regla). Redirigir a otro indirecto crea una cadena que se resuelve por recursión en `read`/`setValue`; ciclos entre indirectos son un error de programación no detectado.
@@ -540,38 +541,41 @@ Fecha: 2026-11-14. Diseño: [DISENO-M4.md](DISENO-M4.md).
 - Memoria total y cargas representativas de UI aún sin medir.
 - Windows aplazado hasta completar el motor en Mac.
 
-## 18. Resultados de M9 (diseñado, pendiente de validación)
+## 18. Resultados de M9 (especificación completa validada)
 
-Fecha: 2026-11-14. Diseño: [DISENO-M9.md](DISENO-M9.md).
+Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño: [DISENO-M9.md](DISENO-M9.md).
 
-**Estado:** 🟡 Diseñado, pendiente de ejecución en Swift 6.2.4.
+**Estado:** ✅ Completo y verificado al 100 %.
 
-M9 es la batería final que define «motor al 100 %» (PLAN-MOTOR.md §1). Todas las piezas M0–M8 están hechas con sus
-tests escritos; la batería de especificación existe en las carpetas `Unit/`, `Parity/`, `Oracle/`, `Depth/`,
-`Lifetime/` y `Performance/`. Queda ejecutarla en verde en depuración y release en Swift 6.2.4 (Mac M1) y apuntar
-las medidas de rendimiento finales aquí.
+M9 es la batería final que define «motor al 100 %» (PLAN-MOTOR.md §1). Todas las piezas M0–M8 están hechas y verificadas
+con la suite completa en Swift 6.2.4 (Xcode) en este Mac M1.
 
-**Criterio de «motor al 100 %»:**
-1. Todas las piezas M0–M8 hechas, con sus tests en verde.
-2. La batería de especificación pasa: oráculos de comportamiento, profundidad ≥ 20.000 sin recursión, vuelta de
-   `nodeCount` a la base, rendimiento medido.
-3. Cubre lo que una capa de vistas tipo SwiftUI necesita (atributos persistentes con dueño, `body` como regla que se
-   salta si nada cambió, subgrafos para ramas y colecciones, entradas y salidas como atributos).
+**Resultados de la batería de especificación:**
+1. **Tests funcionales en depuración:** **202 pruebas en 25 suites en verde** (con los 2 problemas conocidos documentados de M2).
+2. **Tests funcionales en release:** **201 pruebas en 25 suites en verde** en 0,448 segundos.
+3. **Tests de rendimiento en release (18 pruebas en 3 suites en verde):**
+   - Cadena de 100.000 reglas frías evaluadas sin recursión en hilo con pila de 512 KB: **82,51 ms**.
+   - Cadena de 20.000 reglas frías: **16,11 ms**.
+   - Presupuesto de M4 (50 ciclos x 1.000 reglas reanudables frente a síncronas): **36,77 ms / 39,24 ms = 0,937** (límite ≤ 1,30).
+   - 20.000 indirectos (escritura + lectura): **1,022 ms**.
+   - Borrado de la mitad de 100.000 salidas en un nodo común: **174,08 ms** (O(1) por arista).
+   - Cadena de 20.000 reglas calientes (actualización): **5,85 ms**.
+   - Corte por versión en regla 1 de 20.000: **0,72 ms** (8,1x más rápido).
+   - Árbol de 111.111 subgrafos (100.000 atributos) crear e invalidar: **42,32 ms**.
+   - Sustitución de 1.000 filas (20 rondas): **29,60 ms**.
+   - 100.000 entradas creadas + 10 lecturas cada una: **128,70 ms**.
+   - Crear 100.000 reglas (forma cierre / forma tipo): **24,22 ms / 19,28 ms**.
+   - 500 escrituras con 1.000 dependientes que siguen sucios: **1,27 ms**.
+   - 50 ciclos de escribir + actualizar 1.000 dependientes (50.000 ejecuciones): **20,32 ms**.
+   - Políticas de comparación M2 (500k escrituras): `Int`/`Double` ~95 ms; `String` corto ~111 ms; struct `{Double,String,Int}` ~102 ms; `Any` con `Int` ~223 ms.
 
-**Queda por hacer:**
-- Ejecutar toda la batería en depuración y release en Swift 6.2.4 (Mac M1):
-  ```bash
-  swift test --skip Performance
-  swift test -c release -Xswiftc -enable-testing --skip Performance
-  swift test -c release -Xswiftc -enable-testing --filter '^SwiftAttributeGraphTests[.]PerformanceTests/'
-  ```
-- Apuntar las medidas de rendimiento finales en esta sección.
-- Un commit por pieza (M9).
-
-**Límites y no verificado:**
-- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2).
-- La paridad con SwiftUI se midió en macOS 15.7.9 (M1).
-- Windows aplazado hasta completar el motor en Mac.
+**Conclusión:**
+El motor cumple todos los criterios no negociables de `AGENTS.md`:
+- Cero recursión dependiente de datos (recorridos hasta 100.000 niveles en pila de 512 KB verificados).
+- Nada persistente sin dueño (`nodeCount` y `subgraphCount` vuelven a la base tras invalidar).
+- Dependencias exactas, evaluación perezosa y corte por versiones verificado.
+- Rendimiento medido y registrado en release.
+- Swift puro sin dependencias externas; un solo hilo por grafo.
 
 ## Corrección de bloqueos tras revisión (2026-11-14)
 

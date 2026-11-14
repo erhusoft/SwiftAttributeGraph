@@ -49,7 +49,6 @@ extension Graph {
         lines.append("")
         for index in 0..<table.slotCount {
             guard table.isLive(index: UInt32(index)) else { continue }
-            let id = AttributeID(index: UInt32(index), generation: table.generations[index])
             let state = table.state[index]
             let version = table.versions[index]
             let owner = table.owner(at: UInt32(index))
