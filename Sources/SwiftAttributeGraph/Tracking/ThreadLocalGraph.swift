@@ -42,7 +42,13 @@ private func rawGet() -> UnsafeMutableRawPointer? { pthread_getspecific(key) }
 private func rawSet(_ pointer: UnsafeMutableRawPointer?) { _ = pthread_setspecific(key, pointer) }
 
 /// A number that identifies the calling thread.
-func currentThreadToken() -> UInt64 { UInt64(UInt(bitPattern: pthread_self())) }
+func currentThreadToken() -> UInt64 {
+    #if canImport(Darwin)
+    return UInt64(UInt(bitPattern: pthread_self()))      // `pthread_t` is a pointer on Darwin
+    #else
+    return UInt64(pthread_self())                         // `pthread_t` is an integer on Linux
+    #endif
+}
 #endif
 
 /// The graph whose rule is running on this thread, if any.
