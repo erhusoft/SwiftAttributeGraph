@@ -18,4 +18,6 @@ enum NodeState {
     static let stateful: UInt16 = 1 << 7
     /// The rule yields to the explicit update stack when it needs a dirty input.
     static let resumable: UInt16 = 1 << 8
+    /// The node is an indirect attribute: it redirects to another attribute and has no value of its own.
+    static let indirect: UInt16 = 1 << 9
 }

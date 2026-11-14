@@ -128,6 +128,20 @@ public final class Graph {
         return Attribute(id: id)
     }
 
+    /// Creates an indirect attribute that redirects to `source`, in the current subgraph.
+    ///
+    /// Reading the indirect attribute reads `source`; writing it writes to `source`. It has no
+    /// value of its own and shares `source`'s version, so the value cut applies to `source`.
+    /// `source` must not be a rule (rules cannot be written to).
+    public func makeIndirect<Value>(_ source: Attribute<Value>) -> Attribute<Value> {
+        assertOwnThread()
+        precondition(table.isLive(source.id), "makeIndirect: the source attribute is dead")
+        precondition(table.state[Int(source.id.index)] & NodeState.isRule == 0,
+                     "makeIndirect: cannot redirect to a rule")
+        let id = allocate(IndirectNode(source: source.id), state: NodeState.hasValue)
+        return Attribute(id: id)
+    }
+
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
     public func makeRule<R: Rule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()

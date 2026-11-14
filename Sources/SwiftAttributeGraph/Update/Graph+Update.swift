@@ -32,7 +32,18 @@ extension Graph {
     func read<Value>(_ attribute: Attribute<Value>) -> Value {
         precondition(table.isLive(attribute.id), "reading a dead attribute (its subgraph was invalidated)")
         let index = attribute.id.index
-        if table.state[Int(index)] & NodeState.dirty != 0 {
+        let n = Int(index)
+
+        // An indirect attribute redirects to another attribute: reading it reads the source,
+        // so the rule that reads it depends on the source too.
+        if table.state[n] & NodeState.indirect != 0 {
+            let box = table.box(at: index) as! IndirectNode<Value>
+            precondition(table.isLive(box.source), "reading an indirect attribute whose source is dead")
+            if evaluatingNode != Graph.noNode { recordRead(of: index) }
+            return read(Attribute<Value>(id: box.source))
+        }
+
+        if table.state[n] & NodeState.dirty != 0 {
             precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
             update(index)
         }
@@ -52,6 +63,15 @@ extension Graph {
         precondition(table.isLive(attribute.id), "setValue(_:for:): the attribute is dead (its subgraph was invalidated)")
         let index = Int(attribute.id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
+
+        // An indirect attribute redirects to another attribute: writing it writes to the source.
+        if table.state[index] & NodeState.indirect != 0 {
+            let box = table.box(at: index) as! IndirectNode<Value>
+            precondition(table.isLive(box.source), "writing an indirect attribute whose source is dead")
+            setValue(value, for: Attribute<Value>(id: box.source))
+            return
+        }
+
         guard typedNode(attribute).store(value) else { return }
         globalVersion &+= 1
         table.versions[index] &+= 1
