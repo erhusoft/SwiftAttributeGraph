@@ -1,8 +1,8 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)). Falta M9 ([§17](#17-resultados-de-m9)), la especificación completa.
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)). M9 ([§18](#18-resultados-de-m9)) está diseñado y pendiente de ejecución en Swift 6.2.4 (este entorno tiene 6.1.2 y no ejecuta `swift test`).
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
-y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md)).
+y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md), [DISENO-M9.md](DISENO-M9.md)).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -47,7 +47,7 @@ una pieza descubra otra cosa.
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | ✅ ([resultados](#14-resultados-de-m6)) |
 | M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🟡 Parcial ([§13](#13-resultados-de-m7)) |
 | M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | ✅ ([resultados](#15-resultados-de-m8)) |
-| M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🔴 |
+| M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🟡 Diseñado, pendiente de validación ([§18](#18-resultados-de-m9)) |
 
 ## 4. Decisiones
 
@@ -540,19 +540,35 @@ Fecha: 2026-11-14. Diseño: [DISENO-M4.md](DISENO-M4.md).
 - Memoria total y cargas representativas de UI aún sin medir.
 - Windows aplazado hasta completar el motor en Mac.
 
-## 17. Resultados de M9 (pendiente)
+## 18. Resultados de M9 (diseñado, pendiente de validación)
 
-Fecha: pendiente. Diseño: [DISENO-M9.md](DISENO-M9.md) (por escribir).
+Fecha: 2026-11-14. Diseño: [DISENO-M9.md](DISENO-M9.md).
 
-**Estado:** 🔴 Pendiente.
+**Estado:** 🟡 Diseñado, pendiente de ejecución en Swift 6.2.4.
 
-M9 es la batería final que define «motor al 100 %» (PLAN-MOTOR.md §1):
+M9 es la batería final que define «motor al 100 %» (PLAN-MOTOR.md §1). Todas las piezas M0–M8 están hechas con sus
+tests escritos; la batería de especificación existe en las carpetas `Unit/`, `Parity/`, `Oracle/`, `Depth/`,
+`Lifetime/` y `Performance/`. Queda ejecutarla en verde en depuración y release en Swift 6.2.4 (Mac M1) y apuntar
+las medidas de rendimiento finales aquí.
+
+**Criterio de «motor al 100 %»:**
 1. Todas las piezas M0–M8 hechas, con sus tests en verde.
-2. La batería de especificación pasa: oráculos de comportamiento, profundidad ≥ 20.000 sin recursión, vuelta de `nodeCount` a la base, rendimiento medido.
-3. Cubre lo que una capa de vistas tipo SwiftUI necesita (atributos persistentes con dueño, `body` como regla que se salta si nada cambió, subgrafos para ramas y colecciones, entradas y salidas como atributos).
+2. La batería de especificación pasa: oráculos de comportamiento, profundidad ≥ 20.000 sin recursión, vuelta de
+   `nodeCount` a la base, rendimiento medido.
+3. Cubre lo que una capa de vistas tipo SwiftUI necesita (atributos persistentes con dueño, `body` como regla que se
+   salta si nada cambió, subgrafos para ramas y colecciones, entradas y salidas como atributos).
 
 **Queda por hacer:**
-- Escribir `DISENO-M9.md` con el alcance exacto de la batería.
-- Ejecutar toda la batería en depuración y release en Swift 6.2.4 (Mac M1).
-- Apuntar las medidas de rendimiento finales en `PLAN-MOTOR.md`.
+- Ejecutar toda la batería en depuración y release en Swift 6.2.4 (Mac M1):
+  ```bash
+  swift test --skip Performance
+  swift test -c release -Xswiftc -enable-testing --skip Performance
+  swift test -c release -Xswiftc -enable-testing --filter '^SwiftAttributeGraphTests[.]PerformanceTests/'
+  ```
+- Apuntar las medidas de rendimiento finales en esta sección.
 - Un commit por pieza (M9).
+
+**Límites y no verificado:**
+- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2).
+- La paridad con SwiftUI se midió en macOS 15.7.9 (M1).
+- Windows aplazado hasta completar el motor en Mac.
