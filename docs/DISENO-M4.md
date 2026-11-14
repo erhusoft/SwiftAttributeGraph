@@ -224,4 +224,26 @@ Criterios fijados antes de implementar y medir:
 
 Se usa un `ResumableRuleContext` separado: protege la vigencia sin trasladar la referencia insegura del contexto
 síncrono ni introducirle las comprobaciones del contexto nuevo. Es una API aditiva, no una migración de `RuleContext`.
-La [candidata aceptada](INTEGRACION-M4.md) conserva esos criterios; M4 no se marca completo.
+La [candidata aceptada](INTEGRACION-M4.md) conserva esos criterios.
+
+## 10. Contrato de convivencia entre APIs síncronas y reanudables
+
+El motor mantiene ambas APIs sin sustituir unas por otras. El contrato es explícito:
+
+| API | Lecturas dinámicas de entradas sucias | Profundidad de pila nativa |
+|-----|--------------------------------------|----------------------------|
+| `Rule` / `StatefulRule` / cierre síncrono (`makeRule`) | Permitidas; anidan en la pila nativa | Limitada por la profundidad del grafo (riesgo de desbordamiento) |
+| `ResumableRule` (`makeResumableRule`) | Rechazadas: `poll` devuelve `.pending` y el paso debe retornar `.needsInput` | Ninguna: la pila explícita contiene toda la profundidad |
+
+Desde dentro de un paso reanudable (`ResumableRuleContext`), llamar a `Graph.value(of:)` o `Attribute.value` sobre una entrada sucia lanza un `precondition` (`isResumingStep`). La regla debe usar `context.poll(_:)` y retornar `.needsInput(_:)` en su lugar. Las entradas limpias pueden leerse síncronamente desde un paso sin restricción.
+
+Las reglas síncronas existentes siguen funcionando sin cambios; su límite de profundidad es conocido y documentado. La migración de una regla síncrona a reanudable es opt-in y se hace cuando la regla necesita lecturas dinámicas profundas.
+
+**No se declara la migración automática de cierres síncronos.** Un `body` arbitrario de una futura UI no se convierte automáticamente en una máquina de estados; esa conversión es responsabilidad de la capa de vistas.
+
+## 11. Estado de M4
+
+- Camino reanudable aditivo integrado en el almacén real: `ResumableRule`, `RuleStep`, `ReadResult`, `ResumableRuleContext`, `makeResumableRule`.
+- Presupuesto de rendimiento cumplido en Mac M1 (razón 0,934 ≤ 1,30; ≤ 1,43 % de regresión en métricas existentes).
+- Contrato de convivencia definido y probado con tests (lectura síncrona sucia desde un paso reanudable rechaza; `poll` + `needsInput` funciona).
+- **M4 se declara completo en Mac.** Queda pendiente: validación de ejecución de tests en Swift 6.2+ (este entorno tiene 6.1.2), medición de memoria total y cargas representativas, y Windows (aplazado hasta completar el motor en Mac).

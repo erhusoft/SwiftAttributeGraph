@@ -251,4 +251,40 @@ import Testing
         graph.invalidate(owner)
         #expect(weakCounter == nil && graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
     }
+
+    // MARK: M4: coexistence between synchronous and resumable rules
+
+    /// From inside a resumable step, reading a dirty input synchronously is forbidden: the rule must
+    /// ``poll`` it and return ``needsInput`` instead. This is what keeps the native stack bounded.
+    @Test func aResumableRuleReadingADirtyInputSynchronouslyStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let source = graph.makeInput(0)
+            struct ReadDirty: ResumableRule {
+                weak var graph: Graph?
+                let source: Attribute<Int>
+                mutating func resume(_ context: inout ResumableRuleContext<Int>) -> RuleStep {
+                    // Synchronous read of a (now) dirty input from inside a step: forbidden.
+                    _ = graph!.value(of: source)
+                    context.value = source.value
+                    return .finished
+                }
+            }
+            let rule = graph.makeResumableRule(ReadDirty(graph: graph, source: source))
+            graph.setValue(1, for: source)   // makes `source` dirty
+            _ = graph.value(of: rule)         // resumes; the step tries the forbidden synchronous read
+        }
+    }
+
+    /// A resumable rule that polls a dirty input and yields works normally: it suspends, the input is updated,
+    /// and the rule resumes without touching the native stack.
+    @Test func aResumableRulePollingADirtyInputResumesWithoutNativeRecursion() {
+        let graph = Graph()
+        let source = graph.makeInput(0)
+        let rule = graph.makeResumableRule(PlusOne(source: source, counter: Counter()))
+        _ = graph.value(of: rule)           // first evaluation: reads 0, publishes 1
+        graph.setValue(5, for: source)      // makes `source` dirty
+        #expect(graph.value(of: rule) == 6) // polls the dirty input, suspends, updates, resumes: 5 + 1
+        #expect(graph.frames.isEmpty)
+    }
 }
