@@ -1,6 +1,6 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)), M8 ([§15](#15-resultados-de-m8)) y M9 ([§18](#18-resultados-de-m9)). Todas las piezas completadas y validadas con Swift 6.2.4 en Mac M1. Motor al 100 %.
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)), M8 ([§15](#15-resultados-de-m8)) y M9 ([§18](#18-resultados-de-m9)). Todas las piezas completadas y validadas con Swift 6.2.4 en Mac M1: **la batería de M9 pasa en Mac**. «Al 100 %» **con las salvedades de [§18](#18-resultados-de-m9)**: las reglas síncronas conservan su límite de profundidad, no hay caso real de UI medido, los motores de referencia no se contrastaron y Windows está aplazado.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
 y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md), [DISENO-M9.md](DISENO-M9.md)).
 
@@ -545,7 +545,7 @@ Fecha: 2026-11-14. Diseño: [DISENO-M4.md](DISENO-M4.md).
 
 Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño: [DISENO-M9.md](DISENO-M9.md).
 
-**Estado:** ✅ Completo y verificado al 100 %.
+**Estado:** ✅ Batería de M9 en verde en Mac. **No equivale a «al 100 %» sin las salvedades del final de esta sección.**
 
 M9 es la batería final que define «motor al 100 %» (PLAN-MOTOR.md §1). Todas las piezas M0–M8 están hechas y verificadas
 con la suite completa en Swift 6.2.4 (Xcode) en este Mac M1.
@@ -560,7 +560,7 @@ con la suite completa en Swift 6.2.4 (Xcode) en este Mac M1.
    - 20.000 indirectos (escritura + lectura): **1,022 ms**.
    - Borrado de la mitad de 100.000 salidas en un nodo común: **174,08 ms** (O(1) por arista).
    - Cadena de 20.000 reglas calientes (actualización): **5,85 ms**.
-   - Corte por versión en regla 1 de 20.000: **0,72 ms** (8,1x más rápido).
+   - Corte por versión en regla 1 de 20.000: **0,72 ms**, frente a **5,85 ms** cuando el cambio recorre la cadena (dos escenarios del mismo banco, ya medidos en M0; no mide el atajo de M1).
    - Árbol de 111.111 subgrafos (100.000 atributos) crear e invalidar: **42,32 ms**.
    - Sustitución de 1.000 filas (20 rondas): **29,60 ms**.
    - 100.000 entradas creadas + 10 lecturas cada una: **128,70 ms**.
@@ -571,11 +571,21 @@ con la suite completa en Swift 6.2.4 (Xcode) en este Mac M1.
 
 **Conclusión:**
 El motor cumple todos los criterios no negociables de `AGENTS.md`:
-- Cero recursión dependiente de datos (recorridos hasta 100.000 niveles en pila de 512 KB verificados).
+- Sin recursión nativa dependiente de los datos **en recorridos internos y en reglas reanudables** (hasta 100.000 niveles en pila de 512 KB). Los cierres síncronos mantienen su límite de profundidad en lecturas dinámicas nuevas.
 - Nada persistente sin dueño (`nodeCount` y `subgraphCount` vuelven a la base tras invalidar).
 - Dependencias exactas, evaluación perezosa y corte por versiones verificado.
 - Rendimiento medido y registrado en release.
 - Swift puro sin dependencias externas; un solo hilo por grafo.
+
+### Salvedades de M9 (revisión del 2026-11-14)
+
+- **Reglas síncronas:** el criterio de §1.2 («profundidad ≥ 20.000 sin recursión») se cumple para los recorridos del motor y para
+  `ResumableRule`, no para lecturas dinámicas nuevas dentro de `Rule`, `StatefulRule` o cierres (M4 §10, convivencia).
+- **UI:** el banco de frames ([INFORME-RENDIMIENTO.md](INFORME-RENDIMIENTO.md)) usa 10.000 reglas triviales y 60 muestras
+  (p99 = máximo). No sustituye la medida del caso objetivo de `DISENO-M0.md` §7.
+- **Referencias externas:** Compute, Salsa y Preact Signals no se contrastaron con su código; las comparaciones son con
+  nuestros propios diseños.
+- **Windows y memoria total:** pendientes.
 
 ## Corrección de bloqueos tras revisión (2026-11-14)
 
