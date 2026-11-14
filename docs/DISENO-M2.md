@@ -1,9 +1,9 @@
-# Diseño M2: políticas de comparación por atributo (versión 3, pendiente de aprobación)
+# Diseño M2: políticas de comparación por atributo (versión 4, pendiente de aprobación)
 
-Fecha: 2026-11-14. Sustituye a las versiones 1 y 2 (commits `1f89f95`, `9d0d5f3`); parte de las rondas 1–4 de
+Fecha: 2026-11-14. Sustituye a las versiones 1 a 3 (commits `1f89f95`, `9d0d5f3`, `d89e20a`); parte de las rondas 1–4 de
 `parity/ANALISIS.md`. **Estado: propuesta. No se implementa nada hasta que el dueño la apruebe.**
 
-## 0. Qué cambió y por qué (versión 3)
+## 0. Qué cambió y por qué (versión 4)
 
 La sonda comparativa `parity/Compare` (local, no versionada) ejecuta los mismos escenarios en SwiftUI real y en el
 motor. Resultados en `parity/Compare/resultados-macos-15.7.9-compare{2..6}*.txt`, resumen en `HALLAZGOS.md`. Todo
@@ -14,7 +14,8 @@ motor. Resultados en `parity/Compare/resultados-macos-15.7.9-compare{2..6}*.txt`
 2. **Ronda 5 (17 escenarios nuevos): H2 de la versión 2 se refutó en 10 casos** (caliente). Se corrigió a **H3** (§2),
    que explica **134 de 138** casos calientes (46 escenarios × 3 sitios). Los 4 restantes son casos de bytes sin
    especificar (relleno y existenciales), tratados en §6. H3 se ajustó después de ver los datos: explica, no ha
-   predicho; §5 propone una ronda 6 con casos nuevos.
+   predicho. **Ronda 6 (§5): 20 escenarios nuevos × 3 sitios = 60 casos, H3 los acierta los 60 con la predicción
+   fijada antes de medirlos.** Es la primera vez que H3 predice en vez de explicar.
 3. Con `Comparison.bits` (el de M0) el motor discrepa de SwiftUI en caliente en **11 casos**, todos de «propiedad
    de vista»: `String`, `[Int]`, `String?`, enum con `String`, struct `Equatable` con clase, structs y tuplas mixtos
    con `String` (SwiftUI salta, el motor ejecuta) y `Any`/`any Equatable` (§6).
@@ -51,8 +52,8 @@ regla de la columna; una referencia a clase se compara por identidad; una hoja s
 La diferencia clave entre la versión 2 y esta: en una vista, un `Double` va por bytes **aunque esté dentro de un struct
 con un `String`**, y el `String` va por `==`; en `@State` y entorno, también el `Double` va por `==`.
 
-**Sin probar y puede romper H3** (§5): existenciales con otros tipos dinámicos; enums con carga mixta
-(`Double` y `String`); `Equatable` de tipos de otros módulos; propiedades `@Binding` y `@Bindable` dentro de la vista.
+**Sin probar:** tipos dinámicos no triviales ni `Equatable` dentro de un existencial; `Equatable` propio de tipos de
+otros módulos; versiones de macOS distintas de la 15.7.9 y chips distintos del M1.
 
 ## 3. El estado frío: decisión del dueño
 
@@ -106,25 +107,37 @@ camino caliente (`store`) hace una llamada indirecta: ni `switch` ni cast. Al cr
 - Enums con carga: `_forEachField` no recorre casos de enum. SwiftUI salta el enum con `String` en otro buffer y con
   `Double` -0.0 (por hoja); el motor solo lo reproduciría con un recorrido por metadatos. Se comparan por bytes
   (ejecutan de más con `String`).
-- **Existenciales (`Any`, `any P`):** medido que `Any` con `Int` 1→1 hace que `Comparison.bits` dé «cambió» el **100 %
+- **Existenciales (`Any`, `any P`):** SwiftUI los abre y aplica las reglas de §2 al tipo dinámico (ronda 6). Medido que `Any` con `Int` 1→1 hace que `Comparison.bits` dé «cambió» el **100 %
   de las veces** (2.000 de 2.000 escrituras): el contenedor tiene palabras sin inicializar. SwiftUI salta. Hay que
   abrir el existencial y comparar el valor dinámico (hipótesis: con las reglas de §2 sobre su tipo dinámico; sin
   probar con otros tipos dinámicos).
 - Closures: bytes (puntero de función + contexto), como mide E2/E18 y la ronda 5. Tipos de otros módulos con campos
   privados.
 
-## 5. Ronda 6 (casos que pueden refutar H3; antes de cualquier código del motor)
+## 5. Ronda 6 (resultado: H3 acierta 60 de 60, predicción fijada antes de medir)
 
-| Caso | Pregunta |
-|---|---|
-| `Any` con `String` largo en otro buffer; con `Int` 1→2; con `Int` y luego `Double` | ¿Se abre el existencial? ¿Cuenta el tipo dinámico? |
-| enum con carga mixta `case a(Double), b(String)`: `a(-0.0)` frente a `a(0.0)`; `b` en otro buffer | ¿Hoja a hoja también en enums? |
-| `@Binding<Double>` y `@Bindable` dentro de la vista con un `Double` -0.0 | ¿Se comparan como una hoja más? |
-| struct con `Double` y `Array<Int>` reconstruido; struct con `Double` y clase (otro objeto) | Otras combinaciones de hojas mixtas |
-| tipo de otro módulo (p. ej. `CGPoint`, `CGSize`) con -0.0 | Triviales de la biblioteca: ¿bytes en vista, `==` en `@State`? |
-| `Optional<String>` dentro de un struct con `Double` | Anidamiento de `Equatable` no triviales |
+`parity/Compare/resultados-macos-15.7.9-compare7-ronda6.txt`. Caliente, ¿ejecuta? (viewValue / environment / stateWrite):
 
-Si H3 falla, se actualiza esta nota **antes** de escribir código y se te avisa.
+| Caso | viewValue | environment | stateWrite |
+|---|---|---|---|
+| `Any` con `String` largo, mismo buffer / otro buffer | salta / salta* | salta / salta | salta / salta* |
+| `Any` con `Int` 1→2; `Int`→`Double`; clase otro objeto igual | ejecuta | ejecuta | ejecuta |
+| `Any` con `Double` 0.0→-0.0 | ejecuta | salta | salta |
+| enum `{a(Double), b(String)}`: `a(-0.0)` / `a(nan)→a(nan)` / `b` otro buffer | ejecuta / salta / salta | salta / salta / salta | salta / ejecuta / salta |
+| `Binding<Double>.constant` -0.0 / misma instancia | ejecuta / salta | salta / salta | salta / salta |
+| struct `{Double, [Int]}` array reconstruido / `d` -0.0 con el mismo array | salta / ejecuta | salta / salta | salta / salta |
+| struct `{Double, clase}` otro objeto igual / mismo objeto con `d` -0.0 | ejecuta / ejecuta | ejecuta / salta | ejecuta / salta |
+| `CGPoint` x -0.0 / x nan→nan; `CGSize` width -0.0 | ejecuta / salta / ejecuta | salta / salta / salta | salta / ejecuta / salta |
+| struct `{Double, String?}`: `s` largo otro buffer / `d` -0.0 | salta / ejecuta | salta / salta | salta / salta |
+
+\* Con `Any` y `String` largo en otro buffer, SwiftUI tarda **dos ejecuciones en calentar** (ejecuta, ejecuta, salta):
+el estado frío puede durar más de una comparación en existenciales.
+
+Conclusiones medidas: los tipos de otros módulos triviales (`CGPoint`, `CGSize`) siguen la regla (bytes en vista, `==`
+en `@State`); un `Binding` se compara como una hoja de bytes (`constant`: el valor va dentro); el existencial se abre y
+cuenta el tipo dinámico (`Int`→`Double` ejecuta); un enum con carga mixta se compara hoja a hoja. **No probado:**
+`@Bindable` (es una referencia a clase: identidad, ya cubierto), otros módulos con `==` propio, tipos dinámicos
+no triviales y no `Equatable` dentro de un `Any`.
 
 ## 6. Relleno entre campos y bytes sin inicializar (paso 4 del encargo)
 
@@ -160,14 +173,14 @@ rango de bytes que excluye el relleno cuando el plan lo conoce.
 ## 8. Orden de trabajo
 
 1. (hecho) Ronda 5 en la sonda con el frío por proceso.
-2. Ronda 6 (§5). Actualizar esta nota (versión 4 si H3 cambia) y pedir aprobación.
+2. (hecho) Ronda 6: H3 acierta 60/60. Esta nota es la versión 4; falta la aprobación del dueño.
 3. Tests rojos (paridad y unidad).
 4. `ValueComparator` y las políticas de §2; plan de hojas para *campo a campo*; existenciales.
 5. Medidas, `PLAN-MOTOR.md` (hecho, no verificado, límites) y `swift test -c release -Xswiftc -enable-testing`.
 
 ## 9. Preguntas para el dueño
 
-1. **Frío o caliente (§3):** ¿propones A (caliente) como especificación?
+1. **Frío o caliente (§3):** ¿aprobamos A (caliente) como especificación?
 2. ¿Se aceptan `_isPOD` y `_forEachField` (símbolos internos) aislados en un archivo y con prueba?
 3. ¿`.bits` se mantiene como caso público (suelo seguro, sin mirar tipos) y `.viewValue` pasa a ser el valor por
    defecto? Es un **cambio de comportamiento por defecto** respecto a M0 (el motor deja de ejecutar de más con `String` y deja de dar «cambió» siempre con `Any`).
