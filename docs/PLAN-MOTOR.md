@@ -1,11 +1,11 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)) y M7 ([§13](#13-resultados-de-m7)).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)).
 M4 sigue parcial: el [camino reanudable aditivo](INTEGRACION-M4.md) ya se integra en el almacén real y pasa los
 presupuestos de rendimiento en Mac ([§11](#11-integración-aditiva-de-m4-en-mac)); falta decidir y validar la migración
 de las lecturas dinámicas síncronas. El [prototipo aislado](#10-prototipo-aislado-de-m4) queda como referencia.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
-y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md)).
+y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md)).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -49,7 +49,7 @@ una pieza descubra otra cosa.
 | M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | ✅ ([resultados](#14-resultados-de-m6)) |
 | M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🟡 Parcial ([§13](#13-resultados-de-m7)) |
-| M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | 🔴 |
+| M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | ✅ ([resultados](#15-resultados-de-m8)) |
 | M9 | **Especificación completa** | Batería de oráculos y de rendimiento que define «al 100 %» | Toda la batería en verde en debug y release | 🔴 |
 
 ## 4. Decisiones
@@ -487,3 +487,31 @@ Fecha: 2026-11-14. Diseño: [DISENO-M6.md](DISENO-M6.md).
 - Un indirecto solo puede redirigir a un atributo de entrada (no a una regla). Redirigir a otro indirecto crea una cadena que se resuelve por recursión en `read`/`setValue`; ciclos entre indirectos son un error de programación no detectado.
 - No hay API para cambiar el destino de un indirecto tras crearlo ("cambio de destino" del plan queda como límite conocido; se añadiría con `redirect(_:)` si la UI lo necesita).
 - El desplazamiento por key path (leer un campo del source sin nodo propio) no está cubierto en esta versión; se deja para una iteración posterior.
+
+## 15. Resultados de M8
+
+Fecha: 2026-11-14. Diseño: [DISENO-M8.md](DISENO-M8.md).
+
+**Hecho:**
+- `Graph.inputCount(of:)` y `Graph.outputCount(of:)`: número de aristas de entrada y salida de un atributo.
+- `Graph.edgeCount`: número total de aristas en el grafo (suma de todas las entradas).
+- `Graph.recalculationCount`: número de veces que se ha ejecutado una regla desde que se creó el grafo. Se incrementa en `run` (reglas síncronas) y en `advanceResumable` cuando una regla reanudable termina (`.finished`).
+- `Graph.dump()`: volcado de texto de todo el grafo: cada atributo vivo con su estado, versión, subgrafo propietario, aristas de entrada y salida.
+- `Graph.estimatedMemoryFootprint`: estimación del uso de memoria de las tablas de nodos y subgrafos (arrays paralelos), en bytes.
+- `NodeTable.freeListCount` y `SubgraphTable.freeListCount`: accessors para las listas libres.
+- `recaclulationCount` se incrementa en `Graph.run` y `Graph.advanceResumable`.
+- Tests en `IntrospectionTests`:
+  1. `inputCount`/`outputCount` devuelven los conteos correctos tras leer reglas.
+  2. `edgeCount` es la suma de todas las entradas.
+  3. `edgeCount` disminuye tras podar aristas (lectura condicional).
+  4. `recalculationCount` incrementa al ejecutar reglas, no al leer en caché, y cuenta cada regla independiente.
+  5. `dump` lista los atributos vivos y distingue `input` de `rule`.
+  6. `estimatedMemoryFootprint` es positivo y crece al crear más nodos y aristas.
+
+**Medidas (pendiente de validar en Mac M1, Swift 6.2.4):**
+- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2). Las medidas se apuntarán al validar en el Mac de desarrollo.
+- No hay métrica de rendimiento específica para M8; es una herramienta de depuración, no del camino caliente.
+
+**Límites y no verificado:**
+- `estimatedMemoryFootprint` es una estimación: cuenta los arrays paralelos de `NodeTable` y `SubgraphTable`, pero trata cada `NodeBox` como un objeto de tamaño desconocido. Útil para detectar regresiones, no para contabilidad exacta.
+- `dump()` es O(nodos) y solo para depuración; no está en el camino caliente.

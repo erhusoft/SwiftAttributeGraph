@@ -28,6 +28,8 @@ public final class Graph {
     @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
     var trackCursor = 0
     var isResumingStep = false
+    /// Number of times a rule has been executed (recalculations) since the graph was created.
+    var recalculationCount = 0
 
     // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
     var dirtyStack: [UInt32] = []
@@ -138,7 +140,7 @@ public final class Graph {
         precondition(table.isLive(source.id), "makeIndirect: the source attribute is dead")
         precondition(table.state[Int(source.id.index)] & NodeState.isRule == 0,
                      "makeIndirect: cannot redirect to a rule")
-        let id = allocate(IndirectNode(source: source.id), state: NodeState.hasValue)
+        let id = allocate(IndirectNode<Value>(source: source.id), state: NodeState.hasValue)
         return Attribute(id: id)
     }
 

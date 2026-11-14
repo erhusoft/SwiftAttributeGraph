@@ -66,7 +66,7 @@ extension Graph {
 
         // An indirect attribute redirects to another attribute: writing it writes to the source.
         if table.state[index] & NodeState.indirect != 0 {
-            let box = table.box(at: index) as! IndirectNode<Value>
+            let box = table.box(at: UInt32(index)) as! IndirectNode<Value>
             precondition(table.isLive(box.source), "writing an indirect attribute whose source is dead")
             setValue(value, for: Attribute<Value>(id: box.source))
             return
@@ -171,6 +171,7 @@ extension Graph {
             currentSubgraph = subgraphForCreating(in: owner)
         }
 
+        recalculationCount &+= 1
         let changed = table.box(at: node).evaluate(in: self, node: node)
 
         currentSubgraph = previousSubgraph

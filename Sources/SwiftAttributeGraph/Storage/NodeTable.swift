@@ -17,6 +17,9 @@ struct NodeTable {
     /// Number of slots ever created (live or free).
     var slotCount: Int { generations.count }
 
+    /// Number of free slots waiting to be reused.
+    var freeListCount: Int { freeList.count }
+
     /// Reserves a slot (reusing a freed one if any) and stores the node in it.
     mutating func allocate(owner: UInt32, box: NodeBox, state initialState: UInt16, version: UInt32) -> AttributeID {
         liveCount += 1

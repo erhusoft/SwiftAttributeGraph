@@ -20,6 +20,9 @@ struct SubgraphTable {
     /// Number of slots ever created (live or free).
     var slotCount: Int { generations.count }
 
+    /// Number of free slots waiting to be reused.
+    var freeListCount: Int { freeList.count }
+
     mutating func allocate(parent: SubgraphID?) -> SubgraphID {
         liveCount += 1
         let index: UInt32

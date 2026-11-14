@@ -43,6 +43,7 @@ extension Graph {
             frames[top].waiting = source
             push(source)
         case .finished:
+            recalculationCount &+= 1
             pruneEdges(of: node, keeping: cursor)
             table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
                 | NodeState.hasValue
