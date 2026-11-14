@@ -1,8 +1,8 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M2 ([§7](#7-resultados-de-m2)) y M3 ([§8](#8-resultados-de-m3)).
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)) y M5 ([§9](#9-resultados-de-m5)).
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
-y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md)).
+y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md)).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -43,7 +43,7 @@ una pieza descubra otra cosa.
 | M2 | **Políticas de comparación por atributo** | Cuatro políticas más `bits`, resueltas una vez por tipo y política al crear el atributo (caché por grafo): `viewValue` (por defecto), `environment`, `stateWrite`, `alwaysDifferent`. Reglas medidas en SwiftUI real en [DISENO-M2.md](DISENO-M2.md) §2 (campo a campo; hoja trivial por bytes en la vista y `==` en `@State`; existenciales por su tipo dinámico) | Cada política reproduce las filas medidas en SwiftUI real (caliente); sin `as? any Equatable` en el camino de escritura; medida de escrituras; el relleno no se compara | ✅ ([resultados](#7-resultados-de-m2)) |
 | M3 | **Reglas con estado** | `StatefulRule` y `RuleContext`: valor anterior, poder no cambiarlo, `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)` y estado propio (`mutating`); forma de tipo y de cierre | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta; profundidad 20.000; el estado se libera con el subgrafo | ✅ ([resultados](#8-resultados-de-m3)) |
 | M4 | **Actualización sin recursión total** | Las lecturas dinámicas dentro de una regla tampoco usan la pila nativa; reentrada (actualización anidada) | Cadena de 20.000 lecturas dinámicas no declaradas sin desbordar; test de reentrada | 🔴 |
-| M5 | **Subgrafos** | Jerarquía padre-hijo; los atributos nacen en el subgrafo actual; invalidar un subgrafo libera todo lo suyo; diferido si hay una actualización en curso | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización | 🔴 |
+| M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | 🔴 |
 | M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🔴 |
 | M8 | **Herramientas** | Volcado del grafo (texto o Graphviz), contadores (nodos, aristas, recálculos), medida de memoria | Test del volcado de un grafo pequeño; contadores en los tests de rendimiento | 🔴 |
@@ -131,7 +131,7 @@ oráculo y los tests de paridad la detectan.
   (≈ 0,1 s optimizada). Lo cubre M7.
 - La primera ejecución de una regla que lee otra regla **nunca ejecutada** anida en la pila nativa (el motor no puede
   saber qué va a leer); las cadenas de los tests de profundidad se calientan nodo a nodo. Lo quita M4.
-- Borrar una arista cuesta O(grado) (M7). Invalidar durante una actualización no está permitido (M5).
+- Borrar una arista cuesta O(grado) (M7). Invalidar durante una actualización: resuelto en M5.
 - Las reglas no lanzan y no pueden escribir en el grafo (`precondition`); la paridad no los mide aún.
 - Relleno entre campos: `bits` compara todos los bytes, así que el relleno de un tipo puede dar un «cambió» falso
   (se ejecuta de más, nunca de menos). No se midió la frecuencia (M2).
@@ -239,3 +239,48 @@ conteo de referencias en el contexto. El resto es el coste de la función: recor
 - Las aristas que la regla no volverá a leer siguen contando en `anyInputsChanged` hasta que termina la ejecución.
 - No se midió contra SwiftUI ni contra AttributeGraph: «cambió» como diferencia de versión por arista es un supuesto.
 - No cubre reglas que lanzan ni escribir dentro de una regla.
+
+## 9. Resultados de M5
+
+Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Diseño: [DISENO-M5.md](DISENO-M5.md); medidas de SwiftUI
+de la ronda 7 en `parity/Compare/resultados-macos-15.7.9-ronda7-ramas.txt`.
+
+**Hecho:**
+- `SubgraphTable` con árbol (padre, primer y último hijo, hermanos en arreglos: alta y baja de un hijo en O(1)) y
+  recorrido en posorden con pila explícita (hijos antes que padres, hermanos en orden de creación).
+- `makeSubgraph(parent:)`, `liveSubgraphCount` y `observe(_ subgraph:onInvalidate:)` con `SubgraphObservationToken`.
+- `invalidate`: fuera de una regla, avisa (con todo vivo y legible), desprende las aristas hacia fuera del conjunto
+  entero (no solo del subgrafo), libera nodos y subgrafos y marca sucios con `pending` a los lectores de fuera. Dentro de
+  una regla (o de un aviso), el conjunto pasa a «cayendo»: no se puede crear en él pero sigue legible, y se libera al
+  terminar la actualización más externa. Invalidar algo que ya cae no hace nada.
+- Dentro de una regla el subgrafo actual es el de su propietario (o su ancestro más cercano que no esté cayendo).
+- Tests: `SubgraphTests` (20), `BranchParityTests` (3: cambio de rama, volver al estado inicial y filas por id,
+  E7/E8/E19), `SubgraphOracleTests` (12 semillas × 150 operaciones contra un modelo), profundidad (20.000 anidados,
+  20.000 hermanos y 20.000 anidados invalidados desde una regla) y vida. Se comprobaron dos mutaciones (avisos de
+  padre antes que hijos; «fuera del conjunto» por igualdad de propietario) y los tests las detectan. Depuración: 157
+  tests; release: 156; 0 avisos. Los 2 «known issues» son los de M2.
+
+**Medidas** (release, mediana de 5–7 ejecuciones, este Mac):
+
+| Caso | Antes | M5 |
+|---|---|---|
+| 2.000 subgrafos × 5 atributos: crear e invalidar | 5,9 ms | 6,6–6,8 ms (**+12 %**) |
+| 50 ciclos de escribir + actualizar 1.000 reglas | 17,3 ms | 18,1–18,5 ms (+6 %) |
+| 100 lotes de 32 escrituras + 1.000 compartidos | 386 ms | 417 ms (+8 %) |
+| 500 escrituras / 100.000 entradas / cadena de 20.000 | 1,23 ms / 129 ms / 5,1 ms | 1,24 ms / 126 ms / 5,5 ms |
+| Árbol de 111.111 subgrafos con 100.000 atributos: crear e invalidar | — | 56–59 ms |
+| 20 rondas sustituyendo 1.000 filas (2 atributos cada una) | — | 34–35 ms |
+
+El criterio era no empeorar más del ≈ 10 % lo de M0: **se cumple salvo en «2.000 subgrafos»** (+12 %). El motivo es el
+trabajo nuevo por subgrafo (seis arreglos de enlaces en vez de dos, el recorrido en posorden y el reparto de avisos).
+Se probó evitar reservas en el recorrido y no instalar el subgrafo actual si ya es el del propietario; la mejora fue mínima.
+
+**Límites y no verificado:**
+- **Orden entre hermanos no prometido.** SwiftUI lo muestra inverso en una rama y directo en un `ForEach`; el motor usa
+  el orden de creación.
+- **Un subgrafo que cae sigue legible hasta el final de la actualización más externa**, y lo que cree una regla suya
+  en ese rato va a un ancestro vivo: decisiones de diseño, no medidas en SwiftUI.
+- Los avisos de un subgrafo se entregan antes de liberar; si la invalidación fue diferida, al terminar la actualización.
+- La creación de lo nuevo antes de invalidar lo viejo (E7) es cosa de la capa de vistas: el motor lo permite.
+- **No cubre** subgrafos con varios padres, mover un subgrafo de padre, ni invalidar desde otro hilo.
+- Medido en una sola versión de macOS (15.7.9); una lectura nueva dentro de una regla sigue usando la pila nativa (M4).

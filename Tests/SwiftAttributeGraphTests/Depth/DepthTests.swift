@@ -100,4 +100,40 @@ import Testing
         graph.invalidate(sub)
         #expect(graph.isDirty(previous.id))
     }
+
+    // MARK: M5: the subgraph tree
+
+    @Test func aTreeOfTwentyThousandNestedSubgraphsIsInvalidatedWithoutRecursion() {
+        let graph = Graph()
+        var current = graph.makeSubgraph()
+        let top = current
+        var last = current
+        for i in 0..<20_000 {
+            graph.withCurrent(current) { _ = graph.makeInput(i) }
+            last = graph.makeSubgraph(parent: current)
+            current = last
+        }
+        #expect(graph.nodeCount == 20_000 && graph.liveSubgraphCount == 20_002)
+        graph.invalidate(top)
+        #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
+        #expect(!graph.isLive(last))
+    }
+
+    @Test func twentyThousandSiblingSubgraphsAreInvalidatedTogether() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph()
+        for i in 0..<20_000 { graph.withCurrent(graph.makeSubgraph(parent: parent)) { _ = graph.makeInput(i) } }
+        graph.invalidate(parent)
+        #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
+    }
+
+    @Test func aDeepNestedTreeInvalidatedFromInsideARuleIsFreedWithoutRecursion() {
+        let graph = Graph()
+        let top = graph.makeSubgraph()
+        var current = top
+        for _ in 0..<20_000 { current = graph.makeSubgraph(parent: current) }
+        let rule = graph.makeRule { () -> Int in graph.invalidate(top); return 1 }
+        _ = graph.value(of: rule)
+        #expect(graph.liveSubgraphCount == 1)
+    }
 }

@@ -260,4 +260,43 @@ import Testing
         Self.report("M3 50 cycles x 1,000 stateful rules (2 inputs, hasChanged)", stateful, "x\(((stateful / plain) * 100).rounded() / 100) of plain")
         #expect(stateful < 5_000)
     }
+
+    // MARK: M5: subgraph trees
+
+    @Test func invalidatingATreeOfOneHundredThousandSubgraphs() {
+        let ms = Self.median(runs: 5) {
+            let graph = Graph()
+            let root = graph.makeSubgraph()
+            var level = [root]
+            for _ in 0..<5 {                                                    // 10 children each: 11,110 per... see below
+                var next: [Subgraph] = []
+                for parent in level { for _ in 0..<10 { next.append(graph.makeSubgraph(parent: parent)) } }
+                level = next
+            }
+            for sub in level { graph.withCurrent(sub) { _ = graph.makeInput(1) } }
+            graph.invalidate(root)
+        }
+        Self.report("M5 build + invalidate a tree of 111,111 subgraphs (100,000 attributes)", ms)
+        #expect(ms < 5_000)
+    }
+
+    @Test func churnOfOneThousandRows() {
+        let ms = Self.median(runs: 5) {
+            let graph = Graph()
+            var rows: [Subgraph] = []
+            for round in 0..<20 {
+                for sub in rows { graph.invalidate(sub) }
+                rows = (0..<1_000).map { _ in
+                    let sub = graph.makeSubgraph()
+                    graph.withCurrent(sub) {
+                        let state = graph.makeInput(round)
+                        _ = graph.value(of: graph.makeRule { state.value + 1 })
+                    }
+                    return sub
+                }
+            }
+        }
+        Self.report("M5 20 rounds of replacing 1,000 rows (2 attributes each)", ms)
+        #expect(ms < 5_000)
+    }
 }

@@ -70,4 +70,35 @@ import Testing
         }
         #expect(weakGraph == nil, "a graph must not be kept alive by its own attributes or rules")
     }
+
+    // MARK: M5
+
+    @Test func branchesAndRowsLeaveNothingBehindEvenWhenInvalidatedInsideRules() {
+        let graph = Graph()
+        let switcher = graph.makeInput(0)
+        let baseNodes = graph.nodeCount, baseSubgraphs = graph.liveSubgraphCount
+        var branch = graph.makeSubgraph()
+        let host = graph.makeRule { () -> Int in
+            let round = switcher.value
+            if round > 0 {                                                      // the view body swaps its branch
+                let old = branch
+                branch = graph.makeSubgraph()
+                graph.withCurrent(branch) {
+                    for _ in 0..<10 { _ = graph.makeSubgraph() }
+                    _ = graph.makeInput(round)
+                }
+                graph.invalidate(old)
+            }
+            return round
+        }
+        _ = graph.value(of: host)
+        for round in 1...200 {
+            graph.setValue(round, for: switcher)
+            #expect(graph.value(of: host) == round)
+        }
+        graph.invalidate(branch)
+        #expect(graph.nodeCount == baseNodes + 1)                               // `host` is the only addition
+        #expect(graph.liveSubgraphCount == baseSubgraphs)
+        #expect(graph.subgraphs.slotCount < 40, "the slots of dead subgraphs are reused")
+    }
 }

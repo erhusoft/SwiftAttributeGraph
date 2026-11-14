@@ -31,7 +31,9 @@ extension Graph {
         let index = attribute.id.index
         if table.state[Int(index)] & NodeState.dirty != 0 { update(index) }
         if evaluatingNode != Graph.noNode { recordRead(of: index) }
-        return typedNode(attribute).value.unsafelyUnwrapped
+        let value = typedNode(attribute).value.unsafelyUnwrapped
+        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+        return value
     }
 
     // MARK: Writing
@@ -126,9 +128,13 @@ extension Graph {
         evaluatingNode = node
         trackCursor = 0
         let previousGraph = ThreadLocalGraph.install(self)
+        let previousSubgraph = currentSubgraph
+        let owner = table.owner(at: node)
+        if currentSubgraph.index != owner { currentSubgraph = subgraphForCreating(in: owner) }
 
         let changed = table.box(at: node).evaluate(in: self, node: node)
 
+        currentSubgraph = previousSubgraph
         _ = ThreadLocalGraph.install(previousGraph)
         let cursor = trackCursor
         evaluatingNode = previousNode
@@ -138,6 +144,16 @@ extension Graph {
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
             | NodeState.hasValue
         if changed { table.versions[n] &+= 1 }
+    }
+
+    /// Where what a rule creates is born: the subgraph that owns the rule, or its nearest ancestor that is not being
+    /// invalidated (a rule of a falling subgraph may still run in the same update).
+    private func subgraphForCreating(in owner: UInt32) -> SubgraphID {
+        var index = owner
+        while subgraphs.isFalling(index: index), let parent = subgraphs.parent(of: subgraphs.id(at: index)) {
+            index = parent.index
+        }
+        return subgraphs.id(at: index)
     }
 
     // MARK: What changed (for stateful rules)

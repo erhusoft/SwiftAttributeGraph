@@ -14,6 +14,12 @@ public final class Graph {
     var subgraphs = SubgraphTable()
     var currentSubgraph: SubgraphID
 
+    // Subgraph invalidation (see `Graph+Invalidation.swift`).
+    var subgraphObservers: [UInt32: [Observer]] = [:]
+    /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
+    var deferredInvalidations: [Subgraph] = []
+    var isInvalidating = false
+
     // Update machinery (see `Graph+Update.swift`).
     var frames: [UpdateFrame] = []
     var evaluatingNode: UInt32 = Graph.noNode
@@ -39,7 +45,7 @@ public final class Graph {
 
     /// Creates an empty graph with a root subgraph.
     public init() {
-        let root = subgraphs.allocate()
+        let root = subgraphs.allocate(parent: nil)
         rootSubgraph = Subgraph(id: root)
         currentSubgraph = root
     }
@@ -59,20 +65,43 @@ public final class Graph {
 
     // MARK: Subgraphs
 
-    /// Creates a subgraph. Attributes created while it is current belong to it and die with it.
-    public func makeSubgraph() -> Subgraph {
+    /// Creates a subgraph as a child of `parent` (by default the current subgraph). Attributes created while it is
+    /// current belong to it, and it dies with its parent.
+    public func makeSubgraph(parent: Subgraph? = nil) -> Subgraph {
         assertOwnThread()
-        return Subgraph(id: subgraphs.allocate())
+        let owner = parent?.id ?? currentSubgraph
+        precondition(subgraphs.isLive(owner), "makeSubgraph: the parent subgraph was invalidated")
+        precondition(!subgraphs.isFalling(index: owner.index), "makeSubgraph: the parent subgraph is being invalidated")
+        return Subgraph(id: subgraphs.allocate(parent: owner))
     }
 
     /// Runs `body` with `subgraph` as the current one, so the attributes created inside belong to it.
     public func withCurrent<T>(_ subgraph: Subgraph, _ body: () -> T) -> T {
         assertOwnThread()
         precondition(subgraphs.isLive(subgraph.id), "withCurrent: the subgraph was invalidated")
+        precondition(!subgraphs.isFalling(index: subgraph.id.index), "withCurrent: the subgraph is being invalidated")
         let previous = currentSubgraph
         currentSubgraph = subgraph.id
         defer { currentSubgraph = previous }
         return body()
+    }
+
+    /// Number of live subgraphs, the root included.
+    public var liveSubgraphCount: Int { subgraphs.liveCount }
+
+    /// Whether the subgraph exists (it was not freed).
+    func isLive(_ subgraph: Subgraph) -> Bool { subgraphs.isLive(subgraph.id) }
+
+    /// The parent of a subgraph; `nil` for the root.
+    func parent(of subgraph: Subgraph) -> Subgraph? {
+        precondition(subgraphs.isLive(subgraph.id), "parent(of:): the subgraph was invalidated")
+        return subgraphs.parent(of: subgraph.id).map(Subgraph.init(id:))
+    }
+
+    /// The children of a subgraph in creation order.
+    func children(of subgraph: Subgraph) -> [Subgraph] {
+        precondition(subgraphs.isLive(subgraph.id), "children(of:): the subgraph was invalidated")
+        return subgraphs.children(of: subgraph.id.index).map { Subgraph(id: subgraphs.id(at: $0)) }
     }
 
     /// The subgraph that owns the attribute.
@@ -130,6 +159,7 @@ public final class Graph {
 
     private func allocate(_ box: NodeBox, state: UInt8) -> AttributeID {
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
+        precondition(!subgraphs.isFalling(index: currentSubgraph.index), "the current subgraph is being invalidated")
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
         subgraphs.add(member: id.index, to: currentSubgraph)
         return id

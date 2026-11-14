@@ -2,7 +2,7 @@
 
 Fecha: 2026-11-14. Parte de [PLAN-MOTOR.md](PLAN-MOTOR.md) §3 (M5), [DISENO-M0.md](DISENO-M0.md) (subgrafo plano) y de la
 paridad con SwiftUI medida (E7, E8, E19 en `parity/ANALISIS.md`, y la ronda 7 de esta nota, §1).
-**Estado: propuesta. No se implementa nada hasta que el dueño la apruebe.**
+**Estado: aprobada e implementada** (resultados, límites y lo no verificado en [PLAN-MOTOR.md](PLAN-MOTOR.md) §9). Desviación: el coste de «2.000 subgrafos × 5 atributos» subió un 12 % (el criterio era ≈ 10 %).
 
 ## 1. Qué hay hoy y qué falta
 
