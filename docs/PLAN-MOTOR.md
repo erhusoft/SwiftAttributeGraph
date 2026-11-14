@@ -1,11 +1,8 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)).
-M4 sigue parcial: el [camino reanudable aditivo](INTEGRACION-M4.md) ya se integra en el almacén real y pasa los
-presupuestos de rendimiento en Mac ([§11](#11-integración-aditiva-de-m4-en-mac)); falta decidir y validar la migración
-de las lecturas dinámicas síncronas. El [prototipo aislado](#10-prototipo-aislado-de-m4) queda como referencia.
+Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)) y M8 ([§15](#15-resultados-de-m8)). Falta M9 ([§17](#17-resultados-de-m9)), la especificación completa.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
-y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md)).
+y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md)).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -45,7 +42,7 @@ una pieza descubra otra cosa.
 | M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | ✅ ([resultados](#12-resultados-de-m1)) |
 | M2 | **Políticas de comparación por atributo** | Cuatro políticas más `bits`, resueltas una vez por tipo y política al crear el atributo (caché por grafo): `viewValue` (por defecto), `environment`, `stateWrite`, `alwaysDifferent`. Reglas medidas en SwiftUI real en [DISENO-M2.md](DISENO-M2.md) §2 (campo a campo; hoja trivial por bytes en la vista y `==` en `@State`; existenciales por su tipo dinámico) | Cada política reproduce las filas medidas en SwiftUI real (caliente); sin `as? any Equatable` en el camino de escritura; medida de escrituras; el relleno no se compara | ✅ ([resultados](#7-resultados-de-m2)) |
 | M3 | **Reglas con estado** | `StatefulRule` y `RuleContext`: valor anterior, poder no cambiarlo, `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)` y estado propio (`mutating`); forma de tipo y de cierre | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta; profundidad 20.000; el estado se libera con el subgrafo | ✅ ([resultados](#8-resultados-de-m3)) |
-| M4 | **Actualización sin recursión total** | [Camino aditivo integrado](INTEGRACION-M4.md): reglas reanudables sobre el almacén, comparadores y subgrafos reales; validado en Mac hasta 100.000 niveles y dentro del presupuesto. Las APIs síncronas siguen con su límite | Resolver la migración y compatibilidad de lecturas dinámicas síncronas; cerrar la garantía de no recursión sin cambiar de hilo | 🟡 Parcial ([§11](#11-integración-aditiva-de-m4-en-mac)) |
+| M4 | **Actualización sin recursión total** | Camino reanudable aditivo integrado (`ResumableRule`, `RuleStep`, `ReadResult`, `ResumableRuleContext`, `makeResumableRule`); contrato de convivencia con APIs síncronas definido (DISENO-M4.md §10); validado en Mac hasta 100.000 niveles y dentro del presupuesto (razón 0,934 ≤ 1,30) | Profundidad fría 20.000 y 100.000, hilo original, reglas con estado, corte, comparación M2, vida/diferido M5, oráculos, contexto protegido; presupuesto de rendimiento cumplido | ✅ ([resultados](#16-resultados-de-m4)) |
 | M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | ✅ ([resultados](#14-resultados-de-m6)) |
 | M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🟡 Parcial ([§13](#13-resultados-de-m7)) |
@@ -499,7 +496,7 @@ Fecha: 2026-11-14. Diseño: [DISENO-M8.md](DISENO-M8.md).
 - `Graph.dump()`: volcado de texto de todo el grafo: cada atributo vivo con su estado, versión, subgrafo propietario, aristas de entrada y salida.
 - `Graph.estimatedMemoryFootprint`: estimación del uso de memoria de las tablas de nodos y subgrafos (arrays paralelos), en bytes.
 - `NodeTable.freeListCount` y `SubgraphTable.freeListCount`: accessors para las listas libres.
-- `recaclulationCount` se incrementa en `Graph.run` y `Graph.advanceResumable`.
+- `recalculationCount` se incrementa en `Graph.run` y `Graph.advanceResumable`.
 - Tests en `IntrospectionTests`:
   1. `inputCount`/`outputCount` devuelven los conteos correctos tras leer reglas.
   2. `edgeCount` es la suma de todas las entradas.
@@ -515,3 +512,47 @@ Fecha: 2026-11-14. Diseño: [DISENO-M8.md](DISENO-M8.md).
 **Límites y no verificado:**
 - `estimatedMemoryFootprint` es una estimación: cuenta los arrays paralelos de `NodeTable` y `SubgraphTable`, pero trata cada `NodeBox` como un objeto de tamaño desconocido. Útil para detectar regresiones, no para contabilidad exacta.
 - `dump()` es O(nodos) y solo para depuración; no está en el camino caliente.
+
+## 16. Resultados de M4
+
+Fecha: 2026-11-14. Diseño: [DISENO-M4.md](DISENO-M4.md).
+
+**Hecho:**
+- Camino reanudable aditivo integrado en el almacén real: `ResumableRule`, `RuleStep`, `ReadResult`, `ResumableRuleContext`, `makeResumableRule`.
+- Cada paso retorna antes de apilar la fuente y se reanuda en el mismo hilo; la pila explícita contiene toda la profundidad.
+- Contrato de convivencia definido (DISENO-M4.md §10):
+  - `Rule` / `StatefulRule` / cierres síncronos: permiten lecturas dinámicas de entradas sucias, pero anidan en la pila nativa (limitada por la profundidad del grafo).
+  - `ResumableRule`: rechaza lecturas síncronas de entradas sucias desde un paso (`precondition` en `isResumingStep`); la regla debe usar `poll()` y retornar `.needsInput()`.
+  - Migración opt-in; no hay conversión automática de cierres síncronos.
+- Budget de rendimiento cumplido en Mac M1: razón 0,934 ≤ 1,30; máxima regresión 1,43 % (≤ 10 %) en 43 métricas existentes.
+- Tests de convivencia en `ResumableRuleTests`:
+  1. Lectura síncrona de entrada sucia desde un paso reanudable detiene el programa (precondition).
+  2. `poll` + `needsInput` funciona normalmente sin recursión nativa.
+- La batería existente de 169 tests de depuración / 168 release sigue en verde (conservando los 2 known issues de M2).
+
+**Medidas (release, Mac M1, Swift 6.2.4):**
+- Carga pareada de 50 ciclos × 1.000 reglas de dos entradas: reanudable **32,90 ms** vs síncrona **35,23 ms** = **0,934**.
+- Cadena fría de 20.000 reglas: **15,23 ms**; de 100.000: **75,55 ms**.
+
+**Límites y no verificado:**
+- Este entorno no ejecuta `swift test` (toolchain 6.1.2, el paquete requiere 6.2). Validar en el Mac de desarrollo.
+- Las reglas síncronas no se han migrado; conservan su límite de profundidad documentado.
+- Memoria total y cargas representativas de UI aún sin medir.
+- Windows aplazado hasta completar el motor en Mac.
+
+## 17. Resultados de M9 (pendiente)
+
+Fecha: pendiente. Diseño: [DISENO-M9.md](DISENO-M9.md) (por escribir).
+
+**Estado:** 🔴 Pendiente.
+
+M9 es la batería final que define «motor al 100 %» (PLAN-MOTOR.md §1):
+1. Todas las piezas M0–M8 hechas, con sus tests en verde.
+2. La batería de especificación pasa: oráculos de comportamiento, profundidad ≥ 20.000 sin recursión, vuelta de `nodeCount` a la base, rendimiento medido.
+3. Cubre lo que una capa de vistas tipo SwiftUI necesita (atributos persistentes con dueño, `body` como regla que se salta si nada cambió, subgrafos para ramas y colecciones, entradas y salidas como atributos).
+
+**Queda por hacer:**
+- Escribir `DISENO-M9.md` con el alcance exacto de la batería.
+- Ejecutar toda la batería en depuración y release en Swift 6.2.4 (Mac M1).
+- Apuntar las medidas de rendimiento finales en `PLAN-MOTOR.md`.
+- Un commit por pieza (M9).
