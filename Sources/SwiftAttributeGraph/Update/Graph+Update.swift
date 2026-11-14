@@ -3,10 +3,13 @@
 /// Resuming at `next` instead of rescanning the inputs is the update-stack idea of Compute (`UpdateStack`).
 struct UpdateFrame {
     var node: UInt32
+    /// A nonnegative input cursor, or `-readCursor - 1` while a resumable rule is suspended.
     var next: Int
     /// A stateful rule keeps scanning after it found an input that changed; if it then has to bring a later input up
     /// to date, the frame is left and resumed, so what it found is kept here.
     var inputChanged = false
+    /// Fits the original frame's padding on 64-bit platforms; no source is freed while an update is active.
+    var waiting: UInt32 = Graph.noNode
 }
 
 extension Graph {
@@ -29,7 +32,10 @@ extension Graph {
     func read<Value>(_ attribute: Attribute<Value>) -> Value {
         precondition(table.isLive(attribute.id), "reading a dead attribute (its subgraph was invalidated)")
         let index = attribute.id.index
-        if table.state[Int(index)] & NodeState.dirty != 0 { update(index) }
+        if table.state[Int(index)] & NodeState.dirty != 0 {
+            precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
+            update(index)
+        }
         if evaluatingNode != Graph.noNode { recordRead(of: index) }
         let value = typedNode(attribute).value.unsafelyUnwrapped
         if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
@@ -70,6 +76,10 @@ extension Graph {
             let top = frames.count - 1
             let node = frames[top].node
             let n = Int(node)
+            if frames[top].next < 0 {
+                advanceResumable(top: top, firstStep: false)
+                continue
+            }
             var mustRun = table.state[n] & NodeState.hasValue == 0 || table.state[n] & NodeState.pending != 0
                 || frames[top].inputChanged
             // A stateful rule needs every input up to date (to know what changed), so it does not stop at the first
@@ -93,6 +103,10 @@ extension Graph {
             }
 
             if mustRun {
+                if table.state[n] & NodeState.resumable != 0 {
+                    advanceResumable(top: top, firstStep: true)
+                    continue
+                }
                 run(node)
             } else {
                 table.state[n] &= ~(NodeState.dirty | NodeState.evaluating)
@@ -101,7 +115,7 @@ extension Graph {
         }
     }
 
-    private func push(_ node: UInt32) {
+    func push(_ node: UInt32) {
         let n = Int(node)
         precondition(table.state[n] & NodeState.evaluating == 0,
                      "cycle detected: an attribute depends on itself through its own rule")
@@ -150,7 +164,7 @@ extension Graph {
 
     /// Where what a rule creates is born: the subgraph that owns the rule, or its nearest ancestor that is not being
     /// invalidated (a rule of a falling subgraph may still run in the same update).
-    private func subgraphForCreating(in owner: UInt32) -> SubgraphID {
+    func subgraphForCreating(in owner: UInt32) -> SubgraphID {
         var index = owner
         while subgraphs.isFalling(index: index), let parent = subgraphs.parent(of: subgraphs.id(at: index)) {
             index = parent.index
@@ -162,13 +176,14 @@ extension Graph {
 
     /// Whether the edge from `source` into `node` was changed when the node's run began; `nil` if there is no such edge.
     @inline(__always)
+    @usableFromInline
     func inputChanged(of node: UInt32, source: UInt32) -> Bool? {
         for edge in table.inputs[Int(node)] where edge.source == source { return edge.changed }
         return nil
     }
 
     /// Whether any input edge of `node` was changed, ignoring `excluded`. Every input counts on the first run.
-    func anyInputChanged(of node: UInt32, excluding excluded: [UInt32]) -> Bool {
+    @usableFromInline func anyInputChanged(of node: UInt32, excluding excluded: [UInt32]) -> Bool {
         let n = Int(node)
         if table.state[n] & NodeState.hasValue == 0 { return true }
         for edge in table.inputs[n] where edge.changed && !excluded.contains(edge.source) { return true }
@@ -179,7 +194,7 @@ extension Graph {
 
     /// Records that the running rule read `source`. Edges stay in read order: a read moves its edge to the cursor,
     /// and whatever is left after the cursor when the rule ends was not read and is pruned.
-    func recordRead(of source: UInt32) {
+    @usableFromInline func recordRead(of source: UInt32) {
         let consumer = Int(evaluatingNode)
         precondition(source != evaluatingNode, "a rule cannot read itself")
         let version = table.versions[Int(source)]
@@ -211,7 +226,7 @@ extension Graph {
     }
 
     /// Removes the edges after `cursor`: the ones the rule did not read in its last run.
-    private func pruneEdges(of node: UInt32, keeping cursor: Int) {
+    func pruneEdges(of node: UInt32, keeping cursor: Int) {
         let n = Int(node)
         guard cursor < table.inputs[n].count else { return }
         for edge in table.inputs[n][cursor...] { removeOutput(node, from: edge.source) }

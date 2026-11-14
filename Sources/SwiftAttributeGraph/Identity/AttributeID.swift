@@ -15,6 +15,6 @@ public struct AttributeID: Hashable, Sendable {
         rawValue = (UInt64(generation) << 32) | UInt64(index)
     }
 
-    var index: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
+    @inlinable var index: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
     var generation: UInt32 { UInt32(truncatingIfNeeded: rawValue >> 32) }
 }

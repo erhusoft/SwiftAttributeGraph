@@ -1,9 +1,9 @@
 # Plan del motor SwiftAttributeGraph
 
 Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)) y M5 ([§9](#9-resultados-de-m5)).
-M4 sigue pendiente: la [propuesta revisada](DISENO-M4.md) tiene un prototipo aislado autorizado y validado en Mac
-([§10](#10-prototipo-aislado-de-m4)); faltan rendimiento e integración y decidir la migración de API. No se implementa
-el cambio a hilos auxiliares.
+M4 sigue parcial: el [camino reanudable aditivo](INTEGRACION-M4.md) ya se integra en el almacén real y pasa los
+presupuestos de rendimiento en Mac ([§11](#11-integración-aditiva-de-m4-en-mac)); falta decidir y validar la migración
+de las lecturas dinámicas síncronas. El [prototipo aislado](#10-prototipo-aislado-de-m4) queda como referencia.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
 y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M5.md](DISENO-M5.md)).
 
@@ -45,7 +45,7 @@ una pieza descubra otra cosa.
 | M1 | **Corte por versiones (resto)** | M0 ya hace el corte básico (una regla sucia no corre si ninguna entrada, en orden de lectura, cambió de versión). M1 queda para lo que falte tras medir: versión global y atajos | Test: una regla que da el mismo valor no hace recalcular a sus dependientes; medida del atajo | 🔴 |
 | M2 | **Políticas de comparación por atributo** | Cuatro políticas más `bits`, resueltas una vez por tipo y política al crear el atributo (caché por grafo): `viewValue` (por defecto), `environment`, `stateWrite`, `alwaysDifferent`. Reglas medidas en SwiftUI real en [DISENO-M2.md](DISENO-M2.md) §2 (campo a campo; hoja trivial por bytes en la vista y `==` en `@State`; existenciales por su tipo dinámico) | Cada política reproduce las filas medidas en SwiftUI real (caliente); sin `as? any Equatable` en el camino de escritura; medida de escrituras; el relleno no se compara | ✅ ([resultados](#7-resultados-de-m2)) |
 | M3 | **Reglas con estado** | `StatefulRule` y `RuleContext`: valor anterior, poder no cambiarlo, `hasChanged`, `anyInputsChanged(excluding:)`, `changedValue(of:)` y estado propio (`mutating`); forma de tipo y de cierre | Tests de una regla que acumula y de una que solo reacciona a una entrada concreta; profundidad 20.000; el estado se libera con el subgrafo | ✅ ([resultados](#8-resultados-de-m3)) |
-| M4 | **Actualización sin recursión total** | Las lecturas dinámicas dentro de una regla tampoco usan la pila nativa; reentrada (actualización anidada). [Diseño revisado](DISENO-M4.md): prototipo aislado de reglas reanudables validado en Mac ([§10](#10-prototipo-aislado-de-m4)); integración y migración de API pendientes; se mantiene el hilo original | Cadena de 20.000 lecturas dinámicas no declaradas sin desbordar; test de reentrada; resolver la compatibilidad de las reglas síncronas actuales | 🔴 |
+| M4 | **Actualización sin recursión total** | [Camino aditivo integrado](INTEGRACION-M4.md): reglas reanudables sobre el almacén, comparadores y subgrafos reales; validado en Mac hasta 100.000 niveles y dentro del presupuesto. Las APIs síncronas siguen con su límite | Resolver la migración y compatibilidad de lecturas dinámicas síncronas; cerrar la garantía de no recursión sin cambiar de hilo | 🟡 Parcial ([§11](#11-integración-aditiva-de-m4-en-mac)) |
 | M5 | **Subgrafos** | Jerarquía padre-hijo (`makeSubgraph(parent:)`, padre por omisión el actual); los atributos nacen en el subgrafo actual, que dentro de una regla es el de su propietario; invalidar libera el subgrafo y sus descendientes; invalidación diferida si hay una regla en ejecución; avisos de invalidación (`observe(_ subgraph:)`) antes de liberar | `nodeCount` vuelve a la base; invalidar durante una actualización no rompe la actualización; 20.000 niveles sin recursión | ✅ ([resultados](#9-resultados-de-m5)) |
 | M6 | **Atributos indirectos y desplazados** | Un atributo que redirige a otro o lee un campo suyo sin nodo propio | Tests de redirección, de cambio de destino y de que la dependencia sigue al destino | 🔴 |
 | M7 | **Aristas eficientes** | Borrado de arista O(1) (posición guardada); poda por marca y barrido | Test de un nodo con 100.000 padres que pierde la mitad, en tiempo lineal | 🔴 |
@@ -374,3 +374,35 @@ Medidas finales adicionales (medianas de cinco): cadena fría de 20.000, **30,36
 un millón de lecturas limpias, **118,81 ms**. Se conserva más memoria por regla (objeto y buffers) para reducir
 reservas; el valor propuesto se vacía al terminar. No se ha medido la memoria total. La medición fría no incluye la
 destrucción del dueño, a la que ahora se traslada la liberación del objeto de evaluación. **M4 sigue pendiente.**
+
+## 11. Integración aditiva de M4 en Mac
+
+Fecha: 2026-11-14. El dueño autoriza probar la integración sobre el almacén real y descartarla si no cumple los
+presupuestos. Se fijaron antes de implementar: coste reanudable / síncrono ≤ 1,30 en la carga pareada y ninguna
+regresión sostenida > 10 % en los caminos existentes. [Informe y límites](INTEGRACION-M4.md),
+[medidas](MEDIDAS-M4-INTEGRACION.txt). **Candidata conservada; M4 sigue parcial.**
+
+**Integrado:** `ResumableRule`, `RuleStep`, `ReadResult`, `ResumableRuleContext` y `makeResumableRule`, usando tabla,
+rastreo, poda y versiones reales. M2 compara al publicar; M5 conserva jerarquía, avisos y diferido. Cada paso retorna
+antes de apilar la fuente y se reanuda en el mismo hilo. El contexto usa `unowned` comprobado y un token por paso;
+no retiene la vida del grafo ni usa `unowned(unsafe)`. El valor inicial se resuelve una vez, en la primera lectura.
+Los marcos siguen midiendo 24 bytes en este Mac; el estado pasa a UInt16, un byte adicional por ranura.
+
+**Resultado release (Mac M1, Swift 6.2.4):** primera candidata 51,53 / 36,16 ms = 1,425, fuera de presupuesto.
+Tras especializar el contexto y ajustar la referencia no propietaria comprobada, la carga pareada de 50 ciclos ×
+1.000 reglas de dos entradas dio razones 0,949, 0,938, 0,947 y 0,944. La verificación final dio **32,90 ms** reanudable
+frente a **35,23 ms** síncrona = **0,934**, con siete muestras y orden alternado. No se relajaron los criterios.
+
+En las 43 métricas existentes comparables con `db21efa`, el mayor aumento observado fue **1,43 %** (18,23 → 18,49 ms
+en 50 ciclos de 1.000 reglas simples); ninguna superó el 10 %. Cadenas nuevas frías, sin creación ni destrucción:
+20.000 reglas **15,23 ms**, 100.000 **75,55 ms** (cinco muestras). No son números de SwiftUI ni de una UI completa.
+
+**Pruebas:** 169 de depuración sin rendimiento; 168 funcionales de release; 14 de rendimiento existentes y 2 nuevas,
+ejecutadas por separado: 184 verificadas en release. Solo quedan los dos problemas conocidos de M2. Profundidad fría
+hasta 100.000, pila de 512 KB con hilo comprobado en release, 20.000 reglas con estado y 20.000 entradas, oráculo
+mixto de 12 semillas × 100 operaciones, políticas de M2, propuestas entre pasos, corte, contextos inválidos y vida/M5.
+TDD adicional: se vio fallar la inicialización adelantada y se corrigió; una mutación del token fue detectada.
+
+**Pendiente:** las reglas síncronas no se han migrado y pueden mantener recursión nativa en sus lecturas nuevas.
+Por eso no se declara M4 completo. Falta definir su contrato de convivencia, memoria total y cargas representativas,
+y completar las demás piezas en Mac. Windows sigue aplazado hasta completar el motor en Mac.

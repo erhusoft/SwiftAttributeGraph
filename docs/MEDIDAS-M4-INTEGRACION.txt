@@ -1,0 +1,125 @@
+Medidas de M4 en Mac M1, macOS 15.7.9, Swift 6.2.4.
+Base: db21efa. Medianas según cada test; pruebas pareadas nuevas: siete muestras.
+No es una comparación con SwiftUI. No se ejecutaron estas suites a la vez.
+
+BASE EXISTENTE
+PERF P4 create 100k inputs + 10 reads each: 129.1 ms (checksum 0)
+PERF P3 create 100k rules, closure form: 35.91 ms
+PERF P3 create 100k rules, Rule-type form: 28.83 ms
+PERF create + first run of 20k rules reading one input: 16.41 ms
+PERF 500 writes, dependents stay dirty: 1.24 ms
+PERF 500 writes + read one dependent each: 1.41 ms
+PERF 50 cycles: write + update all 1,000 dependents: 18.23 ms (= 50,000 rule runs)
+PERF 100 batches of 32 writes + update 1,000 shared dependents: 415.97 ms
+PERF write at the root + update a 20,000-rule chain: 5.37 ms
+PERF write + update when the cut stops at rule 1 of 20,000: 0.72 ms
+PERF 2,000 subgraphs x 5 attributes: create + invalidate: 6.8 ms
+PERF 20,000-input rule loses half of its edges (M7 target): 74.47 ms
+PERF M2 Int x 500k alternating writes, bits: 91.48 ms
+PERF M2 Int x 500k alternating writes, viewValue: 91.84 ms
+PERF M2 Int x 500k alternating writes, environment: 96.46 ms
+PERF M2 Int x 500k alternating writes, stateWrite: 91.56 ms
+PERF M2 Double x 500k alternating writes, bits: 91.38 ms
+PERF M2 Double x 500k alternating writes, viewValue: 91.95 ms
+PERF M2 Double x 500k alternating writes, environment: 105.01 ms
+PERF M2 Double x 500k alternating writes, stateWrite: 100.06 ms
+PERF M2 String short x 500k alternating writes, bits: 96.74 ms
+PERF M2 String short x 500k alternating writes, viewValue: 107.27 ms
+PERF M2 String short x 500k alternating writes, environment: 112.42 ms
+PERF M2 String short x 500k alternating writes, stateWrite: 107.18 ms
+PERF M2 String long x 500k alternating writes, bits: 99.92 ms
+PERF M2 String long x 500k alternating writes, viewValue: 114.84 ms
+PERF M2 String long x 500k alternating writes, environment: 120.27 ms
+PERF M2 String long x 500k alternating writes, stateWrite: 115.13 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, bits: 98.15 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, viewValue: 98.62 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, environment: 112.01 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, stateWrite: 106.85 ms
+PERF M2 Any holding Int x 500k alternating writes, bits: 95.4 ms
+PERF M2 Any holding Int x 500k alternating writes, viewValue: 235.39 ms
+PERF M2 Any holding Int x 500k alternating writes, environment: 241.76 ms
+PERF M2 Any holding Int x 500k alternating writes, stateWrite: 236.52 ms
+PERF M2 String long x 500k identical writes, bits: 45.68 ms
+PERF M2 String long x 500k identical writes, viewValue: 57.61 ms
+PERF M2 String long x 500k identical writes, stateWrite: 57.72 ms
+PERF M3 50 cycles x 1,000 plain rules (2 inputs): 25.19 ms
+PERF M3 50 cycles x 1,000 stateful rules (2 inputs, hasChanged): 34.88 ms (x1.38 of plain)
+PERF M5 build + invalidate a tree of 111,111 subgraphs (100,000 attributes): 56.55 ms
+PERF M5 20 rounds of replacing 1,000 rows (2 attributes each): 36.71 ms
+
+CANDIDATA: CAMINOS EXISTENTES
+PERF P4 create 100k inputs + 10 reads each: 119.63 ms (checksum 0)
+PERF P3 create 100k rules, closure form: 28.99 ms
+PERF P3 create 100k rules, Rule-type form: 19.79 ms
+PERF create + first run of 20k rules reading one input: 14.74 ms
+PERF 500 writes, dependents stay dirty: 1.24 ms
+PERF 500 writes + read one dependent each: 1.42 ms
+PERF 50 cycles: write + update all 1,000 dependents: 18.49 ms (= 50,000 rule runs)
+PERF 100 batches of 32 writes + update 1,000 shared dependents: 414.68 ms
+PERF write at the root + update a 20,000-rule chain: 5.42 ms
+PERF write + update when the cut stops at rule 1 of 20,000: 0.73 ms
+PERF 2,000 subgraphs x 5 attributes: create + invalidate: 5.81 ms
+PERF 20,000-input rule loses half of its edges (M7 target): 75.17 ms
+PERF M2 Int x 500k alternating writes, bits: 90.88 ms
+PERF M2 Int x 500k alternating writes, viewValue: 91.59 ms
+PERF M2 Int x 500k alternating writes, environment: 97.15 ms
+PERF M2 Int x 500k alternating writes, stateWrite: 91.2 ms
+PERF M2 Double x 500k alternating writes, bits: 91.16 ms
+PERF M2 Double x 500k alternating writes, viewValue: 91.33 ms
+PERF M2 Double x 500k alternating writes, environment: 105.42 ms
+PERF M2 Double x 500k alternating writes, stateWrite: 99.72 ms
+PERF M2 String short x 500k alternating writes, bits: 97.91 ms
+PERF M2 String short x 500k alternating writes, viewValue: 107.61 ms
+PERF M2 String short x 500k alternating writes, environment: 112.77 ms
+PERF M2 String short x 500k alternating writes, stateWrite: 107.0 ms
+PERF M2 String long x 500k alternating writes, bits: 99.46 ms
+PERF M2 String long x 500k alternating writes, viewValue: 115.36 ms
+PERF M2 String long x 500k alternating writes, environment: 120.17 ms
+PERF M2 String long x 500k alternating writes, stateWrite: 114.46 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, bits: 97.97 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, viewValue: 98.05 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, environment: 112.34 ms
+PERF M2 struct{Double,String,Int} x 500k alternating writes, stateWrite: 106.59 ms
+PERF M2 Any holding Int x 500k alternating writes, bits: 95.67 ms
+PERF M2 Any holding Int x 500k alternating writes, viewValue: 237.58 ms
+PERF M2 Any holding Int x 500k alternating writes, environment: 243.35 ms
+PERF M2 Any holding Int x 500k alternating writes, stateWrite: 238.23 ms
+PERF M2 String long x 500k identical writes, bits: 45.39 ms
+PERF M2 String long x 500k identical writes, viewValue: 57.05 ms
+PERF M2 String long x 500k identical writes, stateWrite: 57.03 ms
+PERF M3 50 cycles x 1,000 plain rules (2 inputs): 25.35 ms
+PERF M3 50 cycles x 1,000 stateful rules (2 inputs, hasChanged): 34.79 ms (x1.37 of plain)
+PERF M5 build + invalidate a tree of 111,111 subgraphs (100,000 attributes): 47.17 ms
+PERF M5 20 rounds of replacing 1,000 rows (2 attributes each): 32.94 ms
+
+PRIMERA CANDIDATA, RECHAZADA
+M4_GATE synchronous_ms=36.16 resumable_ms=51.52725 ratio=1.4249792588495578 limit=1.30
+M4_SAMPLES synchronous=[39.170792, 36.12575, 36.194583, 36.154083, 36.16, 36.205167, 36.13] resumable=[51.611083, 51.509083, 51.524667, 51.52725, 51.884666, 51.648916, 51.478458]
+M4_FRAME_STRIDE 24
+
+AJUSTE
+M4_GATE synchronous_ms=35.372875 resumable_ms=33.558916 ratio=0.9487189265786284 limit=1.30
+M4_SAMPLES synchronous=[39.782708, 39.069959, 36.084, 35.367125, 35.372875, 35.116667, 35.007708] resumable=[36.691791, 37.569583, 33.221, 33.570583, 33.412042, 33.558916, 33.169959]
+M4_FRAME_STRIDE 24
+
+REPETICION 1
+M4_GATE synchronous_ms=35.2095 resumable_ms=33.013375 ratio=0.9376269188713274 limit=1.30
+M4_SAMPLES synchronous=[37.784167, 35.2095, 34.997292, 35.061833, 34.99725, 35.303459, 35.214333] resumable=[33.012666, 32.991375, 33.115125, 33.073458, 33.013375, 32.976917, 33.190083]
+M4_FRAME_STRIDE 24
+
+REPETICION 2
+M4_GATE synchronous_ms=35.006666 resumable_ms=33.135375 ratio=0.9465447237963193 limit=1.30
+M4_SAMPLES synchronous=[37.557833, 35.065916, 34.99225, 35.006666, 34.947959, 34.967083, 35.201875] resumable=[33.100334, 33.135375, 33.130667, 33.162583, 33.355542, 33.120083, 33.353541]
+M4_FRAME_STRIDE 24
+
+REPETICION 3
+M4_GATE synchronous_ms=35.005083 resumable_ms=33.030125 ratio=0.9435808222480147 limit=1.30
+M4_SAMPLES synchronous=[37.801541, 34.961917, 35.078417, 34.974083, 35.005083, 34.970708, 35.014958] resumable=[32.95275, 33.209833, 33.028166, 33.038416, 33.015208, 33.030125, 33.065042]
+M4_FRAME_STRIDE 24
+
+FINAL, TRAS CORREGIR INICIALIZACION PEREZOSA
+M4_COLD depth=20000 median_ms=15.231083
+M4_COLD depth=100000 median_ms=75.546083
+M4_GATE synchronous_ms=35.2265 resumable_ms=32.896583 ratio=0.9338589698096603 limit=1.30
+M4_SAMPLES synchronous=[35.67625, 35.255792, 35.183375, 35.239542, 35.101167, 35.2265, 35.131083] resumable=[33.031958, 33.52375, 32.884709, 32.866625, 32.876875, 32.896583, 32.962667]
+M4_FRAME_STRIDE 24

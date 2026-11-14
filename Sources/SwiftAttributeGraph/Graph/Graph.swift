@@ -22,8 +22,9 @@ public final class Graph {
 
     // Update machinery (see `Graph+Update.swift`).
     var frames: [UpdateFrame] = []
-    var evaluatingNode: UInt32 = Graph.noNode
+    @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
     var trackCursor = 0
+    var isResumingStep = false
 
     // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
     var dirtyStack: [UInt32] = []
@@ -52,6 +53,7 @@ public final class Graph {
 
     /// Stops the program in debug builds if the graph is used from another thread than the one that created it.
     @inline(__always)
+    @usableFromInline
     func assertOwnThread() {
         #if DEBUG && !SAG_UNCHECKED
         precondition(isOnOwningThread, "a Graph must be used from the thread that created it")
@@ -114,7 +116,7 @@ public final class Graph {
     // MARK: Creating attributes
 
     /// Whether the ID names a live attribute.
-    func contains(_ id: AttributeID) -> Bool { table.isLive(id) }
+    @usableFromInline func contains(_ id: AttributeID) -> Bool { table.isLive(id) }
 
     /// Creates a leaf attribute holding `value`, in the current subgraph.
     public func makeInput<Value>(_ value: Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
@@ -157,7 +159,7 @@ public final class Graph {
         return Attribute(id: id)
     }
 
-    private func allocate(_ box: NodeBox, state: UInt8) -> AttributeID {
+    func allocate(_ box: NodeBox, state: UInt16) -> AttributeID {
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
         precondition(!subgraphs.isFalling(index: currentSubgraph.index), "the current subgraph is being invalidated")
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
@@ -165,7 +167,7 @@ public final class Graph {
         return id
     }
 
-    func typedNode<Value>(_ attribute: Attribute<Value>) -> TypedNode<Value> {
+    @usableFromInline func typedNode<Value>(_ attribute: Attribute<Value>) -> TypedNode<Value> {
         let box = table.box(at: attribute.id.index)
         #if DEBUG && !SAG_UNCHECKED
         guard let node = box as? TypedNode<Value> else {

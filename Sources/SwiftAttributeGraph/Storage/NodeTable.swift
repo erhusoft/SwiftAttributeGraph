@@ -4,7 +4,7 @@
 /// is what made propagation 3.8× faster in the SwiftGraph storage study (G1–G3). Only `boxes` holds a reference.
 struct NodeTable {
     private(set) var generations: [UInt32] = []
-    var state: [UInt8] = []
+    var state: [UInt16] = []
     var versions: [UInt32] = []
     var inputs: [[InputEdge]] = []
     var outputs: [[UInt32]] = []
@@ -17,7 +17,7 @@ struct NodeTable {
     var slotCount: Int { generations.count }
 
     /// Reserves a slot (reusing a freed one if any) and stores the node in it.
-    mutating func allocate(owner: UInt32, box: NodeBox, state initialState: UInt8, version: UInt32) -> AttributeID {
+    mutating func allocate(owner: UInt32, box: NodeBox, state initialState: UInt16, version: UInt32) -> AttributeID {
         liveCount += 1
         if let index = freeList.popLast() {
             let i = Int(index)

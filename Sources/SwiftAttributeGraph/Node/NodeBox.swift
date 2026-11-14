@@ -1,13 +1,17 @@
 /// Type-erased holder of the value of a node. The common, non-generic parts of a node live in `NodeTable` arrays;
 /// only the typed value (and the rule, if any) lives here.
-class NodeBox {
+@usableFromInline class NodeBox {
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
     func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
+    /// Performs one step; only resumable rule nodes override this.
+    func resume(in graph: Graph, node: AttributeID, firstStep: Bool) -> (step: RuleStep, changed: Bool) {
+        preconditionFailure("resume() called on a node that is not resumable")
+    }
 }
 
 /// A box holding a value of a known type.
-class TypedNode<Value>: NodeBox {
-    var value: Value?
+@usableFromInline class TypedNode<Value>: NodeBox {
+    @usableFromInline var value: Value?
     /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
     let isEqual: (Value, Value) -> Bool
 

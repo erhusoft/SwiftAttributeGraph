@@ -1,9 +1,10 @@
 # Diseño M4: evaluación reanudable en el hilo del grafo (propuesta revisada)
 
 Fecha: 2026-11-14. Sustituye la propuesta de segmentos mediante hilos auxiliares del commit `1e6f041`.
-**Estado: prototipo aislado autorizado y validado en Mac; integración pendiente.** Resultados y órdenes en
-[Prototypes/ResumableGraph](../Prototypes/ResumableGraph/README.md). M4 sigue pendiente. La implementación de producción conserva el
-contrato actual hasta decidir la migración de API descrita en §6. No se cambian los principios de `AGENTS.md`.
+**Estado: camino reanudable aditivo integrado y validado en Mac; M4 sigue parcial.**
+[Resultados de integración](INTEGRACION-M4.md). El [prototipo aislado](../Prototypes/ResumableGraph/README.md) queda
+como referencia. Las APIs síncronas conservan su contrato y su límite actual hasta decidir la migración de §6.
+No se cambian los principios de `AGENTS.md`.
 
 ## 1. Problema y garantías que se conservan
 
@@ -46,7 +47,7 @@ El método del paso ya ha retornado cuando se apila una dependencia. No queda un
 pila nativa ni se requiere otro hilo. La regla conserva en sus propiedades la fase y los valores locales necesarios.
 No se reinicia desde el principio para descubrir lecturas.
 
-**Boceto de API, no disponible todavía:**
+**API aditiva integrada:**
 
 ```swift
 /// The next action requested by a resumable rule.
@@ -65,12 +66,12 @@ public enum ReadResult<Value> {
 public protocol ResumableRule {
     associatedtype Value
     static var initialValue: Value? { get }
-    mutating func resume(_ context: inout RuleContext<Value>) -> RuleStep
+    mutating func resume(_ context: inout ResumableRuleContext<Value>) -> RuleStep
 }
 ```
 
-Se añadirían `RuleContext.poll(_:) -> ReadResult<T>` y `isFirstStep`, y
-`Graph.makeResumableRule(_:comparison:)`. `poll` nunca llama recursivamente a `update`: devuelve `.pending` si la
+Están disponibles `ResumableRuleContext.poll(_:) -> ReadResult<T>`, `isFirstStep` y
+`Graph.makeResumableRule(_:comparison:)`. El contexto síncrono no cambia. `poll` nunca llama recursivamente a `update`: devuelve `.pending` si la
 entrada necesita actualización. `.ready(nil)` se distingue de `.pending` cuando el valor del atributo es opcional.
 
 Ejemplo de una regla cuyo segundo atributo depende del valor del primero (esquema; los nombres son propuestos):
@@ -82,7 +83,7 @@ struct Choose: ResumableRule {
     let right: Attribute<Int>
     var selected: Attribute<Int>?
 
-    mutating func resume(_ context: inout RuleContext<Int>) -> RuleStep {
+    mutating func resume(_ context: inout ResumableRuleContext<Int>) -> RuleStep {
         if context.isFirstStep { selected = nil }
         if selected == nil {
             switch context.poll(selector) {
@@ -157,9 +158,9 @@ Para la futura UI hay que comprobar que las reglas internas pueden expresarse po
 automáticamente un `body` arbitrario ni todas sus lecturas implícitas en una máquina de estados. Si conservar esa
 sintaxis en cualquier profundidad es un requisito, sigue abierta la investigación de otra estrategia.
 
-**Decisión del dueño (2026-11-14):** aprobada la exploración de esta API mediante un prototipo aislado. No equivale a
-aprobar la sustitución de las APIs de producción ni su migración. El prototipo está en
-`Prototypes/ResumableGraph`; antes de integrar se debe resolver el coste caliente y concretar la convivencia de APIs.
+**Decisiones del dueño (2026-11-14):** aprobados el prototipo y, después, probar la integración aditiva con criterios
+previos de descarte (§9). La candidata pasó esos criterios y se conserva. No se sustituyen las APIs síncronas ni
+se declara resuelta su migración. El prototipo sigue en `Prototypes/ResumableGraph` como referencia.
 
 ## 7. Validación y criterio de terminado
 
@@ -203,3 +204,24 @@ puede atribuirse al acto de suspender. La memoria retenida por regla aumenta y a
 percentiles, cargas reales de UI y Windows. El prototipo usa `Equatable`, dueños planos y no reutiliza ranuras.
 Los estudios externos enumerados en `AGENTS.md` §5 no están disponibles en las rutas locales consultadas; esta revisión
 parte del código y los diseños de este repositorio. Deben contrastarse antes de cerrar el diseño de implementación.
+
+## 9. Criterios previos de la integración candidata
+
+Fecha: 2026-11-14. El dueño autoriza probar el camino reanudable sobre el almacén real y descartarlo si los números
+no son buenos. Se trabaja en un checkout aislado; no se reemplazan las APIs existentes. Windows sigue aplazado.
+
+Criterios fijados antes de implementar y medir:
+- Correctitud obligatoria: profundidad fría de 20.000 y 100.000, hilo original, estado, dependencias exactas, corte,
+  comparación de M2, vida y diferido de M5, oráculos y errores controlados del contexto. Los problemas conocidos de
+  M2 no se convierten en aprobaciones nuevas. M4 no queda completo mientras siga pendiente la migración de cierres.
+- Caso caliente: 50 ciclos × 1.000 reglas de dos entradas, comparando reglas de tipo equivalentes, ambas con estado,
+  mismas lecturas, consulta `hasChanged` y resultado. Objetivo: razón reanudable / síncrona **≤ 1,30**, mediana de siete
+  muestras, sin creación ni precalentamiento en el intervalo.
+- Caminos existentes: ninguna regresión sostenida **> 10 %** en la batería de rendimiento frente a la revisión base
+  `db21efa`, repitiendo diferencias dudosas para distinguir ruido. No se cambian umbrales después de ver resultados.
+- No se eliminan comprobaciones ni se cambian las políticas para aprobar el presupuesto. Si falla correctitud o
+  rendimiento sostenido, la candidata queda fuera del motor principal y se registran código, resultados y motivo.
+
+Se usa un `ResumableRuleContext` separado: protege la vigencia sin trasladar la referencia insegura del contexto
+síncrono ni introducirle las comprobaciones del contexto nuevo. Es una API aditiva, no una migración de `RuleContext`.
+La [candidata aceptada](INTEGRACION-M4.md) conserva esos criterios; M4 no se marca completo.
