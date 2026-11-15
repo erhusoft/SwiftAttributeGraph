@@ -622,3 +622,20 @@ Fecha: 2026-11-14. Implementación fuera del motor, en `Views/`. Detalle y lími
   No es p99 de UI ni una medida del renderizado. TDD y mutación verificados.
 - Los 202 tests funcionales de debug del motor siguen pasando, con los 2 known issues preexistentes de M2.
   No se cambiaron fuentes del motor. Windows sigue aplazado.
+
+## 20. Estudio nativo de lecturas dinámicas e identidad (Mac)
+
+Fecha: 2026-11-14. [Estudio, predicciones y límites](ESTUDIO-LECTURAS-DINAMICAS.md).
+
+- Seis variantes: State directo, Binding proyectado, Binding con cierres, ramas estructurales, Binding nunca leído
+  y control que lee ambas entradas. Dos direcciones y diez acciones por variante: 120 acciones nativas por proceso.
+- La hipótesis de poda exacta en todo cuerpo SwiftUI falla en tres variantes. El efecto no es exclusivo de Binding:
+  también aparece con State directo. Identidad y separación en hijos cambian los recuentos.
+- Recrear la identidad del hijo elimina una lectura anterior en el Binding proyectado; cambiar solo el contenido
+  no recrea el cuerpo dueño del State. Con Binding por cierres también se reevalúa al padre, a diferencia de `$state`.
+- Predicciones fijadas tras descubrimiento y antes de medir la secuencia inversa: pasan en debug y release. Los
+  oráculos registran tanto los valores como los cuerpos del padre y los consumidores.
+- Batería de Views: 18 tests en debug y release, con el known issue previo de paridad. Nuevo oráculo del motor:
+  aristas exactas, lectura activa/doble, recreación y vuelta de nodos/aristas a cero.
+- Solo tests y documentación; sin cambios del motor ni coste nuevo de producción. No se declara paridad general
+  ni conocimiento de las estructuras internas de Apple. Windows sigue aplazado.

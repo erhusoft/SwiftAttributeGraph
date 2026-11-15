@@ -89,3 +89,9 @@ La prueba demuestra el enlace con el motor y el control de vida de una composici
 ni equivalencia general con SwiftUI.** El siguiente estudio es aislar la invalidación de `Binding` tras cambiar de rama
 (con `State` directo, vistas hijas distintas y remontaje), antes de decidir si la capa de propiedades dinámicas debe
 conservar información adicional. No corresponde alterar la poda exacta del motor solo para reproducir esta observación.
+
+### Seguimiento: estudio de lecturas dinámicas
+
+El [estudio posterior](ESTUDIO-LECTURAS-DINAMICAS.md) amplía este caso a State directo, dos formas de Binding, ramas
+estructurales e identidad, con controles de lectura. La evaluación adicional también aparece con State directo:
+no es exclusiva de Binding. La discrepancia de esta prueba se mantiene declarada; el núcleo conserva su poda exacta.

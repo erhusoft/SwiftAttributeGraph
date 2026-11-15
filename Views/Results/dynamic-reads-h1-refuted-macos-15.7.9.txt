@@ -1,0 +1,50 @@
+warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.
+warning: 'views': failed storing manifest for 'views' in cache: attempt to write a readonly database
+warning: 'swiftattributegraph': failed storing manifest for 'swiftattributegraph' in cache: attempt to write a readonly database
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Emitting module ShellUITests
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/VerticalSliceTests.swift:102:18: warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+100 |         let scope = ViewGraphScope(graph: graph)
+101 |         var token: Token? = Token()
+102 |         weak var weakToken = token
+    |                  `- warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+103 |         var state: State<Token>? = State(wrappedValue: token!)
+104 |         state!.install(in: scope)
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[4/5] Compiling ShellUITests DynamicReadProbeTests.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking ShellUIPackageTests
+Build complete! (1.95s)
+Test Suite 'Selected tests' started at 2026-11-14 19:59:49.237.
+Test Suite 'ShellUIPackageTests.xctest' started at 2026-11-14 19:59:49.238.
+Test Suite 'ShellUIPackageTests.xctest' passed at 2026-11-14 19:59:49.238.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 19:59:49.238.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SliceTests started.
+◇ Test dynamicReadNativeMatrix() started.
+✘ Test dynamicReadNativeMatrix() recorded an issue at DynamicReadProbeTests.swift:124:17: Expectation failed: (selected → [1, 0, 1, 1, 1, 1, 1, 1, 1, 1]) == [1, 0, 1, 0, 1, 0, 1, 1, 0, 1]
+± inserted [1, 1, 1], removed [0, 0, 0]
+DynamicReads direct: selected=[1, 0, 1, 1, 1, 1, 1, 1, 1, 1] root=[1, 0, 1, 1, 1, 1, 1, 1, 1, 1] values=["1", "1", "100", "100", "100", "100", "101", "3", "3", "4"]
+✘ Test dynamicReadNativeMatrix() recorded an issue at DynamicReadProbeTests.swift:124:17: Expectation failed: (selected → [1, 0, 1, 1, 1, 0, 1, 1, 1, 1]) == [1, 0, 1, 0, 1, 0, 1, 1, 0, 1]
+± inserted [1, 1], removed [0, 0]
+DynamicReads projected: selected=[1, 0, 1, 1, 1, 0, 1, 1, 1, 1] root=[0, 0, 0, 0, 1, 0, 0, 0, 0, 0] values=["1", "1", "100", "100", "100", "100", "101", "3", "3", "4"]
+✘ Test dynamicReadNativeMatrix() recorded an issue at DynamicReadProbeTests.swift:124:17: Expectation failed: (selected → [1, 0, 1, 1, 1, 1, 1, 1, 1, 1]) == [1, 0, 1, 0, 1, 0, 1, 1, 0, 1]
+± inserted [1, 1, 1], removed [0, 0, 0]
+DynamicReads closure: selected=[1, 0, 1, 1, 1, 1, 1, 1, 1, 1] root=[1, 0, 1, 1, 1, 1, 1, 1, 1, 1] values=["1", "1", "100", "100", "100", "100", "101", "3", "3", "4"]
+DynamicReads structural: selected=[1, 0, 1, 0, 1, 0, 1, 1, 0, 1] root=[0, 0, 1, 0, 1, 0, 0, 1, 0, 0] values=["1", "1", "100", "100", "100", "100", "101", "3", "3", "4"]
+DynamicReads unread: selected=[0, 0, 0, 0, 1, 0, 1, 0, 1, 0] root=[0, 0, 0, 0, 1, 0, 0, 0, 0, 0] values=["100", "100", "100", "100", "100", "100", "101", "101", "102", "102"]
+DynamicReads both: selected=[1, 0, 1, 1, 1, 1, 1, 1, 1, 1] root=[0, 0, 0, 0, 1, 0, 0, 0, 0, 0] values=["1", "1", "100", "100", "100", "100", "101", "3", "3", "4"]
+✘ Test dynamicReadNativeMatrix() failed after 6.940 seconds with 3 issues.
+↳ /// Discovery first checks values and controls; per-mode count expectations are frozen after the first observation.
+✘ Suite SliceTests failed after 6.941 seconds with 3 issues.
+✘ Test run with 1 test in 1 suite failed after 6.941 seconds with 3 issues.
