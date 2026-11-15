@@ -18,7 +18,7 @@ SCENARIOS = [
     "diamond-multiple-forward", "diamond-multiple-reverse",
     "stateful-no-write-cut", "stateful-unread-input", "stateful-has-value-and-revert",
     "selector-input-order", "invalidate-in-rule", "weak-attribute-in-rule",
-    "indirect-rule-and-redirect",
+    "indirect-rule-and-redirect", "focus-keypath-cut",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

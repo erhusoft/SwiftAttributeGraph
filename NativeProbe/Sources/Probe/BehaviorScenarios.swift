@@ -218,3 +218,30 @@ func indirectRuleAndRedirect() {
     precondition(runHistory == [1, 1, 2, 2, 3, 4, 5])
     print("indirect-rule-and-redirect|values=\(values)|runs=\(runHistory)")
 }
+
+private struct ProbePair {
+    var left: Int
+    var right: Int
+}
+
+func focusKeyPathCut() {
+    let d = Driver()
+    defer { d.close() }
+    let root = d.input(ProbePair(left: 2, right: 100))
+    let leftAttr = d.focus(root, keyPath: \.left)
+    var runs = 0
+    let reader = d.rule {
+        runs += 1
+        return d.read(leftAttr) * 10
+    }
+    var values = [d.read(reader)], runHistory = [runs]
+    d.write(ProbePair(left: 2, right: 200), to: root)
+    values.append(d.read(reader)); runHistory.append(runs)
+    d.write(ProbePair(left: 5, right: 200), to: root)
+    values.append(d.read(reader)); runHistory.append(runs)
+    d.write(ProbePair(left: 5, right: 300), to: root)
+    values.append(d.read(reader)); runHistory.append(runs)
+    precondition(values == [20, 20, 50, 50])
+    precondition(runHistory == [1, 1, 2, 2])
+    print("focus-keypath-cut|values=\(values)|runs=\(runHistory)")
+}

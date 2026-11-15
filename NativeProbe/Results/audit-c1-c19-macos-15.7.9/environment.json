@@ -22,7 +22,8 @@
     "selector-input-order",
     "invalidate-in-rule",
     "weak-attribute-in-rule",
-    "indirect-rule-and-redirect"
+    "indirect-rule-and-redirect",
+    "focus-keypath-cut"
   ],
   "probe_only": true
 }

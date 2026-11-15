@@ -13,3 +13,4 @@ selector-input-order|ab=[2, 2, 2]|ba=[2, 2, 2]
 invalidate-in-rule|v1=42|v2=43|validDuring=false|weakDuring=Optional(42)|validAfter=false
 weak-attribute-in-rule|reader=[10, 20, 20, -1]|stateful=[110, 120, 120, -999]|runsBeforeTick=[2, 2]|runsAfterTick=[3, 3]
 indirect-rule-and-redirect|values=[11, 11, 11, 11, 26, 22, 25]|runs=[1, 1, 2, 2, 3, 4, 5]
+focus-keypath-cut|values=[20, 20, 50, 50]|runs=[1, 1, 2, 2]

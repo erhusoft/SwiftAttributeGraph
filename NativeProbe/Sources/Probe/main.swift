@@ -73,6 +73,9 @@ final class Driver {
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.projectedValue }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.source }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { indirect.source = newSource }
+    func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
+        currentSubgraph.apply { Handle(AttributeGraph.Focus(root: root, keyPath: keyPath)) }
+    }
     func read<V>(_ attribute: Handle<V>) -> V { attribute.value }
     func write<V>(_ value: V, to attribute: Handle<V>) { attribute.value = value }
     func close() {
@@ -143,6 +146,9 @@ final class Driver {
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { graph.source(of: indirect) }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
+    func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
+        graph.withCurrent(currentSubgraph) { graph.makeFocus(root, keyPath: keyPath) }
+    }
     func read<V>(_ attribute: Handle<V>) -> V { graph.value(of: attribute) }
     func write<V>(_ value: V, to attribute: Handle<V>) { graph.setValue(value, for: attribute) }
     func close() {
@@ -251,3 +257,4 @@ selectorInputOrder()
 invalidateInRule()
 weakAttributeInRule()
 indirectRuleAndRedirect()
+focusKeyPathCut()

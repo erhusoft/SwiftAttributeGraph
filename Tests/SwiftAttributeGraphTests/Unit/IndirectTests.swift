@@ -213,4 +213,55 @@ import Testing
         #expect(graph.value(of: rule) == 30)
         #expect(changes == [true, true, true])
     }
+
+    // MARK: - KeyPath projection / Focus (M6 / C14)
+
+    private struct Pair {
+        var left: Int
+        var right: Int
+    }
+
+    @Test func focusProjectsKeyPathAndCutsWhenOtherFieldsChange() {
+        let graph = Graph()
+        let root = graph.makeInput(Pair(left: 1, right: 100))
+        var focusRuns = 0
+        let leftAttr = graph.makeRule(Focus(root: root, keyPath: \.left))
+        let reader = graph.makeRule {
+            focusRuns += 1
+            return leftAttr.value * 10
+        }
+        #expect(graph.value(of: reader) == 10)
+        #expect(focusRuns == 1)
+
+        // Changing `right` leaves `left` unchanged: `leftAttr` evaluates and cuts `reader`.
+        graph.setValue(Pair(left: 1, right: 200), for: root)
+        #expect(graph.value(of: reader) == 10)
+        #expect(focusRuns == 1)
+
+        // Changing `left` updates `leftAttr` and runs `reader`.
+        graph.setValue(Pair(left: 5, right: 200), for: root)
+        #expect(graph.value(of: reader) == 50)
+        #expect(focusRuns == 2)
+    }
+
+    @Test func makeFocusConvenienceCreatesKeyPathProjectionRule() {
+        let graph = Graph()
+        let root = graph.makeInput(Pair(left: 3, right: 4))
+        let rightAttr = graph.makeFocus(root, keyPath: \.right)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return rightAttr.value + 1
+        }
+        #expect(graph.value(of: reader) == 5)
+        #expect(runs == 1)
+
+        graph.setValue(Pair(left: 99, right: 4), for: root)
+        #expect(graph.value(of: reader) == 5)
+        #expect(runs == 1)
+
+        graph.setValue(Pair(left: 99, right: 10), for: root)
+        #expect(graph.value(of: reader) == 11)
+        #expect(runs == 2)
+    }
 }

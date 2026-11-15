@@ -131,3 +131,4 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 | 13 | `invalidate-in-rule` | C9, C15 | Idéntico (`v1=42`, `v2=43`, `validDuring=false`, `weakDuring=Optional(42)`, `validAfter=false`, `weakAfter=nil`) |
 | 14 | `weak-attribute-in-rule` | C9, C10, C15 | Idéntico (`reader=[10, 20, 20, -1]`, `stateful=[110, 120, 120, -999]`, `runsBeforeTick=[2, 2]`, `runsAfterTick=[3, 3]`) |
 | 15 | `indirect-rule-and-redirect` | M6, C18 | Idéntico (`values=[11, 11, 11, 11, 26, 22, 25]`, `runs=[1, 1, 2, 2, 3, 4, 5]`) |
+| 16 | `focus-keypath-cut` | M6, C14 | Idéntico (`values=[20, 20, 50, 50]`, `runs=[1, 1, 2, 2]`) |

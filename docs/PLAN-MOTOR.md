@@ -723,17 +723,18 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Estudio detallado 
    - Se añadió `WeakAttribute<Value>` (`graph.attribute(of:)`, `graph.value(of:)`, `graph.changedValue(of:)` y `context.changedValue(of:)`).
    - Se expuso `graph.isValid(_ subgraph:)`: pasa a `false` inmediatamente cuando `invalidate(_:)` se llama desde dentro de una regla (`isFalling`), mientras los atributos del subgrafo siguen legibles hasta el final de la actualización más externa.
    - Al invalidar un subgrafo, las aristas hacia lectores externos se desprenden (`remove_edge`) **sin** marcarlos `dirty | pending`, preservando su valor cacheado hasta que otra entrada viva los ensucie (verificado con `AGTrace`).
-3. **Pieza 3 (`74fad4c` — M6 y C18: `Indirect` hacia reglas, redirección `setSource` y arista única):**
+3. **Pieza 3 (`74fad4c` + `Focus` — M6, C14 y C18: `Indirect` hacia reglas, redirección `setSource`, arista única y proyección `Focus` por `KeyPath`):**
    - `makeIndirect(_:)` acepta tanto entradas como reglas (`Rule`, `StatefulRule`, `ResumableRule`).
    - Se añadieron `graph.source(of:)` y `graph.setSource(_:for:)`: reasignar el mismo `source` es un *no-op*; redirigir a un atributo distinto desconecta el anterior, sube la versión del indirecto y marca a sus lectores `dirty | pending` aunque el valor numérico coincida (idéntico a `IndirectAttribute` de Apple). Detecta ciclos de redirección con `precondition`.
    - Cada indirecto mantiene su arista `indirect <- source` y los lectores registran una única arista `reader <- indirect`.
-4. **Pieza 4 (limpieza de `lastVerified`, ampliación de `NativeProbe` a 15 escenarios y documentación):**
+   - Se añadieron `Focus<Root, Value>` y `graph.makeFocus(_:keyPath:comparison:)` (proyección de un campo por `KeyPath` con corte por versión propio cuando cambian otros campos del `struct` raíz, idéntico a `AttributeGraph.Focus` de Apple).
+4. **Pieza 4 (limpieza de `lastVerified`, ampliación de `NativeProbe` a 16 escenarios y documentación):**
    - Se eliminó el arreglo paralelo `lastVerified` de `NodeTable` (se escribía pero nunca se leía), ahorrando 4 bytes por ranura.
-   - Se añadieron 7 escenarios directos a `NativeProbe` (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`).
+   - Se añadieron 8 escenarios directos a `NativeProbe` (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`, `focus-keypath-cut`).
 
 **Validación y medidas (Mac M1, Swift 6.2.4):**
-- **`NativeProbe`:** **15 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
-- **Tests funcionales:** **211 pruebas en 26 suites** pasan en `1,56 s` en depuración (frente a `31,02 s` antes de la Pieza 1) y **210 pruebas** en release, conservando únicamente los 2 *known issues* documentados de M2.
+- **`NativeProbe`:** **16 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
+- **Tests funcionales:** **213 pruebas en 26 suites** pasan en depuración y **212 pruebas** en release, conservando únicamente los 2 *known issues* documentados de M2.
 - **Rendimiento en release (18 pruebas en 3 suites en verde):**
   - Regla de 20.000 entradas que pierde la mitad: **4,85 ms** (frente a 76,83 ms antes de la Pieza 1: **15,8× más rápido**).
   - Presupuesto M4 (50 ciclos × 1.000 reglas reanudables frente a síncronas): **33,20 ms / 36,56 ms = 0,908** (≤ 1,30).
