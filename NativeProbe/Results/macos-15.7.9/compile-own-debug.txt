@@ -1,0 +1,9 @@
+warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.
+warning: 'nativeprobe': failed storing manifest for 'nativeprobe' in cache: attempt to write a readonly database
+warning: 'swiftattributegraph': failed storing manifest for 'swiftattributegraph' in cache: attempt to write a readonly database
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.52s)

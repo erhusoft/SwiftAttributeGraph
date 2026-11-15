@@ -606,6 +606,10 @@ conocidos de M2. Rendimiento ejecutado en suites separadas: 20.000 aliases, escr
 (mediana de siete); presupuesto M4 **34,96 / 36,91 ms = 0,947**, por debajo de 1,30. Pasan las tres pruebas de
 rendimiento seleccionadas. Esto no sustituye toda la batería final de M9 ni su caso objetivo de UI; M9 sigue pendiente.
 
+> **Corrección de alcance (2026-11-14, indicación del dueño):** los apartados 19–22 describen estudios de la capa de
+> vistas y cambios experimentales de ShellUI. No cuentan como validación directa ni avance del núcleo frente al
+> AttributeGraph nativo. ShellUI queda aparcado como cascarón de API; estos apartados son registro histórico.
+
 ## 19. Primera conexión experimental con vistas (Mac)
 
 Fecha: 2026-11-14. Implementación fuera del motor, en `Views/`. Detalle y límites en
@@ -673,3 +677,20 @@ Fecha: 2026-11-14. [Contrato, sondas y límites](CONTRATO-BINDING.md).
   El público tiene dos llamadas a get por iteración y la proyección una. No es p99 de UI ni comparación nativa.
 - Quedan pendientes actualización dinámica, caché para comparación y reconciliación de argumentos de hijos. Se cierra
   solo la diferencia de lectura en construcción, sin declarar paridad completa. Windows continúa aplazado.
+
+## 23. Primera validación directa contra AttributeGraph de Apple (Mac)
+
+Fecha: 2026-11-14. [Método, resultados y límites](ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md).
+
+- Banco aislado `NativeProbe/`, sin SwiftUI ni ShellUI. La misma fuente define cuatro escenarios y dos adaptadores
+  mínimos. El nativo enlaza al AttributeGraph instalado, comprobado mediante otool; no a una implementación de terceros.
+- Coinciden dependencias dinámicas (la entrada retirada no ejecuta la regla), corte por igualdad aguas abajo, 100
+  escrituras antes de leer y restauración del dato antes de leer, además de destrucción del objeto con su dueño.
+- Ambos motores vuelven a cero nodos vivos. El nativo también verifica Subgraph.isValid y WeakAttribute; el propio,
+  cero aristas y solo el subgrafo raíz.
+- Tres pares de procesos en debug y tres en release: 12 procesos y 48 ejecuciones de los cuatro escenarios, sin diferencias.
+  Se verifican valores y contadores mediante precondiciones y comparación de salidas. No se cuenta esto como 48 casos nuevos.
+- Solo sondas y documentación, sin cambios de producción ni medición nueva de costes. Las declaraciones privadas de
+  investigación se descargan a /private/tmp, fijadas a una revisión; el paquete raíz no incorpora dependencias.
+- No demuestra paridad general ni rendimiento equivalente. Los apartados 19–22 son estudios de UI y no validación
+  directa del núcleo. ShellUI y Windows quedan aplazados según la indicación del dueño.

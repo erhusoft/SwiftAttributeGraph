@@ -1,0 +1,3 @@
+PASS debug run 1: four direct graph traces match
+PASS release run 1: four direct graph traces match
+Results: /private/tmp/sag-native-bootstrap-results
