@@ -139,3 +139,41 @@ tocó el motor. **S2 a S6 siguen sin medir.**
 3. Las filas del motor son 4 reglas por fila escritas a mano, sin capa de vistas, y menos que las 5 a 10 del objetivo.
 4. La ventana está fuera de pantalla; la latencia de SwiftUI incluye su planificador y no se puede separar del coste del grafo.
 5. Un solo Mac M1 y macOS 15.7.9; no se extrapola a Windows.
+
+---
+
+## 8. Banco comparativo, escenarios S2 a S6
+
+Fecha: 2026-11-14. Mismo equipo, método y limitaciones que la sección 7. **300 fotogramas por caso tras 20 de calentamiento, 3 ejecuciones**
+alternando qué implementación va primero (S6: 15 repeticiones por ejecución). Resultados en bruto:
+`parity/Bench/resultados-macos-15.7.9-S2-S6-run1..3.txt`. Medianas de las medianas de las 3 ejecuciones; «peor p99» es el mayor de los 3.
+
+| Escenario | Motor: mediana | Motor: peor p99 | SwiftUI: mediana | Cuentas de `body` |
+|---|---|---|---|---|
+| S2, N = 100 (entorno leído por la mitad) | 0,025 ms | 0,082 ms | 5,09 ms | 51 / 51 |
+| S2, N = 1.000 | 0,228 ms | 0,284 ms | 39,93 ms | 501 / 501 |
+| S2, N = 5.000 | 1,146 ms | 1,209 ms | 205,96 ms | 2.501 / 2.501 |
+| S3, añadir una fila a 1.000 | 0,043 ms | 0,060 ms | 36,69 ms | 2 / 2 |
+| S3, quitar una fila del medio | 0,043 ms | 0,054 ms | 0,284 ms (*) | 1 / 1 |
+| S3, invertir 1.000 filas | 0,050 ms | 0,061 ms | 0,446 ms (*) | 1 / 1 |
+| S4, jerarquía de 50 niveles | 0,020 ms | 0,061 ms | 0,494 ms | 52 / 52 |
+| S4, jerarquía de 200 niveles | 0,138 ms | 0,257 ms | 2,357 ms | 202 / 202 |
+| S5, cambio de rama con 100 hijos | 0,101 ms | 0,271 ms | 13,86 ms | 102 / 102 |
+| S6, arranque en frío de 1.000 filas | 3,06 ms | — | 255,4 ms | — |
+
+**Paridad de `body`:** 0 fotogramas con recuento distinto en todos los escenarios y las 3 ejecuciones (columna «cuentas»: obtenidas / esperadas).
+**S5:** el desmontaje de la rama vieja cuesta en el motor 0,04–0,06 ms de mediana y queda fuera de la latencia de la tabla.
+
+**Criterios de la nota (§6):**
+1. Paridad: **cumple** en S1 a S5.
+2. p99 del motor ≤ 1,6 ms en S1 (k = 50) y en S2 con N = 1.000: **cumple** (0,118 y 0,284 ms). En S2 con N = 5.000 el p99 es de **1,21 ms**: cumple, pero con un margen de solo ≈ 25 %.
+3. Escala casi lineal: **cumple** en S1 y S2 (N × 10 da ≈ ×9 en el motor); en S4, 50 → 200 niveles da ≈ ×7 en el motor (4× más niveles), algo por encima de lineal, dentro del ruido de esas medidas.
+4. Memoria: SwiftUI ≈ 81.000–84.000 bytes por fila al repetir el arranque (S6) frente a 118.000–128.000 en S1; el dato del motor por memoria residente **no es utilizable** (0 bytes: el asignador reutiliza lo liberado). Falta medir el motor con `estimatedMemoryFootprint`.
+5. Sin regresión: no se tocó el motor.
+
+**Salvedades:**
+- (*) **S3, quitar e invertir no son comparables.** En SwiftUI solo se ejecuta el `body` de la raíz y la medida termina en él; el diferencial y el layout posteriores quedan fuera, así que su latencia está subestimada. El motor sí incluye su diferencial de ids.
+- **S4 tiene mucha dispersión entre ejecuciones** en SwiftUI (200 niveles: de 1,36 a 2,38 ms de mediana) y algo en el motor (0,095–0,145 ms); no se debe leer una diferencia menor que eso.
+- **S4 usa `AnyView` en cada nivel** para romper la recursión de tipos, lo que añade coste propio a SwiftUI.
+- **S5 mide hasta el último `body` del árbol nuevo.** El desmontaje del viejo en SwiftUI ocurre después y no se mide.
+- **Todo lo dicho al final de la sección 7 sigue valiendo:** cargas sintéticas, `body` triviales, una máquina y una versión, y que la razón entre SwiftUI y el motor no mide la eficiencia del algoritmo.
