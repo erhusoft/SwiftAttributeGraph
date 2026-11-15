@@ -84,6 +84,39 @@ final class Driver {
     func typedRule<R: AttributeGraph.Rule>(_ r: R) -> Handle<R.Value> {
         currentSubgraph.apply { Handle(r) }
     }
+    func withoutUpdate<T>(_ body: () -> T) -> T { AttributeGraph.Graph.withoutUpdate(body) }
+    func mutateBody<R, V>(of attribute: Handle<V>, as type: R.Type, invalidating: Bool, _ body: (inout R) -> Void) {
+        attribute.mutateBody(as: type, invalidating: invalidating, body)
+    }
+    func invalidateValue<V>(of attribute: Handle<V>) { attribute.invalidateValue() }
+    func setDependency<V, D>(of indirect: IndirectHandle<V>, to dep: Handle<D>?) {
+        indirect.dependency = dep?.identifier
+    }
+    func hasDependency<V>(on indirect: IndirectHandle<V>, matching dep: Handle<Int>) -> Bool {
+        indirect.dependency == dep.identifier
+    }
+    func setFlags<V>(_ rawFlags: UInt8, for attribute: Handle<V>) {
+        attribute.flags = AttributeGraph.Subgraph.Flags(rawValue: rawFlags)
+    }
+    func intersects(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) -> Bool {
+        subgraph.intersects(flags: AttributeGraph.Subgraph.Flags(rawValue: rawFlags))
+    }
+    func isDirty(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) -> Bool {
+        subgraph.isDirty(flags: AttributeGraph.Subgraph.Flags(rawValue: rawFlags))
+    }
+    func update(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) {
+        subgraph.update(flags: AttributeGraph.Subgraph.Flags(rawValue: rawFlags))
+    }
+    func countMatching(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) -> Int {
+        var count = 0
+        subgraph.forEach(AttributeGraph.Subgraph.Flags(rawValue: rawFlags)) { _ in count += 1 }
+        return count
+    }
+    func hasValue<V>(of attribute: Handle<V>) -> Bool { attribute.hasValue }
+    func updateValue<V>(of attribute: Handle<V>) { attribute.updateValue() }
+    func validate<V>(_ attribute: Handle<V>) { attribute.validate() }
+    func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { subgraph.isAncestor(of: other) }
+    func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
     func read<V>(_ attribute: Handle<V>) -> V { attribute.value }
     func write<V>(_ value: V, to attribute: Handle<V>) { attribute.value = value }
     func close() {
@@ -165,6 +198,39 @@ final class Driver {
     func typedRule<R: Rule>(_ r: R) -> Handle<R.Value> {
         graph.withCurrent(currentSubgraph) { graph.makeRule(r) }
     }
+    func withoutUpdate<T>(_ body: () -> T) -> T { graph.withoutUpdate(body) }
+    func mutateBody<R, V>(of attribute: Handle<V>, as type: R.Type, invalidating: Bool, _ body: (inout R) -> Void) {
+        graph.mutateBody(of: attribute, as: type, invalidating: invalidating, body)
+    }
+    func invalidateValue<V>(of attribute: Handle<V>) { graph.invalidateValue(of: attribute) }
+    func setDependency<V, D>(of indirect: IndirectHandle<V>, to dep: Handle<D>?) {
+        graph.setDependency(dep?.erased, for: indirect)
+    }
+    func hasDependency<V>(on indirect: IndirectHandle<V>, matching dep: Handle<Int>) -> Bool {
+        graph.dependency(of: indirect) == dep.erased
+    }
+    func setFlags<V>(_ rawFlags: UInt8, for attribute: Handle<V>) {
+        graph.setFlags(AttributeFlags(rawValue: rawFlags), for: attribute)
+    }
+    func intersects(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) -> Bool {
+        graph.intersects(subgraph, flags: AttributeFlags(rawValue: rawFlags))
+    }
+    func isDirty(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) -> Bool {
+        graph.isDirty(subgraph, flags: AttributeFlags(rawValue: rawFlags))
+    }
+    func update(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) {
+        graph.update(subgraph, flags: AttributeFlags(rawValue: rawFlags))
+    }
+    func countMatching(_ subgraph: SubgraphHandle, flags rawFlags: UInt8) -> Int {
+        var count = 0
+        graph.forEach(in: subgraph, flags: AttributeFlags(rawValue: rawFlags)) { _ in count += 1 }
+        return count
+    }
+    func hasValue<V>(of attribute: Handle<V>) -> Bool { graph.hasValue(of: attribute) }
+    func updateValue<V>(of attribute: Handle<V>) { graph.updateValue(of: attribute) }
+    func validate<V>(_ attribute: Handle<V>) { graph.validate(attribute) }
+    func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { graph.isAncestor(subgraph, of: other) }
+    func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
     func read<V>(_ attribute: Handle<V>) -> V { graph.value(of: attribute) }
     func write<V>(_ value: V, to attribute: Handle<V>) { graph.setValue(value, for: attribute) }
     func close() {
@@ -281,3 +347,9 @@ indirectSourceInvalidated()
 randomGraphOracle()
 randomSubgraphWeakIndirectOracle()
 mapAndPropertyWrappers()
+withoutUpdateRead()
+mutateBodyAndInvalidateValue()
+indirectDependencyCutAndRedirect()
+subgraphFlagsForEachAndUpdate()
+hasValueValidateAndUpdateValue()
+withoutSubgraphInvalidationAndAncestor()

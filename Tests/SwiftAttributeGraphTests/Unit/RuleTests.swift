@@ -272,4 +272,171 @@ import Testing
         for group in groups.dropFirst() { graph.invalidate(group) }
         #expect(graph.nodeCount == 0)
     }
+
+    // MARK: C25 — withoutUpdate
+
+    @Test func withoutUpdateEvaluatesDirtyAttributeWithoutRecordingADependencyEdge() {
+        let graph = Graph()
+        let tracked = graph.makeInput(10)
+        let rawUntracked = graph.makeInput(5)
+        let untrackedCounter = Counter()
+        let untracked = graph.makeRule {
+            untrackedCounter.runs += 1
+            return rawUntracked.value * 2
+        }
+        let outerCounter = Counter()
+        let outer = graph.makeRule {
+            outerCounter.runs += 1
+            let a = tracked.value
+            let b = Graph.withoutUpdate { untracked.value }
+            return a + b
+        }
+
+        #expect(graph.value(of: outer) == 20)
+        #expect(outerCounter.runs == 1)
+        #expect(untrackedCounter.runs == 1)
+        #expect(graph.inputs(of: outer.id) == [tracked.id])
+
+        // Changing `rawUntracked` dirties `untracked`, NOT `outer`.
+        graph.setValue(7, for: rawUntracked)
+        #expect(graph.isDirty(untracked.id))
+        #expect(!graph.isDirty(outer.id))
+        #expect(graph.value(of: outer) == 20)
+        #expect(outerCounter.runs == 1)
+
+        // Changing `tracked` runs `outer`, which pulls the updated `untracked` via `withoutUpdate`.
+        graph.setValue(20, for: tracked)
+        #expect(graph.value(of: outer) == 34)
+        #expect(outerCounter.runs == 2)
+        #expect(untrackedCounter.runs == 2)
+        #expect(graph.inputs(of: outer.id) == [tracked.id])
+    }
+
+    // MARK: C26 — mutateBody and invalidateValue
+
+    private struct ScaledRule: Rule {
+        var source: Attribute<Int>
+        var factor: Int
+        var value: Int { source.value * factor }
+    }
+
+    private struct ScaledStatefulRule: StatefulRule {
+        typealias Value = Int
+        static var initialValue: Int { 0 }
+        var source: Attribute<Int>
+        var bonus: Int
+        mutating func updateValue(_ context: inout RuleContext<Int>) {
+            context.value = source.value + bonus
+        }
+    }
+
+    @Test func mutateBodyUpdatesRuleInPlaceAndOptionallyInvalidatesValue() {
+        let graph = Graph()
+        let input = graph.makeInput(3)
+        let scaled = graph.makeRule(ScaledRule(source: input, factor: 10))
+        let downCounter = Counter()
+        let down = graph.makeRule {
+            downCounter.runs += 1
+            return scaled.value + 1
+        }
+        #expect(graph.value(of: down) == 31)
+        #expect(downCounter.runs == 1)
+
+        // Mutating without invalidating leaves `scaled` and `down` clean until `input` changes.
+        graph.mutateBody(of: scaled, as: ScaledRule.self, invalidating: false) { $0.factor = 20 }
+        #expect(!graph.isDirty(scaled.id))
+        #expect(!graph.isDirty(down.id))
+        #expect(graph.value(of: down) == 31)
+        #expect(downCounter.runs == 1)
+
+        graph.setValue(4, for: input)
+        #expect(graph.value(of: down) == 81)
+        #expect(downCounter.runs == 2)
+
+        // Mutating with `invalidating: true` marks `scaled` dirty+pending and `down` dirty immediately.
+        graph.mutateBody(of: scaled, as: ScaledRule.self, invalidating: true) { $0.factor = 30 }
+        #expect(graph.isDirty(scaled.id))
+        #expect(graph.isDirty(down.id))
+        #expect(graph.value(of: down) == 121)
+        #expect(downCounter.runs == 3)
+
+        // Works for `StatefulRule` as well.
+        let stateful = graph.makeStatefulRule(ScaledStatefulRule(source: input, bonus: 5))
+        #expect(graph.value(of: stateful) == 9)
+        graph.mutateBody(of: stateful, as: ScaledStatefulRule.self, invalidating: true) { $0.bonus = 50 }
+        #expect(graph.isDirty(stateful.id))
+        #expect(graph.value(of: stateful) == 54)
+    }
+
+    @Test func invalidateValueForcesRuleRecalculationEvenWhenInputsDidNotChange() {
+        let graph = Graph()
+        let input = graph.makeInput(10)
+        var externalSalt = 1
+        let ruleCounter = Counter()
+        let rule = graph.makeRule {
+            ruleCounter.runs += 1
+            return input.value + externalSalt
+        }
+        let downCounter = Counter()
+        let down = graph.makeRule {
+            downCounter.runs += 1
+            return rule.value * 2
+        }
+        #expect(graph.value(of: down) == 22)
+        #expect((ruleCounter.runs, downCounter.runs) == (1, 1))
+
+        externalSalt = 5
+        graph.invalidateValue(of: rule)
+        #expect(graph.isDirty(rule.id) && graph.isDirty(down.id))
+        #expect(graph.value(of: down) == 30)
+        #expect((ruleCounter.runs, downCounter.runs) == (2, 2))
+    }
+
+    // MARK: C29 — hasValue, updateValue, validate
+
+    @Test func hasValueValidateAndUpdateValueMatchNativeAttributeGraphSemantics() {
+        let graph = Graph()
+        let input = graph.makeInput(10)
+        let ind = graph.makeIndirect(input)
+        let innerCounter = Counter()
+        let inner = graph.makeRule {
+            innerCounter.runs += 1
+            return input.value * 3
+        }
+
+        // Inputs and indirects start with `hasValue == true`; cold rules start with `hasValue == false`.
+        #expect(graph.hasValue(of: input))
+        #expect(graph.hasValue(of: ind))
+        #expect(!graph.hasValue(of: inner))
+
+        // `validate` on a cold rule (`hasValue == false`) does nothing.
+        graph.validate(inner)
+        #expect(innerCounter.runs == 0)
+        #expect(!graph.hasValue(of: inner))
+
+        // `updateValue` brings a cold or dirty rule up to date without recording a dependency on a running outer rule.
+        let outerCounter = Counter()
+        let outer = graph.makeRule {
+            outerCounter.runs += 1
+            graph.updateValue(of: inner)
+            return input.value + 1
+        }
+        #expect(graph.value(of: outer) == 11)
+        #expect(outerCounter.runs == 1)
+        #expect(innerCounter.runs == 1)
+        #expect(graph.hasValue(of: inner))
+        #expect(graph.inputs(of: outer.id) == [input.id])
+
+        // `validate` checks liveness without evaluating a dirty or warm rule; `updateValue` brings it up to date.
+        graph.setValue(20, for: input)
+        #expect(graph.isDirty(inner.id))
+        graph.validate(inner)
+        #expect(graph.isDirty(inner.id))
+        #expect(innerCounter.runs == 1)
+        graph.updateValue(of: inner)
+        #expect(!graph.isDirty(inner.id))
+        #expect(innerCounter.runs == 2)
+        #expect(graph.value(of: inner) == 60)
+        #expect(innerCounter.runs == 2)
+    }
 }

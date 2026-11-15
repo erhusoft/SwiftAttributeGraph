@@ -62,6 +62,136 @@ extension Graph {
         return value
     }
 
+    /// Runs `body` without recording dependency edges on the currently evaluating rule (`Graph.withoutUpdate` in
+    /// native AttributeGraph).
+    ///
+    /// Dirty attributes read inside `body` still evaluate normally to produce their up-to-date value, but no edge is
+    /// added from those attributes to the outer rule.
+    public func withoutUpdate<T>(_ body: () -> T) -> T {
+        assertOwnThread()
+        let previousNode = evaluatingNode
+        let previousResuming = isResumingStep
+        evaluatingNode = Graph.noNode
+        isResumingStep = false
+        defer {
+            evaluatingNode = previousNode
+            isResumingStep = previousResuming
+        }
+        return body()
+    }
+
+    /// Static convenience for ``withoutUpdate(_:)-5k18s`` that uses the graph whose rule is currently running on this
+    /// thread (or runs `body` directly if no rule is running).
+    public static func withoutUpdate<T>(_ body: () -> T) -> T {
+        guard let graph = ThreadLocalGraph.current() else {
+            return body()
+        }
+        return graph.withoutUpdate(body)
+    }
+
+    /// Whether `attribute` currently holds a computed or initial value (`Attribute.hasValue` in native
+    /// AttributeGraph).
+    ///
+    /// Inputs and indirect attributes always report `true`; rules report `false` until they have completed their first
+    /// evaluation.
+    public func hasValue<Value>(of attribute: Attribute<Value>) -> Bool {
+        hasValue(of: attribute.erased)
+    }
+
+    /// Whether `attribute` currently holds a computed or initial value (`AnyAttribute.hasValue` in native
+    /// AttributeGraph).
+    public func hasValue(of attribute: AnyAttribute) -> Bool {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "hasValue(of:): the attribute is dead")
+        return table.state[Int(attribute.id.index)] & NodeState.hasValue != 0
+    }
+
+    /// Brings `attribute` up to date if it is dirty, without recording a dependency edge on any currently running rule
+    /// (`Attribute.updateValue()` in native AttributeGraph).
+    public func updateValue<Value>(of attribute: Attribute<Value>) {
+        updateValue(of: attribute.erased)
+    }
+
+    /// Brings `attribute` up to date if it is dirty, without recording a dependency edge on any currently running rule
+    /// (`AnyAttribute.updateValue()` in native AttributeGraph).
+    public func updateValue(of attribute: AnyAttribute) {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "updateValue(of:): the attribute is dead")
+        let index = attribute.id.index
+        let n = Int(index)
+        withoutUpdate {
+            if table.state[n] & NodeState.dirty != 0 {
+                update(index)
+            }
+            if table.state[n] & NodeState.indirect != 0 {
+                var current = attribute.id
+                while table.isLive(current), table.state[Int(current.index)] & NodeState.indirect != 0 {
+                    let box = table.box(at: current.index) as! AnyIndirectNode
+                    current = box.source
+                }
+                if table.isLive(current), table.state[Int(current.index)] & NodeState.dirty != 0 {
+                    update(current.index)
+                }
+            }
+        }
+        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+    }
+
+    /// Asserts that `attribute` is alive and structurally valid in the graph (`Attribute.validate()` in native
+    /// AttributeGraph). Does not evaluate dirty rules or record dependency edges.
+    public func validate<Value>(_ attribute: Attribute<Value>) {
+        validate(attribute.erased)
+    }
+
+    /// Asserts that `attribute` is alive and structurally valid in the graph (`AnyAttribute.validate()` in native
+    /// AttributeGraph). Does not evaluate dirty rules or record dependency edges.
+    public func validate(_ attribute: AnyAttribute) {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "validate(_:): the attribute is dead")
+    }
+
+    /// Marks a rule attribute dirty and pending so it is forced to re-evaluate on its next read even if none of its
+    /// inputs changed (`Attribute.invalidateValue()` in native AttributeGraph), and propagates dirty to its readers.
+    public func invalidateValue<Value>(of attribute: Attribute<Value>) {
+        invalidateValue(of: attribute.erased)
+    }
+
+    /// Marks a rule attribute dirty and pending so it is forced to re-evaluate on its next read even if none of its
+    /// inputs changed (`AnyAttribute.invalidateValue()` in native AttributeGraph), and propagates dirty to its readers.
+    public func invalidateValue(of attribute: AnyAttribute) {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "invalidateValue(of:): the attribute is dead")
+        let index = attribute.id.index
+        let n = Int(index)
+        precondition(table.state[n] & NodeState.isRule != 0, "invalidateValue(of:): only rule attributes can be invalidated")
+        let wasDirty = table.state[n] & NodeState.dirty != 0
+        table.state[n] |= NodeState.dirty | NodeState.pending
+        if !wasDirty && (table.state[n] & NodeState.observed != 0) {
+            queueNotification(index)
+        }
+        propagateDirty(from: index)
+        flushNotifications()
+    }
+
+    /// Mutates the stored ``Rule`` or ``StatefulRule`` body of `attribute` in place (`Attribute.mutateBody` in native
+    /// AttributeGraph).
+    ///
+    /// When `invalidating` is `true`, ``invalidateValue(of:)-(Attribute<Value>)`` is called after `body` finishes so
+    /// the attribute and its readers are marked dirty and the rule is forced to re-run on its next read. When
+    /// `invalidating` is `false`, the attribute's dirty state is left untouched.
+    public func mutateBody<R, Value>(of attribute: Attribute<Value>, as type: R.Type, invalidating: Bool,
+                                     _ body: (inout R) -> Void) {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "mutateBody(of:as:invalidating:_:): the attribute is dead")
+        let box = table.box(at: attribute.id.index)
+        guard box.mutateRuleBody(as: type, body) else {
+            preconditionFailure("mutateBody(of:as:invalidating:_:): the attribute does not hold a rule of type \(R.self)")
+        }
+        if invalidating {
+            invalidateValue(of: attribute)
+        }
+    }
+
     // MARK: Writing
 
     /// Writes a new value into an input attribute. If it counts as equal under the attribute's comparison policy,
@@ -125,18 +255,34 @@ extension Graph {
                 i += 1
             }
 
-            if mustRun {
-                if table.state[n] & NodeState.indirect != 0 {
-                    if !table.inputs[n].isEmpty {
-                        let source = Int(table.inputs[n][0].source)
-                        table.inputs[n][0].seenVersion = table.versions[source]
+            if table.state[n] & NodeState.indirect != 0 {
+                if let box = table.box(at: node) as? AnyIndirectNode {
+                    let s = Int(box.source.index)
+                    if table.state[s] & NodeState.dirty != 0 {
+                        frames[top].next = table.inputs[n].count
+                        frames[top].inputChanged = mustRun
+                        push(box.source.index)
+                        continue outer
                     }
-                    globalVersion &+= 1
-                    table.versions[n] &+= 1
-                    table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.pending)
-                    frames.removeLast()
-                    continue
+                    let currentSourceVersion = table.versions[s]
+                    let sourceChanged = box.sourceRedirected || currentSourceVersion != box.sourceSeenVersion
+                    box.sourceSeenVersion = currentSourceVersion
+                    box.sourceRedirected = false
+                    for idx in table.inputs[n].indices {
+                        let edgeSource = Int(table.inputs[n][idx].source)
+                        table.inputs[n][idx].seenVersion = table.versions[edgeSource]
+                    }
+                    if sourceChanged {
+                        globalVersion &+= 1
+                        table.versions[n] &+= 1
+                    }
                 }
+                table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.pending)
+                frames.removeLast()
+                continue
+            }
+
+            if mustRun {
                 if table.state[n] & NodeState.resumable != 0 {
                     advanceResumable(top: top, firstStep: true)
                     continue

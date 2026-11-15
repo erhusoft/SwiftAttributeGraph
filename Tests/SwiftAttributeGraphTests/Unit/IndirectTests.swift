@@ -330,4 +330,73 @@ import Testing
         #expect(graph.value(of: downstream) == 100)
         #expect(runs == 2)
     }
+
+    // MARK: - Indirect dependency & setSource inside a rule (C27)
+
+    @Test func indirectDependencyRunsProducerBeforeSourceAndCutsWhenSourceIsUnchanged() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let b = graph.makeInput(100)
+        let sel = graph.makeInput(0)
+        let ind = graph.makeIndirect(a)
+
+        var producerRuns = 0
+        let producer = graph.makeRule { () -> Int in
+            producerRuns += 1
+            let s = sel.value
+            if s >= 0 {
+                graph.setSource(s == 0 ? a : b, for: ind)
+            }
+            return s
+        }
+        #expect(graph.dependency(of: ind) == nil)
+        graph.setDependency(producer.erased, for: ind)
+        #expect(graph.dependency(of: ind) == producer.erased)
+
+        var readerRuns = 0
+        let reader = graph.makeRule {
+            readerRuns += 1
+            return ind.value * 2
+        }
+
+        // 1. Initial pull: `ind` updates `producer` (which keeps `ind` pointing to `a`), then `reader` reads `a` (10 * 2 = 20).
+        #expect(graph.value(of: reader) == 20)
+        #expect(producerRuns == 1)
+        #expect(readerRuns == 1)
+
+        // 2. `sel = -1`: `producer` runs (`producerRuns == 2`) and does NOT call `setSource`; `a` did not change, so `reader` is cut!
+        graph.setValue(-1, for: sel)
+        #expect(graph.isDirty(ind.id))
+        #expect(graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 20)
+        #expect(producerRuns == 2)
+        #expect(readerRuns == 1, "reader must be cut when dependency runs without changing the indirect source or its value")
+
+        // 3. `sel = 1`: `producer` runs (`producerRuns == 3`) and redirects `ind` to `b` (100); `reader` runs (`readerRuns == 2`).
+        graph.setValue(1, for: sel)
+        #expect(graph.value(of: reader) == 200)
+        #expect(producerRuns == 3)
+        #expect(readerRuns == 2)
+
+        // 4. Clearing `dependency` detaches `producer` from `ind`.
+        graph.setDependency(nil, for: ind)
+        #expect(graph.dependency(of: ind) == nil)
+        graph.setValue(0, for: sel)
+        #expect(!graph.isDirty(ind.id))
+        #expect(!graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 200)
+        #expect(producerRuns == 3)
+        #expect(readerRuns == 2)
+    }
+
+    @Test func settingDependencyFromDifferentSubgraphStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let a = graph.makeInput(10)
+            let ind = graph.makeIndirect(a)
+            let child = graph.makeSubgraph()
+            let childProducer = graph.withCurrent(child) { graph.makeRule { 1 } }
+            graph.setDependency(childProducer.erased, for: ind)
+        }
+    }
 }

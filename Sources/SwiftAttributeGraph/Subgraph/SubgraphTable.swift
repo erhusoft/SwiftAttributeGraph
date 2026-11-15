@@ -78,6 +78,29 @@ struct SubgraphTable {
         return result
     }
 
+    /// The subgraph and all its non-falling descendants in pre-order where child subgraphs are visited in reverse
+    /// creation order (`lastChild` to `firstChild` via `previousSibling`), matching `Subgraph.forEach` and
+    /// `Subgraph.update(flags:)` in native AttributeGraph. Uses an explicit stack: the depth of the tree is data.
+    func reverseCreationSubgraphOrder(from root: UInt32) -> [UInt32] {
+        guard !falling[Int(root)] else { return [] }
+        var result: [UInt32] = []
+        var stack: [UInt32] = [root]
+        while let current = stack.popLast() {
+            if falling[Int(current)] { continue }
+            result.append(current)
+            // Push children in creation order (`firstChild` -> `lastChild`) so `popLast()` visits them in reverse
+            // creation order (`lastChild` -> `firstChild`).
+            var child = firstChild[Int(current)]
+            while child != SubgraphTable.none {
+                if !falling[Int(child)] {
+                    stack.append(child)
+                }
+                child = nextSibling[Int(child)]
+            }
+        }
+        return result
+    }
+
     mutating func add(member: UInt32, to id: SubgraphID) { members[Int(id.index)].append(member) }
 
     /// The subgraph and all its descendants with every child before its parent, siblings in creation order. Uses an

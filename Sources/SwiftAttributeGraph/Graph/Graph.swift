@@ -22,6 +22,7 @@ public final class Graph {
     /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
     var deferredInvalidations: [Subgraph] = []
     var isInvalidating = false
+    var deferringSubgraphInvalidationDepth = 0
 
     // Update machinery (see `Graph+Update.swift`).
     var frames: [UpdateFrame] = []
@@ -104,6 +105,111 @@ public final class Graph {
         return subgraphs.isLive(subgraph.id) && !subgraphs.isFalling(index: subgraph.id.index)
     }
 
+    /// Whether `subgraph` is `other` or an ancestor of `other` in the subgraph tree (`Subgraph.isAncestor(of:)` in
+    /// native AttributeGraph). Uses an iterative walk up the parent links.
+    public func isAncestor(_ subgraph: Subgraph, of other: Subgraph) -> Bool {
+        assertOwnThread()
+        guard isValid(subgraph), isValid(other) else { return false }
+        var cursor: SubgraphID? = other.id
+        while let current = cursor {
+            if current == subgraph.id { return true }
+            cursor = subgraphs.parent(of: current)
+        }
+        return false
+    }
+
+    /// Returns the caller-defined ``AttributeFlags`` attached to `attribute` (default `[]`).
+    public func flags<Value>(of attribute: Attribute<Value>) -> AttributeFlags {
+        flags(of: attribute.erased)
+    }
+
+    /// Returns the caller-defined ``AttributeFlags`` attached to `attribute` (default `[]`).
+    public func flags(of attribute: AnyAttribute) -> AttributeFlags {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "flags(of:): the attribute is dead")
+        return AttributeFlags(rawValue: table.flags[Int(attribute.id.index)])
+    }
+
+    /// Sets the caller-defined ``AttributeFlags`` attached to `attribute`.
+    public func setFlags<Value>(_ flags: AttributeFlags, for attribute: Attribute<Value>) {
+        setFlags(flags, for: attribute.erased)
+    }
+
+    /// Sets the caller-defined ``AttributeFlags`` attached to `attribute`.
+    public func setFlags(_ flags: AttributeFlags, for attribute: AnyAttribute) {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "setFlags(_:for:): the attribute is dead")
+        table.flags[Int(attribute.id.index)] = flags.rawValue
+    }
+
+    /// Whether `subgraph` or any of its valid descendant subgraphs owns a live attribute whose flags intersect `flags`
+    /// (`Subgraph.intersects(flags:)` in native AttributeGraph).
+    public func intersects(_ subgraph: Subgraph, flags: AttributeFlags) -> Bool {
+        assertOwnThread()
+        guard isValid(subgraph), flags.rawValue != 0 else { return false }
+        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+            for member in subgraphs.members[Int(sgIndex)] where table.isLive(index: member) {
+                if (table.flags[Int(member)] & flags.rawValue) != 0 { return true }
+            }
+        }
+        return false
+    }
+
+    /// Whether `subgraph` or any of its valid descendant subgraphs owns a live **dirty** attribute whose flags
+    /// intersect `flags` (`Subgraph.isDirty(flags:)` in native AttributeGraph).
+    public func isDirty(_ subgraph: Subgraph, flags: AttributeFlags) -> Bool {
+        assertOwnThread()
+        guard isValid(subgraph), flags.rawValue != 0 else { return false }
+        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+            for member in subgraphs.members[Int(sgIndex)] where table.isLive(index: member) {
+                let m = Int(member)
+                if (table.flags[m] & flags.rawValue) != 0 && (table.state[m] & NodeState.dirty) != 0 {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Calls `body` on every live attribute in `subgraph` and its valid descendant subgraphs whose flags intersect
+    /// `flags`, visiting attributes within each subgraph in reverse creation order and child subgraphs in reverse
+    /// creation order (`Subgraph.forEach(_:_:)` in native AttributeGraph).
+    public func forEach(in subgraph: Subgraph, flags: AttributeFlags, _ body: (AnyAttribute) -> Void) {
+        assertOwnThread()
+        guard isValid(subgraph), flags.rawValue != 0 else { return }
+        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+            let members = subgraphs.members[Int(sgIndex)]
+            for member in members.reversed() where table.isLive(index: member) {
+                let m = Int(member)
+                if (table.flags[m] & flags.rawValue) != 0 {
+                    body(AnyAttribute(id: AttributeID(index: member, generation: table.generations[m])))
+                }
+            }
+        }
+    }
+
+    /// Updates every dirty live attribute in `subgraph` and its valid descendant subgraphs whose flags intersect
+    /// `flags`, visiting attributes and child subgraphs in reverse creation order (`Subgraph.update(flags:)` in native
+    /// AttributeGraph).
+    public func update(_ subgraph: Subgraph, flags: AttributeFlags = .all) {
+        assertOwnThread()
+        guard isValid(subgraph), flags.rawValue != 0 else { return }
+        withoutUpdate {
+            for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+                let members = subgraphs.members[Int(sgIndex)]
+                for member in members.reversed() where table.isLive(index: member) {
+                    let m = Int(member)
+                    if (table.flags[m] & flags.rawValue) != 0 && (table.state[m] & NodeState.dirty) != 0 {
+                        update(member)
+                    }
+                }
+            }
+        }
+        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty {
+            flushDeferredInvalidations()
+        }
+    }
+
     /// The parent of a subgraph; `nil` for the root.
     func parent(of subgraph: Subgraph) -> Subgraph? {
         precondition(subgraphs.isLive(subgraph.id), "parent(of:): the subgraph was invalidated")
@@ -145,8 +251,9 @@ public final class Graph {
         let s = Int(source.id.index)
         let initialState: UInt16 = NodeState.hasValue | NodeState.indirect
             | (table.state[s] & NodeState.dirty)
-        let id = allocate(IndirectNode<Value>(source: source.id), state: initialState)
-        attachIndirectEdge(from: id.index, to: source.id.index)
+        let seenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
+        let id = allocate(IndirectNode<Value>(source: source.id, sourceSeenVersion: seenVersion), state: initialState)
+        rebuildIndirectEdges(for: id.index)
         return Attribute(id: id)
     }
 
@@ -167,7 +274,6 @@ public final class Graph {
     /// values (matching native AttributeGraph).
     public func setSource<Value>(_ newSource: Attribute<Value>, for indirect: Attribute<Value>) {
         assertOwnThread()
-        precondition(evaluatingNode == Graph.noNode, "setSource(_:for:): a rule must not redirect an indirect attribute")
         precondition(table.isLive(indirect.id), "setSource(_:for:): the indirect attribute is dead")
         precondition(table.isLive(newSource.id), "setSource(_:for:): the source attribute is dead")
         let index = indirect.id.index
@@ -188,18 +294,16 @@ public final class Graph {
         precondition(cursor.index != index,
                      "setSource(_:for:): cycle detected (an indirect attribute cannot redirect to itself)")
 
-        if !table.inputs[n].isEmpty {
-            let oldEdge = table.inputs[n][0]
-            removeOutput(index, from: oldEdge.source, at: oldEdge.positionInOutputs)
-            table.inputs[n].removeAll(keepingCapacity: true)
-        }
-
+        let s = Int(newSource.id.index)
         box.source = newSource.id
-        attachIndirectEdge(from: index, to: newSource.id.index)
+        box.sourceSeenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
+        box.sourceRedirected = true
+        rebuildIndirectEdges(for: index)
 
         globalVersion &+= 1
         table.versions[n] &+= 1
-        if table.state[Int(newSource.id.index)] & NodeState.dirty != 0 {
+        let depDirty = box.dependency.map { table.isLive($0) && table.state[Int($0.index)] & NodeState.dirty != 0 } ?? false
+        if table.state[s] & NodeState.dirty != 0 || depDirty {
             table.state[n] |= NodeState.dirty
         } else {
             table.state[n] &= ~NodeState.dirty
@@ -216,13 +320,62 @@ public final class Graph {
     /// `IndirectAttribute.resetSource()` in native AttributeGraph).
     public func resetSource<Value>(for indirect: Attribute<Value>) {
         assertOwnThread()
-        precondition(evaluatingNode == Graph.noNode, "resetSource(for:): a rule must not redirect an indirect attribute")
         precondition(table.isLive(indirect.id), "resetSource(for:): the indirect attribute is dead")
         let index = indirect.id.index
         precondition(table.state[Int(index)] & NodeState.indirect != 0,
                      "resetSource(for:): the attribute is not an indirect attribute")
         let box = table.box(at: index) as! IndirectNode<Value>
         setSource(Attribute(id: box.initialSource), for: indirect)
+    }
+
+    /// Returns the optional producer dependency attached to `indirect` (`IndirectAttribute.dependency` in native
+    /// AttributeGraph).
+    public func dependency<Value>(of indirect: Attribute<Value>) -> AnyAttribute? {
+        assertOwnThread()
+        precondition(table.isLive(indirect.id), "dependency(of:): the indirect attribute is dead")
+        precondition(table.state[Int(indirect.id.index)] & NodeState.indirect != 0,
+                     "dependency(of:): the attribute is not an indirect attribute")
+        let box = table.box(at: indirect.id.index) as! IndirectNode<Value>
+        guard let dep = box.dependency, table.isLive(dep) else { return nil }
+        return AnyAttribute(id: dep)
+    }
+
+    /// Attaches or detaches an optional producer `dependency` in the same subgraph to `indirect`
+    /// (`IndirectAttribute.dependency` in native AttributeGraph).
+    ///
+    /// When `dependency` becomes dirty, `indirect` and its readers become dirty; when a reader pulls `indirect`,
+    /// `dependency` updates before `indirect`'s `source`. If `dependency` finishes without redirecting `indirect` and
+    /// `source`'s value did not change, `indirect`'s version does not rise and downstream readers are cut.
+    public func setDependency<Value>(_ dependency: AnyAttribute?, for indirect: Attribute<Value>) {
+        assertOwnThread()
+        precondition(table.isLive(indirect.id), "setDependency(_:for:): the indirect attribute is dead")
+        let index = indirect.id.index
+        let n = Int(index)
+        precondition(table.state[n] & NodeState.indirect != 0,
+                     "setDependency(_:for:): the attribute is not an indirect attribute")
+        if let dep = dependency {
+            precondition(table.isLive(dep.id), "setDependency(_:for:): the dependency attribute is dead")
+            precondition(dep.id.index != index, "setDependency(_:for:): an indirect attribute cannot depend on itself")
+            precondition(table.owner(at: dep.id.index) == table.owner(at: index),
+                         "setDependency(_:for:): the dependency must belong to the same subgraph as the indirect attribute")
+        }
+        let box = table.box(at: index) as! IndirectNode<Value>
+        if box.dependency == dependency?.id { return }
+        box.dependency = dependency?.id
+        rebuildIndirectEdges(for: index)
+
+        let s = Int(box.source.index)
+        let depDirty = box.dependency.map { table.isLive($0) && table.state[Int($0.index)] & NodeState.dirty != 0 } ?? false
+        if table.state[s] & NodeState.dirty != 0 || depDirty {
+            if table.state[n] & NodeState.dirty == 0 {
+                table.state[n] |= NodeState.dirty
+                if table.state[n] & NodeState.observed != 0 { queueNotification(index) }
+                propagateDirty(from: index)
+                flushNotifications()
+            }
+        } else {
+            table.state[n] &= ~NodeState.dirty
+        }
     }
 
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.

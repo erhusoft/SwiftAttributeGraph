@@ -7,6 +7,8 @@
     func resume(in graph: Graph, node: AttributeID, firstStep: Bool) -> (step: RuleStep, changed: Bool) {
         preconditionFailure("resume() called on a node that is not resumable")
     }
+    /// Mutates the stored rule body in place if its type is `R`, returning `true` when matched.
+    func mutateRuleBody<R>(as type: R.Type, _ body: (inout R) -> Void) -> Bool { false }
 }
 
 /// A box holding a value of a known type.
@@ -48,7 +50,7 @@ final class ClosureRuleNode<Value>: TypedNode<Value> {
 
 /// A rule given as a type that conforms to ``Rule``.
 final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
-    let rule: R
+    var rule: R
 
     init(rule: R, isEqual: @escaping (R.Value, R.Value) -> Bool) {
         self.rule = rule
@@ -56,6 +58,16 @@ final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool { store(rule.value) }
+
+    override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
+        guard R.self == Target.self else { return false }
+        return withUnsafeMutablePointer(to: &rule) { ptr in
+            ptr.withMemoryRebound(to: Target.self, capacity: 1) { targetPtr in
+                body(&targetPtr.pointee)
+                return true
+            }
+        }
+    }
 }
 
 /// A rule given as a type that conforms to ``StatefulRule``.
@@ -72,6 +84,16 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
         rule.updateValue(&context)
         return finish(context)
     }
+
+    override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
+        guard R.self == Target.self else { return false }
+        return withUnsafeMutablePointer(to: &rule) { ptr in
+            ptr.withMemoryRebound(to: Target.self, capacity: 1) { targetPtr in
+                body(&targetPtr.pointee)
+                return true
+            }
+        }
+    }
 }
 
 /// Type-erased base for ``IndirectNode`` so subgraph invalidation can reset an indirect attribute's source to its
@@ -81,10 +103,18 @@ class AnyIndirectNode: NodeBox {
     let initialSource: AttributeID
     /// The attribute this indirect currently redirects to.
     var source: AttributeID
+    /// An optional producer attribute in the same subgraph that updates before `source` (and may call `setSource`).
+    var dependency: AttributeID?
+    /// Last verified version of `source` (0 until `source` has a value), used so a `dependency` run that does not
+    /// change `source` or its value cuts downstream readers of the indirect attribute.
+    var sourceSeenVersion: UInt32
+    /// Set by `setSource(_:for:)` so `update(_:)` knows `source` was redirected since the indirect was last verified.
+    var sourceRedirected = false
 
-    init(source: AttributeID) {
+    init(source: AttributeID, sourceSeenVersion: UInt32) {
         self.initialSource = source
         self.source = source
+        self.sourceSeenVersion = sourceSeenVersion
     }
 }
 

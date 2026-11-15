@@ -139,10 +139,16 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 | 21 | `random-graph-oracle` | C24 | Idéntico (`runs=[95, 108, 105, 100, 95, 107]`, checksums idénticos en las 6 semillas) |
 | 22 | `random-subgraph-weak-indirect-oracle` | C9, C10, C15, C18, C20, C23, C24 | Idéntico (`runs=[115, 96, 106, 66, 96, 89]`, checksums idénticos en las 6 semillas) |
 | 23 | `map-and-property-wrappers` | M6, C11, C15 | Idéntico (`map=[0, 0, 100]`, `mapRuns=[1, 1, 2]`, `wrappers=[27, -2, 500]`) |
+| 24 | `without-update-read` | C25 | Idéntico (`values=[20, 20, 34]`, `runs=[[1, 1], [1, 1], [2, 2]]`) |
+| 25 | `mutate-body-and-invalidate-value` | C26 | Idéntico (`values=[31, 31, 81, 121]`, `downRuns=[1, 1, 2, 3]`, `salted=[14, 54]`, `saltRuns=2`) |
+| 26 | `indirect-dependency-cut-and-redirect` | C27 | Idéntico (`values=[20, 20, 200, 200]`, `producerRuns=[1, 2, 3, 3]`, `readerRuns=[1, 1, 2, 2]`) |
+| 27 | `subgraph-flags-forEach-and-update` | C28 | Idéntico (`count0=5`, `order=["a2", "a1", "d1", "b2", "b1", "d2"]`, `dirty=[true, false, true, false]`) |
+| 28 | `has-value-validate-update-value` | C29 | Idéntico (`hasValue=[false, false, true]`, `innerRuns=[0, 1, 1, 2, 2]`, `values=[11, 60]`) |
+| 29 | `without-subgraph-invalidation-and-ancestor` | C30 | Idéntico (`ancestor=[true, true, true, false, false]`, `validInside=false`, `weakInside=Optional(42)`, `weakAfter=nil`) |
 
 ---
 
-## 4. Hallazgos de C20–C24
+## 4. Hallazgos de C20–C30
 
 1. **C20 (Asignación y reutilización de `AttributeID` y orden de entradas):**
    - En `AttributeGraph` nativo, los `AGAttribute` (`rawValue: UInt32`) son desplazamientos dentro de páginas por subgrafo: dentro de un mismo subgrafo crecen de `40` en `40` (`536, 576, 616...`), y un segundo subgrafo recibe otra página (`1048, 1088...`).
@@ -160,3 +166,22 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 5. **C24 (Oráculos de grafos aleatorios nativo vs propio):**
    - En `random-graph-oracle` (6 semillas × 50 pasos con 6 entradas y 24 reglas mixtas `Rule` y `StatefulRule` con selectores condicionales), las ejecuciones acumuladas (`[95, 108, 105, 100, 95, 107]`) y los checksums de 64 bits coinciden al 100 %.
    - En `random-subgraph-weak-indirect-oracle` (6 semillas × 45 pasos combinando creación e invalidación dinámica de subgrafos hijos, lecturas mediante `WeakAttribute` y redirecciones dinámicas de `IndirectAttribute` con `setSource`), las ejecuciones acumuladas (`[115, 96, 106, 66, 96, 89]`) y los checksums de 64 bits coinciden también al 100 % entre `AttributeGraph` nativo y `SwiftAttributeGraph`.
+6. **C25 (`Graph.withoutUpdate` — lectura sin registrar dependencia):**
+   - Llamar a `Graph.withoutUpdate { ... }` (o `graph.withoutUpdate { ... }`) dentro de una regla en ejecución suspende temporalmente `evaluatingNode = Graph.noNode`: cualquier atributo sucio leído dentro del bloque se actualiza y devuelve su valor, pero no se añade ninguna arista `outer <- untracked`. Mutaciones posteriores del atributo no rastreado dejan a `outer` limpio (`without-update-read`).
+7. **C26 (`mutateBody(as:invalidating:_:)` e `invalidateValue()`):**
+   - `mutateBody(of:as:invalidating:_:)` modifica in-place la instancia almacenada de `Rule` o `StatefulRule`. Con `invalidating: false`, el nodo permanece limpio hasta que alguna entrada cambie; con `invalidating: true`, invoca `invalidateValue(of:)`, que activa `NodeState.dirty | NodeState.pending` y propaga `dirty` a los lectores para forzar su recálculo en la siguiente lectura (`mutate-body-and-invalidate-value`).
+8. **C27 (`IndirectAttribute.dependency` y redirección `setSource` desde una regla productora):**
+   - `setDependency(_:for:)` asocia un atributo productor opcional **del mismo subgrafo** a un atributo indirecto, y `setSource(_:for:)` está permitido desde dentro de una regla.
+   - Cuando el productor se ensucia, el indirecto y sus lectores se ensucian; cuando se lee un lector del indirecto, `update(_:)` actualiza el productor antes que el `source` del indirecto.
+   - Si el productor termina sin redirigir `source` y el valor de `source` no cambió, la versión del indirecto no sube y sus lectores **se cortan sin reejecutarse** (`indirect-dependency-cut-and-redirect`: `producerRuns=[1, 2, 3, 3]`, `readerRuns=[1, 1, 2, 2]`).
+9. **C28 (`AttributeFlags` / `Subgraph.Flags` y orden de `forEach` / `update(flags:)`):**
+   - Cada atributo posee una máscara `AttributeFlags` (`UInt8`, por defecto `[]`).
+   - `intersects(_:flags:)` e `isDirty(_:flags:)` consultan el subgrafo y sus descendientes válidos.
+   - `forEach(in:flags:_:)` y `update(_:flags:)` recorren los miembros de cada subgrafo en **orden inverso de creación** y los subgrafos hijos en **orden inverso de creación** (`["a2", "a1", "d1", "b2", "b1", "d2"]`, `subgraph-flags-forEach-and-update`).
+10. **C29 (`hasValue`, `updateValue` y `validate`):**
+    - `hasValue(of:)` devuelve `true` cuando `NodeState.hasValue` está activo (`true` desde el inicio en entradas e indirectos; `false` en reglas frías hasta su primera evaluación).
+    - `updateValue(of:)` actualiza un atributo sucio (incluso frío) dentro de `withoutUpdate` sin crear aristas hacia una regla en curso.
+    - `validate(_:)` verifica la validez del atributo en el grafo sin evaluar reglas sucias ni frías (`has-value-validate-update-value`).
+11. **C30 (`withoutSubgraphInvalidation` e `isAncestor(of:)`):**
+    - `isAncestor(_:of:)` camina iterativamente por los enlaces `parent` y devuelve `true` si el primer subgrafo es igual o ancestro del segundo.
+    - `withoutSubgraphInvalidation(_:)` incrementa un contador de diferido: cualquier `invalidate(_:)` dentro del bloque marca el subgrafo y sus descendientes como `falling` de inmediato (`isValid == false`), conservando vivos sus atributos (legibles mediante `WeakAttribute`) hasta que termina el bloque `withoutSubgraphInvalidation` más externo (`without-subgraph-invalidation-and-ancestor`).

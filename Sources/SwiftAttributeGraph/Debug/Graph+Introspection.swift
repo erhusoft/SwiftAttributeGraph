@@ -89,6 +89,7 @@ extension Graph {
         var bytes = 0
         bytes += slotCount * MemoryLayout<UInt32>.size        // generations
         bytes += slotCount * MemoryLayout<UInt16>.size        // state
+        bytes += slotCount * MemoryLayout<UInt8>.size         // flags
         bytes += slotCount * MemoryLayout<UInt32>.size        // versions
         bytes += slotCount * MemoryLayout<UInt32>.size        // owners
         bytes += slotCount * MemoryLayout<Optional<NodeBox>>.size  // boxes (references)

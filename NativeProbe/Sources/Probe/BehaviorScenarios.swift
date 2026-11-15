@@ -634,3 +634,261 @@ func mapAndPropertyWrappers() {
     precondition([w1, w2, w3] == [27, -2, 500])
     print("map-and-property-wrappers|map=[\(m1), \(m2), \(m3)]|mapRuns=[\(mr1), \(mr2), \(mr3)]|wrappers=[\(w1), \(w2), \(w3)]")
 }
+
+func withoutUpdateRead() {
+    let d = Driver()
+    defer { d.close() }
+    let tracked = d.input(10)
+    let rawUntracked = d.input(5)
+    var untrackedRuns = 0
+    let untracked = d.rule {
+        untrackedRuns += 1
+        return d.read(rawUntracked) * 2
+    }
+    var outerRuns = 0
+    let outer = d.rule {
+        outerRuns += 1
+        let a = d.read(tracked)
+        let b = d.withoutUpdate { d.read(untracked) }
+        return a + b
+    }
+    let v1 = d.read(outer)
+    let r1 = [outerRuns, untrackedRuns]
+
+    // Mutating `rawUntracked` dirties `untracked`, NOT `outer`.
+    d.write(7, to: rawUntracked)
+    let v2 = d.read(outer)
+    let r2 = [outerRuns, untrackedRuns]
+
+    // Mutating `tracked` runs `outer`, which reads the updated `untracked` inside `withoutUpdate`.
+    d.write(20, to: tracked)
+    let v3 = d.read(outer)
+    let r3 = [outerRuns, untrackedRuns]
+
+    precondition([v1, v2, v3] == [20, 20, 34])
+    precondition(r1 == [1, 1] && r2 == [1, 1] && r3 == [2, 2])
+    print("without-update-read|values=[\(v1), \(v2), \(v3)]|runs=[\(r1), \(r2), \(r3)]")
+}
+
+private struct MutableScaledRule: Rule {
+    var source: Handle<Int>
+    var factor: Int
+    var value: Int { source.value * factor }
+}
+
+func mutateBodyAndInvalidateValue() {
+    let d = Driver()
+    defer { d.close() }
+    let input = d.input(3)
+    let scaled = d.typedRule(MutableScaledRule(source: input, factor: 10))
+    var downRuns = 0
+    let down = d.rule {
+        downRuns += 1
+        return d.read(scaled) + 1
+    }
+    let v1 = d.read(down)
+    let dr1 = downRuns
+
+    // Mutate without invalidating: `down` stays cached until `input` changes.
+    d.mutateBody(of: scaled, as: MutableScaledRule.self, invalidating: false) { $0.factor = 20 }
+    let v2 = d.read(down)
+    let dr2 = downRuns
+
+    d.write(4, to: input)
+    let v3 = d.read(down)
+    let dr3 = downRuns
+
+    // Mutate with `invalidating: true`: forces immediate dirtying and recalculation on next read.
+    d.mutateBody(of: scaled, as: MutableScaledRule.self, invalidating: true) { $0.factor = 30 }
+    let v4 = d.read(down)
+    let dr4 = downRuns
+
+    // Explicit `invalidateValue` on a closure rule whose captured external state changed.
+    var externalSalt = 10
+    var saltRuns = 0
+    let salted = d.rule {
+        saltRuns += 1
+        return d.read(input) + externalSalt
+    }
+    let sv1 = d.read(salted)
+    externalSalt = 50
+    d.invalidateValue(of: salted)
+    let sv2 = d.read(salted)
+
+    precondition([v1, v2, v3, v4] == [31, 31, 81, 121] && [dr1, dr2, dr3, dr4] == [1, 1, 2, 3])
+    precondition([sv1, sv2] == [14, 54] && saltRuns == 2)
+    print("mutate-body-and-invalidate-value|values=[\(v1), \(v2), \(v3), \(v4)]|downRuns=[\(dr1), \(dr2), \(dr3), \(dr4)]|salted=[\(sv1), \(sv2)]|saltRuns=\(saltRuns)")
+}
+
+func indirectDependencyCutAndRedirect() {
+    let d = Driver()
+    defer { d.close() }
+    let a = d.input(10)
+    let b = d.input(100)
+    let sel = d.input(0)
+    let ind = d.indirect(a)
+    let indAttr = d.attribute(of: ind)
+
+    var producerRuns = 0
+    let producer = d.rule { () -> Int in
+        producerRuns += 1
+        let s = d.read(sel)
+        if s >= 0 {
+            d.setSource(s == 0 ? a : b, for: ind)
+        }
+        return s
+    }
+    d.setDependency(of: ind, to: producer)
+    let hasDep1 = d.hasDependency(on: ind, matching: producer)
+
+    var readerRuns = 0
+    let reader = d.rule {
+        readerRuns += 1
+        return d.read(indAttr) * 2
+    }
+
+    let v1 = d.read(reader)
+    let p1 = producerRuns, r1 = readerRuns
+
+    // `sel = -1`: `producer` runs without calling `setSource`, so `reader` is cut!
+    d.write(-1, to: sel)
+    let v2 = d.read(reader)
+    let p2 = producerRuns, r2 = readerRuns
+
+    // `sel = 1`: `producer` runs and redirects `ind` to `b` (100), so `reader` runs!
+    d.write(1, to: sel)
+    let v3 = d.read(reader)
+    let p3 = producerRuns, r3 = readerRuns
+
+    // Clear dependency (`nil`): changing `sel` no longer dirties `ind` or `reader`.
+    let nilHandle: Handle<Int>? = nil
+    d.setDependency(of: ind, to: nilHandle)
+    let hasDep2 = d.hasDependency(on: ind, matching: producer)
+    d.write(0, to: sel)
+    let v4 = d.read(reader)
+    let p4 = producerRuns, r4 = readerRuns
+
+    precondition(hasDep1 && !hasDep2)
+    precondition([v1, v2, v3, v4] == [20, 20, 200, 200])
+    precondition([p1, p2, p3, p4] == [1, 2, 3, 3] && [r1, r2, r3, r4] == [1, 1, 2, 2])
+    print("indirect-dependency-cut-and-redirect|values=[\(v1), \(v2), \(v3), \(v4)]|producerRuns=[\(p1), \(p2), \(p3), \(p4)]|readerRuns=[\(r1), \(r2), \(r3), \(r4)]")
+}
+
+func subgraphFlagsForEachAndUpdate() {
+    let d = Driver()
+    defer { d.close() }
+    let root = d.scope
+    let c1 = d.makeSubgraph()
+    let c2 = d.makeSubgraph()
+    let flag0: UInt8 = 1 << 0
+    let flag1: UInt8 = 1 << 1
+    var order: [String] = []
+
+    func makeFlagged(_ sub: SubgraphHandle, _ name: String, _ flag: UInt8) -> Handle<Int> {
+        d.withSubgraph(sub) {
+            let r = d.rule {
+                order.append(name)
+                return 1
+            }
+            d.setFlags(flag, for: r)
+            return r
+        }
+    }
+
+    _ = makeFlagged(root, "a1", flag0)
+    _ = makeFlagged(root, "a2", flag0)
+    _ = makeFlagged(c1, "b1", flag0)
+    _ = makeFlagged(c1, "b2", flag0)
+    _ = makeFlagged(c2, "d1", flag0)
+    _ = makeFlagged(c2, "d2", flag1)
+
+    let inter0 = d.intersects(root, flags: flag0)
+    let interC1Flag1 = d.intersects(c1, flags: flag1)
+    let dirtyBefore = d.isDirty(root, flags: flag0)
+    let count0 = d.countMatching(root, flags: flag0)
+
+    d.update(root, flags: flag0)
+    let dirtyAfter0 = d.isDirty(root, flags: flag0)
+    let dirtyFlag1Before = d.isDirty(root, flags: flag1)
+    d.update(root, flags: flag1)
+    let dirtyFlag1After = d.isDirty(root, flags: flag1)
+
+    precondition(inter0 && !interC1Flag1 && dirtyBefore && !dirtyAfter0 && dirtyFlag1Before && !dirtyFlag1After && count0 == 5)
+    precondition(order == ["a2", "a1", "d1", "b2", "b1", "d2"])
+    print("subgraph-flags-forEach-and-update|count0=\(count0)|order=\(order)|dirty=[\(dirtyBefore), \(dirtyAfter0), \(dirtyFlag1Before), \(dirtyFlag1After)]")
+}
+
+func hasValueValidateAndUpdateValue() {
+    let d = Driver()
+    defer { d.close() }
+    let input = d.input(10)
+    var innerRuns = 0
+    let inner = d.rule {
+        innerRuns += 1
+        return d.read(input) * 3
+    }
+    let hv0 = d.hasValue(of: inner)
+    // `validate` on a cold rule (`hasValue == false`) does nothing.
+    d.validate(inner)
+    let hv1 = d.hasValue(of: inner)
+    let ir1 = innerRuns
+
+    // `updateValue` inside an outer rule brings `inner` up to date without recording a dependency edge on `outer`.
+    var outerRuns = 0
+    let outer = d.rule {
+        outerRuns += 1
+        d.updateValue(of: inner)
+        return d.read(input) + 1
+    }
+    let ov1 = d.read(outer)
+    let hv2 = d.hasValue(of: inner)
+    let ir2 = innerRuns
+
+    // Mutate `input` -> `inner` is dirty and `hasValue == true`; `validate(inner)` checks liveness without evaluating,
+    // while `updateValue(of: inner)` brings `inner` up to date!
+    d.write(20, to: input)
+    d.validate(inner)
+    let irAfterValidate = innerRuns
+    d.updateValue(of: inner)
+    let ir3 = innerRuns
+    let iv = d.read(inner)
+    let ir4 = innerRuns
+
+    precondition(!hv0 && !hv1 && hv2)
+    precondition([ir1, ir2, irAfterValidate, ir3, ir4] == [0, 1, 1, 2, 2] && ov1 == 11 && iv == 60 && outerRuns == 1)
+    print("has-value-validate-update-value|hasValue=[\(hv0), \(hv1), \(hv2)]|innerRuns=[\(ir1), \(ir2), \(irAfterValidate), \(ir3), \(ir4)]|values=[\(ov1), \(iv)]")
+}
+
+func withoutSubgraphInvalidationAndAncestor() {
+    let d = Driver()
+    defer { d.close() }
+    let root = d.scope
+    let parent = d.makeSubgraph()
+    let child = d.withSubgraph(parent) { d.makeSubgraph() }
+    let sibling = d.makeSubgraph()
+
+    let anc = [
+        d.isAncestor(root, of: root),
+        d.isAncestor(root, of: child),
+        d.isAncestor(parent, of: child),
+        d.isAncestor(child, of: parent),
+        d.isAncestor(parent, of: sibling)
+    ]
+
+    let target = d.withSubgraph(child) { d.input(42) }
+    let weakTarget = d.weak(target)
+    var validInside = true
+    var weakInside: Int? = nil
+
+    d.withoutSubgraphInvalidation {
+        d.invalidate(child)
+        validInside = d.isValid(child)
+        weakInside = d.readWeak(weakTarget)
+    }
+    let validAfter = d.isValid(child)
+    let weakAfter = d.readWeak(weakTarget)
+
+    precondition(anc == [true, true, true, false, false])
+    precondition(!validInside && weakInside == 42 && !validAfter && weakAfter == nil)
+    print("without-subgraph-invalidation-and-ancestor|ancestor=\(anc)|validInside=\(validInside)|weakInside=\(String(describing: weakInside))|weakAfter=\(String(describing: weakAfter))")
+}

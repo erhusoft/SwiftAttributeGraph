@@ -22,6 +22,9 @@ SCENARIOS = [
     "slot-reuse-input-order", "duplicate-writes-before-read",
     "double-read-and-prune", "indirect-source-invalidated", "random-graph-oracle",
     "random-subgraph-weak-indirect-oracle", "map-and-property-wrappers",
+    "without-update-read", "mutate-body-and-invalidate-value",
+    "indirect-dependency-cut-and-redirect", "subgraph-flags-forEach-and-update",
+    "has-value-validate-update-value", "without-subgraph-invalidation-and-ancestor",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

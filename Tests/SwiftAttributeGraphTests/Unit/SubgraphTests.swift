@@ -329,4 +329,90 @@ import Testing
             precondition(graph.nodeCount == 1 && graph.liveSubgraphCount == 2)
         }
     }
+
+    // MARK: C28 — AttributeFlags and Subgraph flag operations
+
+    @Test func attributeFlagsAndSubgraphFlagQueriesAndUpdateFollowReverseCreationOrder() {
+        let graph = Graph()
+        let root = graph.rootSubgraph
+        let c1 = graph.makeSubgraph(parent: root)
+        let c2 = graph.makeSubgraph(parent: root)
+        let flag0 = AttributeFlags(rawValue: 1 << 0)
+        let flag1 = AttributeFlags(rawValue: 1 << 1)
+        let log = Log()
+
+        func makeTracked(_ sub: Subgraph, _ name: String, _ flag: AttributeFlags) -> Attribute<Int> {
+            graph.withCurrent(sub) {
+                let r = graph.makeRule { log.events.append(name); return 1 }
+                graph.setFlags(flag, for: r)
+                return r
+            }
+        }
+
+        let a1 = makeTracked(root, "a1", flag0)
+        let a2 = makeTracked(root, "a2", flag0)
+        let b1 = makeTracked(c1, "b1", flag0)
+        let b2 = makeTracked(c1, "b2", flag0)
+        let d1 = makeTracked(c2, "d1", flag0)
+        let d2 = makeTracked(c2, "d2", flag1)
+
+        #expect(graph.flags(of: a1) == flag0)
+        #expect(graph.flags(of: d2) == flag1)
+        #expect(graph.intersects(root, flags: flag0))
+        #expect(graph.intersects(c1, flags: flag0))
+        #expect(!graph.intersects(c1, flags: flag1))
+        #expect(graph.intersects(c2, flags: flag1))
+        #expect(graph.isDirty(root, flags: flag0))
+        #expect(graph.isDirty(c2, flags: flag1))
+
+        var visited: [AttributeID] = []
+        graph.forEach(in: root, flags: flag0) { visited.append($0.id) }
+        // Reverse creation order within each subgraph (`a2, a1`), then child subgraphs in reverse creation order (`c2`, then `c1`).
+        #expect(visited == [a2.id, a1.id, d1.id, b2.id, b1.id])
+
+        graph.update(root, flags: flag0)
+        #expect(log.events == ["a2", "a1", "d1", "b2", "b1"])
+        #expect(!graph.isDirty(root, flags: flag0))
+        #expect(graph.isDirty(root, flags: flag1))
+
+        graph.update(root, flags: flag1)
+        #expect(log.events == ["a2", "a1", "d1", "b2", "b1", "d2"])
+        #expect(!graph.isDirty(root, flags: .all))
+    }
+
+    // MARK: C30 — withoutSubgraphInvalidation and isAncestor
+
+    @Test func isAncestorAndWithoutSubgraphInvalidationDeferFreeingUntilScopeEnds() {
+        let graph = Graph()
+        let root = graph.rootSubgraph
+        let parent = graph.makeSubgraph(parent: root)
+        let child = graph.makeSubgraph(parent: parent)
+        let sibling = graph.makeSubgraph(parent: root)
+
+        #expect(graph.isAncestor(root, of: root))
+        #expect(graph.isAncestor(root, of: parent))
+        #expect(graph.isAncestor(root, of: child))
+        #expect(graph.isAncestor(parent, of: child))
+        #expect(!graph.isAncestor(child, of: parent))
+        #expect(!graph.isAncestor(parent, of: sibling))
+
+        let target = graph.withCurrent(child) { graph.makeInput(42) }
+        let weakTarget = WeakAttribute(target)
+        let log = Log()
+        graph.observe(child) { log.events.append("child invalidated") }
+
+        graph.withoutSubgraphInvalidation {
+            graph.invalidate(child)
+            // Immediately marked invalid (`isValid == false`), while its attributes remain alive until the scope ends.
+            #expect(!graph.isValid(child))
+            #expect(graph.contains(target.id))
+            #expect(graph.value(of: weakTarget) == 42)
+            #expect(log.events.isEmpty)
+        }
+
+        // Freed as soon as the outermost `withoutSubgraphInvalidation` scope exits.
+        #expect(log.events == ["child invalidated"])
+        #expect(!graph.contains(target.id))
+        #expect(graph.value(of: weakTarget) == nil)
+    }
 }

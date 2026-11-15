@@ -5,6 +5,7 @@
 struct NodeTable {
     private(set) var generations: [UInt32] = []
     var state: [UInt16] = []
+    var flags: [UInt8] = []
     var versions: [UInt32] = []
     var inputs: [[InputEdge]] = []
     var outputs: [[UInt32]] = []
@@ -25,6 +26,7 @@ struct NodeTable {
         if let index = freeList.popLast() {
             let i = Int(index)
             state[i] = initialState
+            flags[i] = 0
             versions[i] = version
             owners[i] = owner
             boxes[i] = box
@@ -32,6 +34,7 @@ struct NodeTable {
         }
         generations.append(1)
         state.append(initialState)
+        flags.append(0)
         versions.append(version)
         inputs.append([])
         outputs.append([])
@@ -57,6 +60,7 @@ struct NodeTable {
         let i = Int(index)
         boxes[i] = nil
         state[i] = 0
+        flags[i] = 0
         inputs[i] = []
         outputs[i] = []
         var next = generations[i] &+ 1

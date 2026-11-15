@@ -2,35 +2,13 @@ warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessib
 warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
 [0/1] Planning build
 Building for debugging...
-[0/6] Write sources
-[2/6] Write swift-version--58304C5D6DBC2206.txt
-[4/11] Compiling SwiftAttributeGraph Map.swift
-[5/19] Compiling SwiftAttributeGraph Attribute.swift
-[6/19] Compiling SwiftAttributeGraph OptionalAttribute.swift
-[7/19] Compiling SwiftAttributeGraph WeakAttribute.swift
-[8/24] Emitting module SwiftAttributeGraph
-[9/25] Compiling SwiftAttributeGraph Graph+ResumableUpdate.swift
-[10/26] Compiling SwiftAttributeGraph Graph+Observation.swift
-[11/26] Compiling SwiftAttributeGraph Graph+ResumableRules.swift
-[12/27] Compiling SwiftAttributeGraph ResumableRuleContext.swift
-[13/27] Compiling SwiftAttributeGraph RuleContext.swift
-[14/27] Compiling SwiftAttributeGraph Graph+Invalidation.swift
-[15/27] Compiling SwiftAttributeGraph Graph+Propagation.swift
-[16/28] Compiling SwiftAttributeGraph Graph+Introspection.swift
-[17/28] Compiling SwiftAttributeGraph Graph+IndirectResolution.swift
-[18/28] Compiling SwiftAttributeGraph Focus.swift
-[19/28] Compiling SwiftAttributeGraph ResumableEvaluation.swift
-[20/28] Compiling SwiftAttributeGraph Graph.swift
-[21/28] Compiling SwiftAttributeGraph InputEdge.swift
-[22/28] Compiling SwiftAttributeGraph RuleStep.swift
-[23/28] Compiling SwiftAttributeGraph ResumableRuleNode.swift
-[24/28] Compiling SwiftAttributeGraph NodeBox.swift
-[25/28] Compiling SwiftAttributeGraph Graph+Update.swift
-[26/32] Compiling Probe main.swift
-[27/32] Compiling Probe BehaviorScenarios.swift
-[28/32] Compiling Probe DiamondScenarios.swift
-[29/32] Emitting module Probe
-[29/32] Write Objects.LinkFileList
-[30/32] Linking Probe
-[31/32] Applying Probe
-Build complete! (2.37s)
+[0/5] Write sources
+[2/5] Write swift-version--58304C5D6DBC2206.txt
+[4/7] Emitting module SwiftAttributeGraph
+[5/7] Compiling SwiftAttributeGraph Graph+Update.swift
+[6/9] Emitting module Probe
+[7/9] Compiling Probe BehaviorScenarios.swift
+[7/10] Write Objects.LinkFileList
+[8/10] Linking Probe
+[9/10] Applying Probe
+Build complete! (1.79s)

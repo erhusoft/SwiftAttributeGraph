@@ -21,3 +21,9 @@ indirect-source-invalidated|values=[11, 78, 78, 100]|runs=[2, 2, 3]|resetToIniti
 random-graph-oracle|runs=[95, 108, 105, 100, 95, 107]|checksums=[-6384035391814883880, 2389317347123615024, 5471729883617613176, -4317106022044399919, -4151220179606527950, 5605945499268791697]
 random-subgraph-weak-indirect-oracle|runs=[115, 96, 106, 66, 96, 89]|checksums=[-3276495598013787319, 4247481780677939783, -3926291191517574679, 5280978778445549690, 5792885826960667132, 158062435473296943]
 map-and-property-wrappers|map=[0, 0, 100]|mapRuns=[1, 1, 2]|wrappers=[27, -2, 500]
+without-update-read|values=[20, 20, 34]|runs=[[1, 1], [1, 1], [2, 2]]
+mutate-body-and-invalidate-value|values=[31, 31, 81, 121]|downRuns=[1, 1, 2, 3]|salted=[14, 54]|saltRuns=2
+indirect-dependency-cut-and-redirect|values=[20, 20, 200, 200]|producerRuns=[1, 2, 3, 3]|readerRuns=[1, 1, 2, 2]
+subgraph-flags-forEach-and-update|count0=5|order=["a2", "a1", "d1", "b2", "b1", "d2"]|dirty=[true, false, true, false]
+has-value-validate-update-value|hasValue=[false, false, true]|innerRuns=[0, 1, 1, 2, 2]|values=[11, 60]
+without-subgraph-invalidation-and-ancestor|ancestor=[true, true, true, false, false]|validInside=false|weakInside=Optional(42)|weakAfter=nil

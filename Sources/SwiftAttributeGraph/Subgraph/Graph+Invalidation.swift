@@ -52,7 +52,7 @@ extension Graph {
         precondition(subgraphs.isLive(subgraph.id), "invalidate: the subgraph was already invalidated")
         if subgraphs.isFalling(index: subgraph.id.index) { return }
 
-        if evaluatingNode != Graph.noNode || isInvalidating {
+        if evaluatingNode != Graph.noNode || isInvalidating || deferringSubgraphInvalidationDepth > 0 {
             for index in subgraphs.postOrder(from: subgraph.id.index) { subgraphs.setFalling(index: index, true) }
             deferredInvalidations.append(subgraph)
             return
@@ -61,9 +61,27 @@ extension Graph {
         flushDeferredInvalidations()
     }
 
+    /// Defers the physical freeing and observer callbacks of any ``invalidate(_:)`` calls executed inside `body` until
+    /// the outermost `withoutSubgraphInvalidation` scope (and any active evaluation) completes.
+    ///
+    /// Invalidated subgraphs are marked invalid (`isValid == false`) immediately, while their attributes stay alive and
+    /// readable by `WeakAttribute` until `body` returns (matching `Subgraph.withoutSubgraphInvalidation` in native
+    /// AttributeGraph).
+    public func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T {
+        assertOwnThread()
+        deferringSubgraphInvalidationDepth += 1
+        defer {
+            deferringSubgraphInvalidationDepth -= 1
+            if deferringSubgraphInvalidationDepth == 0 && evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty {
+                flushDeferredInvalidations()
+            }
+        }
+        return body()
+    }
+
     /// Runs the invalidations that were asked for while a rule was running. Called when the outermost update ends.
     func flushDeferredInvalidations() {
-        guard !isInvalidating, evaluatingNode == Graph.noNode else { return }
+        guard !isInvalidating, evaluatingNode == Graph.noNode, deferringSubgraphInvalidationDepth == 0 else { return }
         var next = 0
         while next < deferredInvalidations.count {
             let subgraph = deferredInvalidations[next]
@@ -100,17 +118,27 @@ extension Graph {
                 let dep = Int(dependent)
                 table.inputs[dep].removeAll { $0.source == node }
                 if table.state[dep] & NodeState.indirect != 0,
-                   let indBox = table.box(at: dependent) as? AnyIndirectNode,
-                   indBox.source.index == node {
-                    indBox.source = indBox.initialSource
-                    let initial = indBox.initialSource
-                    if table.isLive(initial) && !freeing.contains(table.owner(at: initial.index)) {
-                        attachIndirectEdge(from: dependent, to: initial.index)
-                        if table.state[Int(initial.index)] & NodeState.dirty != 0 {
-                            table.state[dep] |= NodeState.dirty
-                        } else {
-                            table.state[dep] &= ~NodeState.dirty
+                   let indBox = table.box(at: dependent) as? AnyIndirectNode {
+                    if indBox.dependency?.index == node {
+                        indBox.dependency = nil
+                    }
+                    if indBox.source.index == node {
+                        indBox.source = indBox.initialSource
+                        indBox.sourceRedirected = false
+                        let initial = indBox.initialSource
+                        if table.isLive(initial) && !freeing.contains(table.owner(at: initial.index)) {
+                            let s = Int(initial.index)
+                            indBox.sourceSeenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
                         }
+                    }
+                    rebuildIndirectEdges(for: dependent)
+                    let s = Int(indBox.source.index)
+                    let depDirty = indBox.dependency.map { table.isLive($0) && table.state[Int($0.index)] & NodeState.dirty != 0 } ?? false
+                    let srcDirty = table.isLive(indBox.source) && !freeing.contains(table.owner(at: indBox.source.index)) && table.state[s] & NodeState.dirty != 0
+                    if depDirty || srcDirty {
+                        table.state[dep] |= NodeState.dirty
+                    } else {
+                        table.state[dep] &= ~NodeState.dirty
                     }
                 }
             }

@@ -1,14 +1,37 @@
 extension Graph {
-    /// Connects an indirect attribute `indirect` to `source` via a single input/output edge so dirty propagation and
-    /// update verification flow through the indirection while readers only record an edge to `indirect`.
-    func attachIndirectEdge(from indirect: UInt32, to source: UInt32) {
-        let s = Int(source)
-        table.outputs[s].append(indirect)
-        let position = UInt32(table.outputs[s].count - 1)
-        let seenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
-        table.inputs[Int(indirect)] = [
-            InputEdge(source: source, seenVersion: seenVersion, read: true, positionInOutputs: position)
-        ]
+    /// Rebuilds the input edges of an indirect attribute (`box.source` and optional `box.dependency`) in ascending
+    /// `source` index order so dirty propagation and update verification flow through the indirection while readers
+    /// only record an edge to the indirect attribute.
+    func rebuildIndirectEdges(for indirect: UInt32) {
+        let n = Int(indirect)
+        for edge in table.inputs[n] {
+            removeOutput(indirect, from: edge.source, at: edge.positionInOutputs)
+        }
+        table.inputs[n].removeAll(keepingCapacity: true)
+
+        guard let box = table.box(at: indirect) as? AnyIndirectNode else { return }
+        var sources: [UInt32] = []
+        if table.isLive(box.source) {
+            sources.append(box.source.index)
+        }
+        if let dep = box.dependency, table.isLive(dep), dep.index != box.source.index {
+            sources.append(dep.index)
+        }
+        sources.sort()
+        for src in sources {
+            let s = Int(src)
+            table.outputs[s].append(indirect)
+            let position = UInt32(table.outputs[s].count - 1)
+            let seenVersion: UInt32
+            if src == box.source.index {
+                seenVersion = box.sourceSeenVersion
+            } else {
+                seenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
+            }
+            table.inputs[n].append(
+                InputEdge(source: src, seenVersion: seenVersion, read: true, positionInOutputs: position)
+            )
+        }
     }
 
     @usableFromInline
