@@ -1,7 +1,7 @@
 # Plan de la API compatible con SwiftUI: inventario y cascarones (borrador, pendiente de aprobación)
 
 Fecha: 2026-11-14. Relación: [PLAN-MOTOR.md](PLAN-MOTOR.md) §5 (conexión con la UI) y [INFORME-RENDIMIENTO.md](INFORME-RENDIMIENTO.md). **Estado:
-propuesta. No se escribe ni se ejecuta nada hasta que el dueño la apruebe.** Es un plan de trabajo de la capa de vistas
+propuesta; la primera rebanada (`Text`, `VStack`, `ScrollView`, `padding`) está hecha en [`Views/`](../Views/README.md).** Es un plan de trabajo de la capa de vistas
 (SwiftGraph), no del motor: el motor no sabe nada de vistas (`AGENTS.md` §1).
 
 ## 1. Idea (del dueño)
