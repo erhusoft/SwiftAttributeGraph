@@ -130,5 +130,16 @@ Estado: **abiertas**, salvo lo ya cubierto por los ocho escenarios de `ESTUDIO-A
 | C11 | Escrituras | ¿Escribir el mismo valor propaga algo? |
 | C12 | Escrituras | Dentro de una regla, ¿se permite escribir? |
 | C13 | Ciclos | ¿Un ciclo falla, se corta o se queda colgado? |
+| C14 | Comparación | ¿Se puede comparar solo parte de un valor para decidir si cambió? |
+| C15 | Débiles | ¿Qué lee un atributo débil cuando su destino ya no existe? |
+| C16 | Plazo | ¿Una actualización puede abandonarse al pasar un plazo y qué queda sin evaluar? |
+| C17 | Búsqueda | ¿En qué orden recorre las entradas una búsqueda por anchura? |
+| C18 | Externos | ¿Cómo se comportan los atributos externos, sin regla ni valor propio? |
+| C19 | Trazas | ¿Los eventos de ciclo de vida permiten observar el orden de ejecución sin depender solo de contadores? |
+
+**Origen de C14–C19:** sugeridas por los **nombres** de las pruebas de `CompatibilityTesting` de
+[jcmosc/Compute](https://github.com/jcmosc/Compute) (licencia MIT): `PartialComparisonTests`, `WeakAttributeTests`,
+`GraphDeadlineTests`, `AttributeSearchTests`, `ExternalTests` y `Tracing*`. No se ha leído el contenido de esas
+pruebas ni se copia código; son solo ideas para formular preguntas propias.
 
 **Límites:** lo observado vale para el runtime y chip medidos (macOS 15.7.9, M1) y puede cambiar con otra versión.
