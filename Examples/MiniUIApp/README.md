@@ -27,6 +27,9 @@ swift run -c release --package-path Examples/MiniUIApp MiniUIApp --bench
 # Comparar ejecuciones reales de `body` en SwiftUI (`@Observable` nativo vs `SwiftAttributeGraph`):
 swift run --package-path Examples/MiniUIApp MiniUIApp --parity
 
+# Estresar montaje/desmontaje de 2.000 subgrafos y 1.000 escrituras multi-fuente en lotes:
+swift run -c release --package-path Examples/MiniUIApp MiniUIApp --stress
+
 # Renderizar una captura PNG fuera de pantalla:
 swift run --package-path Examples/MiniUIApp MiniUIApp --snapshot /tmp/miniui-preview.png
 ```

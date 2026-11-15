@@ -160,4 +160,21 @@ struct MiniUIAppTests {
         #expect(report.engineDetailNodeRuns == 2)
         #expect(report.engine.totalBodyRuns < report.native.totalBodyRuns)
     }
+
+    @Test
+    func stressSubgraphsAndMultiSourceBatchesCleanUpToZero() {
+        let report = runStressScenario(rowCount: 2_000, batchCount: 250)
+
+        #expect(report.peakNodes == 4_000)
+        #expect(report.peakEdges == 2_000)
+        #expect(report.peakSubgraphs == 2_001)
+        #expect(report.afterUnmountNodes == 0)
+        #expect(report.afterUnmountEdges == 0)
+        #expect(report.afterUnmountSubgraphs == 1)
+
+        // 250 batches x 4 writes = 1000 writes -> 250 dirty notifications & 251 combined runs (1 initial + 250 batches).
+        #expect(report.multiSourceWrites == 1_000)
+        #expect(report.multiSourceDirtyNotifications == 250)
+        #expect(report.combinedRuleRuns == 251)
+    }
 }

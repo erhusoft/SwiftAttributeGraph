@@ -354,6 +354,47 @@ private func runParity() {
 }
 
 @MainActor
+private func runStress() {
+    let report = runStressScenario()
+    print(
+        String(
+            format: "STRESS SUBGRAPHS (%d rows): peakNodes=%d peakEdges=%d peakSubgraphs=%d -> afterUnmount nodes=%d edges=%d subgraphs=%d (%.2f ms)",
+            report.rowCount,
+            report.peakNodes,
+            report.peakEdges,
+            report.peakSubgraphs,
+            report.afterUnmountNodes,
+            report.afterUnmountEdges,
+            report.afterUnmountSubgraphs,
+            report.mountUnmountMs
+        )
+    )
+    print(
+        String(
+            format: "STRESS MULTI-SOURCE (%d writes across %d batches): dirtyNotifications=%d combinedRuleRuns=%d (%.2f ms)",
+            report.multiSourceWrites,
+            report.multiSourceBatches,
+            report.multiSourceDirtyNotifications,
+            report.combinedRuleRuns,
+            report.multiSourceBatchMs
+        )
+    )
+    check(
+        report.afterUnmountNodes == 0 && report.afterUnmountEdges == 0 && report.afterUnmountSubgraphs == 1,
+        "expected clean teardown to 0 nodes, 0 edges, 1 root subgraph"
+    )
+    check(
+        report.multiSourceDirtyNotifications == report.multiSourceBatches,
+        "expected 1 dirty notification per batch"
+    )
+    check(
+        report.combinedRuleRuns == 1 + report.multiSourceBatches,
+        "expected 1 combined rule run per batch after initial read"
+    )
+    print("STRESS OK")
+}
+
+@MainActor
 private func renderSnapshot(to path: String) {
     NSApplication.shared.setActivationPolicy(.accessory)
     let bridge = EngineBridge()
@@ -434,6 +475,11 @@ private func runMain() {
 
     if args.contains("--parity") {
         runParity()
+        return
+    }
+
+    if args.contains("--stress") {
+        runStress()
         return
     }
 
