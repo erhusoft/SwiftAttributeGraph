@@ -19,19 +19,33 @@ public struct BodyRunCounts: Equatable, Sendable {
     }
 }
 
-/// Side-by-side comparison of SwiftUI `body` executions between native `@Observable`
-/// and `SwiftAttributeGraph` fine-grained attribute boxes.
+/// Side-by-side comparison of SwiftUI `body` executions across three models:
+/// 1. Naive `@Observable` (computed `parityText` reading `counter`),
+/// 2. Well-written `@Observable` (stored `parityText` updated only when the string changes),
+/// 3. `SwiftAttributeGraph` fine-grained `AttributeBox` (automatic equality cut).
 public struct ParityComparisonReport: Equatable, Sendable {
-    public let native: BodyRunCounts
+    public let nativeNaive: BodyRunCounts
+    public let nativeWellWritten: BodyRunCounts
     public let engine: BodyRunCounts
     public let engineParityNodeRuns: Int
     public let engineDetailNodeRuns: Int
 }
 
-/// Pure SwiftUI `@Observable` model implementing the same state and derived properties as `EngineBridge`.
+/// Pure SwiftUI `@Observable` protocol so both native variants share the same test harness views.
+@MainActor
+private protocol NativeModelProtocol: AnyObject {
+    var counter: Int { get }
+    var altValue: Int { get }
+    var parityText: String { get }
+    var activeIndirectValue: Int { get }
+    var showDetail: Bool { get }
+    var detailText: String? { get }
+}
+
+/// Naive `@Observable` model where `parityText` is a computed property reading `counter`.
 @Observable
 @MainActor
-public final class NativeObservableModel {
+public final class NativeObservableModel: NativeModelProtocol {
     public var counter = 0
     public var altValue = 100
     public var useAlt = false
@@ -54,6 +68,48 @@ public final class NativeObservableModel {
 
     public func incrementCounter(by delta: Int) {
         counter += delta
+    }
+
+    public func incrementAlt(by delta: Int) {
+        altValue += delta
+    }
+
+    public func toggleIndirectSource() {
+        useAlt.toggle()
+    }
+
+    public func setShowDetail(_ show: Bool) {
+        showDetail = show
+    }
+}
+
+/// Well-written `@Observable` model where `parityText` is stored and only assigned when its value changes.
+@Observable
+@MainActor
+public final class WellWrittenObservableModel: NativeModelProtocol {
+    public var counter = 0
+    public var altValue = 100
+    public var useAlt = false
+    public var showDetail = false
+    public private(set) var parityText = "Par (even)"
+
+    public init() {}
+
+    public var activeIndirectValue: Int {
+        useAlt ? altValue : counter
+    }
+
+    public var detailText: String? {
+        guard showDetail else { return nil }
+        return "Detalle vivo: counter=\(counter), indirect=\(activeIndirectValue)"
+    }
+
+    public func incrementCounter(by delta: Int) {
+        counter += delta
+        let nextParity = counter.isMultiple(of: 2) ? "Par (even)" : "Impar (odd)"
+        if nextParity != parityText {
+            parityText = nextParity
+        }
     }
 
     public func incrementAlt(by delta: Int) {
@@ -219,8 +275,8 @@ private final class BodyRunRecorder {
     var counts = BodyRunCounts()
 }
 
-private struct NativeCounterSubview: View {
-    let model: NativeObservableModel
+private struct NativeCounterSubview<Model: NativeModelProtocol>: View {
+    let model: Model
     let recorder: BodyRunRecorder
 
     var body: some View {
@@ -229,8 +285,8 @@ private struct NativeCounterSubview: View {
     }
 }
 
-private struct NativeAltSubview: View {
-    let model: NativeObservableModel
+private struct NativeAltSubview<Model: NativeModelProtocol>: View {
+    let model: Model
     let recorder: BodyRunRecorder
 
     var body: some View {
@@ -239,8 +295,8 @@ private struct NativeAltSubview: View {
     }
 }
 
-private struct NativeParitySubview: View {
-    let model: NativeObservableModel
+private struct NativeParitySubview<Model: NativeModelProtocol>: View {
+    let model: Model
     let recorder: BodyRunRecorder
 
     var body: some View {
@@ -249,8 +305,8 @@ private struct NativeParitySubview: View {
     }
 }
 
-private struct NativeIndirectSubview: View {
-    let model: NativeObservableModel
+private struct NativeIndirectSubview<Model: NativeModelProtocol>: View {
+    let model: Model
     let recorder: BodyRunRecorder
 
     var body: some View {
@@ -259,8 +315,8 @@ private struct NativeIndirectSubview: View {
     }
 }
 
-private struct NativeDetailSubview: View {
-    let model: NativeObservableModel
+private struct NativeDetailSubview<Model: NativeModelProtocol>: View {
+    let model: Model
     let recorder: BodyRunRecorder
 
     var body: some View {
@@ -269,8 +325,8 @@ private struct NativeDetailSubview: View {
     }
 }
 
-private struct NativeParityHarnessView: View {
-    let model: NativeObservableModel
+private struct NativeParityHarnessView<Model: NativeModelProtocol>: View {
+    let model: Model
     let recorder: BodyRunRecorder
 
     var body: some View {
@@ -377,33 +433,56 @@ private func makeOffscreenWindow<V: View>(for view: V) -> (NSWindow, NSHostingVi
     return (window, hostingView)
 }
 
-/// Runs the exact 7-step MiniUIApp interaction sequence on both a native `@Observable` SwiftUI
-/// hierarchy and a fine-grained `SwiftAttributeGraph` SwiftUI hierarchy hosted in real `NSHostingView`s.
+/// Runs the exact 7-step MiniUIApp interaction sequence on a naive `@Observable` hierarchy,
+/// a well-written `@Observable` hierarchy, and a fine-grained `SwiftAttributeGraph` hierarchy
+/// hosted in real `NSHostingView`s.
 @MainActor
 public func runRealSwiftUIParityComparison() -> ParityComparisonReport {
     NSApplication.shared.setActivationPolicy(.accessory)
 
-    let nativeModel = NativeObservableModel()
-    let nativeRecorder = BodyRunRecorder()
-    let (nativeWindow, nativeHosting) = makeOffscreenWindow(
-        for: NativeParityHarnessView(model: nativeModel, recorder: nativeRecorder)
+    let naiveModel = NativeObservableModel()
+    let naiveRecorder = BodyRunRecorder()
+    let (naiveWindow, naiveHosting) = makeOffscreenWindow(
+        for: NativeParityHarnessView(model: naiveModel, recorder: naiveRecorder)
     )
-    defer { nativeWindow.close() }
+    defer { naiveWindow.close() }
 
-    nativeModel.incrementCounter(by: 2)
-    pumpSwiftUI(nativeHosting)
-    nativeModel.incrementCounter(by: 1)
-    pumpSwiftUI(nativeHosting)
-    nativeModel.incrementAlt(by: 10)
-    pumpSwiftUI(nativeHosting)
-    nativeModel.toggleIndirectSource()
-    pumpSwiftUI(nativeHosting)
-    nativeModel.setShowDetail(true)
-    pumpSwiftUI(nativeHosting)
-    nativeModel.incrementCounter(by: 2)
-    pumpSwiftUI(nativeHosting)
-    nativeModel.setShowDetail(false)
-    pumpSwiftUI(nativeHosting)
+    naiveModel.incrementCounter(by: 2)
+    pumpSwiftUI(naiveHosting)
+    naiveModel.incrementCounter(by: 1)
+    pumpSwiftUI(naiveHosting)
+    naiveModel.incrementAlt(by: 10)
+    pumpSwiftUI(naiveHosting)
+    naiveModel.toggleIndirectSource()
+    pumpSwiftUI(naiveHosting)
+    naiveModel.setShowDetail(true)
+    pumpSwiftUI(naiveHosting)
+    naiveModel.incrementCounter(by: 2)
+    pumpSwiftUI(naiveHosting)
+    naiveModel.setShowDetail(false)
+    pumpSwiftUI(naiveHosting)
+
+    let wellWrittenModel = WellWrittenObservableModel()
+    let wellWrittenRecorder = BodyRunRecorder()
+    let (wellWrittenWindow, wellWrittenHosting) = makeOffscreenWindow(
+        for: NativeParityHarnessView(model: wellWrittenModel, recorder: wellWrittenRecorder)
+    )
+    defer { wellWrittenWindow.close() }
+
+    wellWrittenModel.incrementCounter(by: 2)
+    pumpSwiftUI(wellWrittenHosting)
+    wellWrittenModel.incrementCounter(by: 1)
+    pumpSwiftUI(wellWrittenHosting)
+    wellWrittenModel.incrementAlt(by: 10)
+    pumpSwiftUI(wellWrittenHosting)
+    wellWrittenModel.toggleIndirectSource()
+    pumpSwiftUI(wellWrittenHosting)
+    wellWrittenModel.setShowDetail(true)
+    pumpSwiftUI(wellWrittenHosting)
+    wellWrittenModel.incrementCounter(by: 2)
+    pumpSwiftUI(wellWrittenHosting)
+    wellWrittenModel.setShowDetail(false)
+    pumpSwiftUI(wellWrittenHosting)
 
     let engineModel = EngineFineGrainedModel()
     let engineRecorder = BodyRunRecorder()
@@ -428,7 +507,8 @@ public func runRealSwiftUIParityComparison() -> ParityComparisonReport {
     pumpSwiftUI(engineHosting)
 
     return ParityComparisonReport(
-        native: nativeRecorder.counts,
+        nativeNaive: naiveRecorder.counts,
+        nativeWellWritten: wellWrittenRecorder.counts,
         engine: engineRecorder.counts,
         engineParityNodeRuns: engineModel.parityNodeRuns,
         engineDetailNodeRuns: engineModel.detailNodeRuns

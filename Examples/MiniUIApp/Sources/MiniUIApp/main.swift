@@ -338,11 +338,17 @@ private func runBenchmark() {
 @MainActor
 private func runParity() {
     let report = runRealSwiftUIParityComparison()
-    print("PARITY NATIVE @Observable body runs:")
+    print("PARITY NATIVE @Observable (naive computed parity) body runs:")
     print(
-        "  counter=\(report.native.counterBodyRuns) alt=\(report.native.altBodyRuns) "
-            + "parity=\(report.native.parityBodyRuns) indirect=\(report.native.indirectBodyRuns) "
-            + "detail=\(report.native.detailBodyRuns) total=\(report.native.totalBodyRuns)"
+        "  counter=\(report.nativeNaive.counterBodyRuns) alt=\(report.nativeNaive.altBodyRuns) "
+            + "parity=\(report.nativeNaive.parityBodyRuns) indirect=\(report.nativeNaive.indirectBodyRuns) "
+            + "detail=\(report.nativeNaive.detailBodyRuns) total=\(report.nativeNaive.totalBodyRuns)"
+    )
+    print("PARITY NATIVE @Observable (well-written stored parity) body runs:")
+    print(
+        "  counter=\(report.nativeWellWritten.counterBodyRuns) alt=\(report.nativeWellWritten.altBodyRuns) "
+            + "parity=\(report.nativeWellWritten.parityBodyRuns) indirect=\(report.nativeWellWritten.indirectBodyRuns) "
+            + "detail=\(report.nativeWellWritten.detailBodyRuns) total=\(report.nativeWellWritten.totalBodyRuns)"
     )
     print("PARITY ENGINE SwiftAttributeGraph body runs:")
     print(
@@ -355,29 +361,44 @@ private func runParity() {
 
 @MainActor
 private func runStress() {
-    let report = runStressScenario()
+    let report = runStressScenario(rowCount: 2_000, batchCount: 250, trials: 9)
     print(
         String(
-            format: "STRESS SUBGRAPHS (%d rows): peakNodes=%d peakEdges=%d peakSubgraphs=%d -> afterUnmount nodes=%d edges=%d subgraphs=%d (%.2f ms)",
+            format: "STRESS ENGINE SUBGRAPHS (%d rows, %d trials): peak=(nodes=%d, edges=%d, subgraphs=%d) -> afterHalf=(nodes=%d, edges=%d, subgraphs=%d) -> afterUnmount=(nodes=%d, edges=%d, subgraphs=%d) | median=%.2f ms (min=%.2f, max=%.2f)",
             report.rowCount,
+            report.trials,
             report.peakNodes,
             report.peakEdges,
             report.peakSubgraphs,
+            report.afterHalfUnmountNodes,
+            report.afterHalfUnmountEdges,
+            report.afterHalfUnmountSubgraphs,
             report.afterUnmountNodes,
             report.afterUnmountEdges,
             report.afterUnmountSubgraphs,
-            report.mountUnmountMs
+            report.mountUnmountStats.medianMs,
+            report.mountUnmountStats.minMs,
+            report.mountUnmountStats.maxMs
         )
     )
     print(
         String(
-            format: "STRESS MULTI-SOURCE (%d writes across %d batches): dirtyNotifications=%d combinedRuleRuns=%d (%.2f ms)",
+            format: "STRESS ENGINE MULTI-SOURCE (%d writes across %d batches, %d trials): dirtyNotifications=%d combinedRuleRuns=%d | median=%.2f ms (min=%.2f, max=%.2f)",
             report.multiSourceWrites,
             report.multiSourceBatches,
+            report.trials,
             report.multiSourceDirtyNotifications,
             report.combinedRuleRuns,
-            report.multiSourceBatchMs
+            report.multiSourceBatchStats.medianMs,
+            report.multiSourceBatchStats.minMs,
+            report.multiSourceBatchStats.maxMs
         )
+    )
+    check(
+        report.afterHalfUnmountNodes == report.rowCount
+            && report.afterHalfUnmountEdges == report.rowCount / 2
+            && report.afterHalfUnmountSubgraphs == 1 + report.rowCount / 2,
+        "expected intermediate counts to drop to half after unmounting even rows"
     )
     check(
         report.afterUnmountNodes == 0 && report.afterUnmountEdges == 0 && report.afterUnmountSubgraphs == 1,
@@ -390,6 +411,34 @@ private func runStress() {
     check(
         report.combinedRuleRuns == 1 + report.multiSourceBatches,
         "expected 1 combined rule run per batch after initial read"
+    )
+
+    let uiReport = runRealSwiftUIStressList(rowCount: 2_000, mutatedRowCount: 5)
+    print(
+        String(
+            format: "STRESS REAL SWIFTUI LazyVStack (%d rows): initialRowBodyRuns=%d afterMutating(%d)=%d afterUnmount=(nodes=%d, edges=%d, subgraphs=%d) | engine(mount=%.2f ms, mutate=%.3f ms, unmount=%.2f ms) | swiftUI(mount=%.2f ms, mutate=%.2f ms, unmount=%.2f ms)",
+            uiReport.rowCount,
+            uiReport.initialRowBodyRuns,
+            uiReport.mutatedRowCount,
+            uiReport.afterMutationRowBodyRuns,
+            uiReport.afterUnmountNodes,
+            uiReport.afterUnmountEdges,
+            uiReport.afterUnmountSubgraphs,
+            uiReport.engineMountMs,
+            uiReport.engineMutationMs,
+            uiReport.engineUnmountMs,
+            uiReport.swiftUIMountMs,
+            uiReport.swiftUIMutationMs,
+            uiReport.swiftUIUnmountMs
+        )
+    )
+    check(
+        uiReport.afterMutationRowBodyRuns == uiReport.mutatedRowCount,
+        "expected only \(uiReport.mutatedRowCount) SwiftUI row bodies to re-run, got \(uiReport.afterMutationRowBodyRuns)"
+    )
+    check(
+        uiReport.afterUnmountNodes == 0 && uiReport.afterUnmountEdges == 0 && uiReport.afterUnmountSubgraphs == 1,
+        "expected SwiftUI stress teardown to leave 0 nodes, 0 edges, 1 root subgraph"
     )
     print("STRESS OK")
 }

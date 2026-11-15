@@ -139,35 +139,52 @@ struct MiniUIAppTests {
     }
 
     @Test
-    func realSwiftUIParityAgainstObservableShowsEqualityCutAdvantage() {
+    func realSwiftUIParityAgainstObservableShowsNaiveVsWellWrittenVsEngine() {
         let report = runRealSwiftUIParityComparison()
 
-        // Dynamic dependency tracking matches between @Observable and SwiftAttributeGraph:
-        #expect(report.native.counterBodyRuns == 4)
+        // Dynamic dependency tracking matches across all three models:
+        #expect(report.nativeNaive.counterBodyRuns == 4)
+        #expect(report.nativeWellWritten.counterBodyRuns == 4)
         #expect(report.engine.counterBodyRuns == 4)
-        #expect(report.native.altBodyRuns == 2)
+
+        #expect(report.nativeNaive.altBodyRuns == 2)
+        #expect(report.nativeWellWritten.altBodyRuns == 2)
         #expect(report.engine.altBodyRuns == 2)
-        #expect(report.native.indirectBodyRuns == 4)
+
+        #expect(report.nativeNaive.indirectBodyRuns == 4)
+        #expect(report.nativeWellWritten.indirectBodyRuns == 4)
         #expect(report.engine.indirectBodyRuns == 4)
-        #expect(report.native.detailBodyRuns == 3)
+
+        #expect(report.nativeNaive.detailBodyRuns == 3)
+        #expect(report.nativeWellWritten.detailBodyRuns == 3)
         #expect(report.engine.detailBodyRuns == 3)
 
-        // @Observable re-runs parity body whenever `counter` changes (4 runs),
-        // while SwiftAttributeGraph cuts equal outputs ("Par" == "Par", "Impar" == "Impar") -> 2 runs.
-        #expect(report.native.parityBodyRuns == 4)
+        // Naive @Observable computes `parity` on every `counter` change (4 runs),
+        // whereas a well-written @Observable (stored property assigned only on change)
+        // and SwiftAttributeGraph (automatic equality cut) both run `parity` body 2 times.
+        #expect(report.nativeNaive.parityBodyRuns == 4)
+        #expect(report.nativeWellWritten.parityBodyRuns == 2)
         #expect(report.engine.parityBodyRuns == 2)
         #expect(report.engineParityNodeRuns == 2)
         #expect(report.engineDetailNodeRuns == 2)
-        #expect(report.engine.totalBodyRuns < report.native.totalBodyRuns)
+        #expect(report.engine.totalBodyRuns == report.nativeWellWritten.totalBodyRuns)
+        #expect(report.engine.totalBodyRuns < report.nativeNaive.totalBodyRuns)
     }
 
     @Test
-    func stressSubgraphsAndMultiSourceBatchesCleanUpToZero() {
-        let report = runStressScenario(rowCount: 2_000, batchCount: 250)
+    func stressSubgraphsIntermediateHalfUnmountAndMultiSourceMedianCleanUpToZero() {
+        let report = runStressScenario(rowCount: 2_000, batchCount: 250, trials: 9)
 
+        #expect(report.trials == 9)
         #expect(report.peakNodes == 4_000)
         #expect(report.peakEdges == 2_000)
         #expect(report.peakSubgraphs == 2_001)
+
+        // Intermediate state right after unmounting the 1,000 even rows:
+        #expect(report.afterHalfUnmountNodes == 2_000)
+        #expect(report.afterHalfUnmountEdges == 1_000)
+        #expect(report.afterHalfUnmountSubgraphs == 1_001)
+
         #expect(report.afterUnmountNodes == 0)
         #expect(report.afterUnmountEdges == 0)
         #expect(report.afterUnmountSubgraphs == 1)
@@ -176,5 +193,28 @@ struct MiniUIAppTests {
         #expect(report.multiSourceWrites == 1_000)
         #expect(report.multiSourceDirtyNotifications == 250)
         #expect(report.combinedRuleRuns == 251)
+
+        #expect(report.mountUnmountStats.minMs <= report.mountUnmountStats.medianMs)
+        #expect(report.mountUnmountStats.medianMs <= report.mountUnmountStats.maxMs)
+        #expect(report.multiSourceBatchStats.minMs <= report.multiSourceBatchStats.medianMs)
+        #expect(report.multiSourceBatchStats.medianMs <= report.multiSourceBatchStats.maxMs)
+    }
+
+    @Test
+    func realSwiftUIStressListTracksSelectiveRowBodiesAndSeparatesCosts() {
+        let uiReport = runRealSwiftUIStressList(rowCount: 2_000, mutatedRowCount: 5)
+
+        #expect(uiReport.rowCount == 2_000)
+        #expect(uiReport.mutatedRowCount == 5)
+        #expect(uiReport.initialRowBodyRuns > 0)
+        #expect(uiReport.initialRowBodyRuns < 2_000)
+        // Mutating 5 visible rows updates only those 5 rows in SwiftUI, not all mounted rows.
+        #expect(uiReport.afterMutationRowBodyRuns == 5)
+        // Unmounting the whole list returns graph to 0 nodes / 0 edges / 1 root subgraph.
+        #expect(uiReport.afterUnmountNodes == 0)
+        #expect(uiReport.afterUnmountEdges == 0)
+        #expect(uiReport.afterUnmountSubgraphs == 1)
+        #expect(uiReport.engineMountMs >= 0)
+        #expect(uiReport.swiftUIMountMs >= 0)
     }
 }
