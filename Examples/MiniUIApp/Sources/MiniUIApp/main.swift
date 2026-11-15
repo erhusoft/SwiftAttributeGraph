@@ -1,294 +1,399 @@
 import AppKit
-import SwiftAttributeGraph
+import Foundation
+import MiniUIAppCore
 import SwiftUI
 
-/// Snapshot produced lazily by the `SwiftAttributeGraph` engine and rendered by the window.
-struct UISnapshot: Equatable {
-    var counter: Int
-    var altValue: Int
-    var parityText: String
-    var activeIndirectValue: Int
-    var detailText: String?
-    var parityRuns: Int
-    var detailRuns: Int
-    var summaryRuns: Int
-    var nodeCount: Int
-    var edgeCount: Int
-    var subgraphCount: Int
-    var recalculationCount: Int
-}
-
-/// Bridges a single-threaded `Graph` to a macOS SwiftUI window via `graph.observe(_:onDirty:)`.
-@MainActor
-final class EngineBridge: ObservableObject {
-    let graph = Graph()
-    let counterAttr: Attribute<Int>
-    let altAttr: Attribute<Int>
-    let useAltAttr: Attribute<Bool>
-    let indirectAttr: Attribute<Int>
-
-    private var detailSubgraph: Subgraph?
-    private var detailWeak = WeakAttribute<String>()
-    private var parityRuns = 0
-    private var detailRuns = 0
-    private var summaryRuns = 0
-
-    private final class RunCounter { var count = 0 }
-
-    private let parityLabelAttr: Attribute<String>
-    private let parityCounter = RunCounter()
-    private let detailCounter = RunCounter()
-    private let summaryCounter = RunCounter()
-    private var rootRuleHandle: Attribute<UISnapshot>?
-    private var observationToken: ObservationToken?
-    private var refreshScheduled = false
-
-    @Published private(set) var snapshot: UISnapshot
-    @Published private(set) var events: [String] = []
-    @Published var showDetail = false
-
-    init() {
-        let counter = graph.makeInput(0)
-        let alt = graph.makeInput(100)
-        let useAlt = graph.makeInput(false)
-        let indirect = graph.makeIndirect(counter)
-
-        self.counterAttr = counter
-        self.altAttr = alt
-        self.useAltAttr = useAlt
-        self.indirectAttr = indirect
-
-        let parity = graph.makeMap(counter) { $0 % 2 == 0 }
-        let pCounter = parityCounter
-        let parityLabel = graph.makeRule { () -> String in
-            pCounter.count += 1
-            return parity.value ? "Par (even)" : "Impar (odd)"
-        }
-        self.parityLabelAttr = parityLabel
-
-        self.snapshot = UISnapshot(
-            counter: 0, altValue: 100, parityText: "", activeIndirectValue: 0,
-            detailText: nil, parityRuns: 0, detailRuns: 0, summaryRuns: 0,
-            nodeCount: 0, edgeCount: 0, subgraphCount: 0, recalculationCount: 0
-        )
-
-        let rootRule = makeRootRule()
-        self.rootRuleHandle = rootRule
-        self.pullSnapshot(rootRule)
-        self.observationToken = graph.observe(rootRule.erased) { [weak self] in
-            self?.scheduleRefresh(for: rootRule)
-        }
-        log("Motor iniciado (nodeCount=\(graph.nodeCount), subgraphs=\(graph.liveSubgraphCount))")
-    }
-
-    private func makeRootRule() -> Attribute<UISnapshot> {
-        let counter = counterAttr
-        let alt = altAttr
-        let parityLabel = parityLabelAttr
-        let indirect = indirectAttr
-        return graph.makeRule { [unowned self] () -> UISnapshot in
-            summaryCounter.count += 1
-            let c = counter.value
-            let a = alt.value
-            let p = parityLabel.value
-            let indVal = indirect.value
-            let detail = graph.value(of: detailWeak)
-            return UISnapshot(
-                counter: c,
-                altValue: a,
-                parityText: p,
-                activeIndirectValue: indVal,
-                detailText: detail,
-                parityRuns: parityCounter.count,
-                detailRuns: detailCounter.count,
-                summaryRuns: summaryCounter.count,
-                nodeCount: graph.nodeCount,
-                edgeCount: graph.edgeCount,
-                subgraphCount: graph.liveSubgraphCount,
-                recalculationCount: graph.recalculationCount
-            )
-        }
-    }
-
-    private func scheduleRefresh(for rule: Attribute<UISnapshot>) {
-        rootRuleHandle = rule
-        guard !refreshScheduled else { return }
-        refreshScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.refreshScheduled = false
-            self.pullSnapshot(rule)
-        }
-    }
-
-    private func pullSnapshot(_ rule: Attribute<UISnapshot>) {
-        var next = graph.value(of: rule)
-        // Refresh counters after rule finishes so `nodeCount` / `recalculationCount` are exact.
-        next.nodeCount = graph.nodeCount
-        next.edgeCount = graph.edgeCount
-        next.subgraphCount = graph.liveSubgraphCount
-        next.recalculationCount = graph.recalculationCount
-        snapshot = next
-    }
-
-    func incrementCounter(by delta: Int) {
-        let next = graph.value(of: counterAttr) + delta
-        graph.setValue(next, for: counterAttr)
-        log("setValue(\(next), for: counter)")
-    }
-
-    func incrementAlt(by delta: Int) {
-        let next = graph.value(of: altAttr) + delta
-        graph.setValue(next, for: altAttr)
-        log("setValue(\(next), for: alt)")
-    }
-
-    func toggleIndirectSource() {
-        let nextUseAlt = !graph.value(of: useAltAttr)
-        graph.setValue(nextUseAlt, for: useAltAttr)
-        let target = nextUseAlt ? altAttr : counterAttr
-        graph.setSource(target, for: indirectAttr)
-        log("setSource(\(nextUseAlt ? "alt" : "counter"), for: indirect)")
-    }
-
-    func setShowDetail(_ show: Bool) {
-        showDetail = show
-        if show {
-            guard detailSubgraph == nil else { return }
-            let sub = graph.makeSubgraph()
-            let detail = graph.withCurrent(sub) {
-                graph.makeRule { [unowned self] () -> String in
-                    detailCounter.count += 1
-                    return "Detalle vivo: counter=\(counterAttr.value), indirect=\(indirectAttr.value)"
-                }
-            }
-            detailSubgraph = sub
-            detailWeak = WeakAttribute(detail)
-            // Trigger root refresh cleanly by bumping a batch/read.
-            if let rule = rootRuleHandle {
-                graph.invalidateValue(of: rule)
-            }
-            log("makeSubgraph() + detail rule (nodeCount=\(graph.nodeCount), subgraphs=\(graph.liveSubgraphCount))")
-        } else {
-            guard let sub = detailSubgraph else { return }
-            graph.invalidate(sub)
-            detailSubgraph = nil
-            detailWeak = WeakAttribute()
-            if let rule = rootRuleHandle {
-                graph.invalidateValue(of: rule)
-            }
-            log("invalidate(detailSubgraph) (nodeCount=\(graph.nodeCount), subgraphs=\(graph.liveSubgraphCount))")
-        }
-    }
-
-    private func log(_ message: String) {
-        events.insert(message, at: 0)
-        if events.count > 12 { events.removeLast() }
-    }
-}
-
-struct ContentView: View {
-    @ObservedObject var bridge: EngineBridge
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("SwiftAttributeGraph — Mini UI Demo")
-                .font(.title2.bold())
-
-            HStack(spacing: 12) {
-                GroupBox("Entradas") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("counter = \(bridge.snapshot.counter)")
-                                .monospacedDigit()
-                            Spacer()
-                            Button("+2 (misma paridad)") { bridge.incrementCounter(by: 2) }
-                            Button("+1 (cambia paridad)") { bridge.incrementCounter(by: 1) }
-                        }
-                        HStack {
-                            Text("alt = \(bridge.snapshot.altValue)")
-                                .monospacedDigit()
-                            Spacer()
-                            Button("alt +10") { bridge.incrementAlt(by: 10) }
-                        }
-                        HStack {
-                            Button("Redirigir IndirectAttribute (setSource)") {
-                                bridge.toggleIndirectSource()
-                            }
-                            Toggle("Montar Subgraph detalle", isOn: Binding(
-                                get: { bridge.showDetail },
-                                set: { bridge.setShowDetail($0) }
-                            ))
-                        }
-                    }
-                    .padding(6)
-                }
-            }
-
-            GroupBox("Salidas calculadas por el grafo") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Paridad (Map + corte): \(bridge.snapshot.parityText)  [runs: \(bridge.snapshot.parityRuns)]")
-                    Text("IndirectAttribute.value: \(bridge.snapshot.activeIndirectValue)")
-                    if let detail = bridge.snapshot.detailText {
-                        Text(detail)
-                            .foregroundColor(.green)
-                    } else {
-                        Text("WeakAttribute detalle: nil (Subgraph desmontado)")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
-            }
-
-            GroupBox("Métricas del motor en vivo") {
-                HStack(spacing: 20) {
-                    Label("nodeCount: \(bridge.snapshot.nodeCount)", systemImage: "circle.grid.3x3")
-                    Label("edgeCount: \(bridge.snapshot.edgeCount)", systemImage: "arrow.triangle.branch")
-                    Label("subgraphs: \(bridge.snapshot.subgraphCount)", systemImage: "square.stack.3d.up")
-                    Label("recalculations: \(bridge.snapshot.recalculationCount)", systemImage: "bolt")
-                }
-                .monospacedDigit()
-                .padding(6)
-            }
-
-            GroupBox("Últimos eventos") {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(bridge.events.enumerated()), id: \.offset) { _, line in
-                            Text("• \(line)")
-                                .font(.caption.monospaced())
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 110)
-            }
-        }
-        .padding(16)
-        .frame(minWidth: 640, minHeight: 460)
+private func check(
+    _ condition: @autoclosure () -> Bool,
+    _ message: String
+) {
+    if !condition() {
+        fputs("Verification failed: \(message)\n", stderr)
+        exit(1)
     }
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    var window: NSWindow?
+private func assertSnapshotState(
+    _ bridge: EngineBridge,
+    label: String,
+    counter: Int,
+    altValue: Int,
+    parityText: String,
+    parityRuns: Int,
+    indirect: Int,
+    detail: String?,
+    detailRuns: Int,
+    nodes: Int,
+    edges: Int,
+    subgraphs: Int,
+    recalcs: Int,
+    publishes: Int,
+    dirtyNotifications: Int
+) {
+    let s = bridge.snapshot
+    print(
+        "[\(label)] counter=\(s.counter) alt=\(s.altValue) parity=\"\(s.parityText)\" "
+            + "parityRuns=\(s.parityRuns) indirect=\(s.activeIndirectValue) "
+            + "detail=\(s.detailText ?? "nil") detailRuns=\(s.detailRuns) "
+            + "nodes=\(s.nodeCount) edges=\(s.edgeCount) subgraphs=\(s.subgraphCount) "
+            + "recalcs=\(s.recalculationCount) publishes=\(bridge.snapshotPublishCount) "
+            + "dirty=\(bridge.dirtyNotificationCount)"
+    )
+
+    check(s.counter == counter, "\(label): expected counter=\(counter), got \(s.counter)")
+    check(s.altValue == altValue, "\(label): expected altValue=\(altValue), got \(s.altValue)")
+    check(
+        s.parityText == parityText,
+        "\(label): expected parityText=\"\(parityText)\", got \"\(s.parityText)\""
+    )
+    check(
+        s.parityRuns == parityRuns,
+        "\(label): expected parityRuns=\(parityRuns), got \(s.parityRuns)"
+    )
+    check(
+        s.activeIndirectValue == indirect,
+        "\(label): expected indirect=\(indirect), got \(s.activeIndirectValue)"
+    )
+    check(
+        s.detailText == detail,
+        "\(label): expected detail=\(detail ?? "nil"), got \(s.detailText ?? "nil")"
+    )
+    check(
+        s.detailRuns == detailRuns,
+        "\(label): expected detailRuns=\(detailRuns), got \(s.detailRuns)"
+    )
+    check(s.nodeCount == nodes, "\(label): expected nodes=\(nodes), got \(s.nodeCount)")
+    check(s.edgeCount == edges, "\(label): expected edges=\(edges), got \(s.edgeCount)")
+    check(
+        s.subgraphCount == subgraphs,
+        "\(label): expected subgraphs=\(subgraphs), got \(s.subgraphCount)"
+    )
+    check(
+        s.recalculationCount == recalcs,
+        "\(label): expected recalcs=\(recalcs), got \(s.recalculationCount)"
+    )
+    check(
+        bridge.snapshotPublishCount == publishes,
+        "\(label): expected publishes=\(publishes), got \(bridge.snapshotPublishCount)"
+    )
+    check(
+        bridge.dirtyNotificationCount == dirtyNotifications,
+        "\(label): expected dirtyNotifications=\(dirtyNotifications), got \(bridge.dirtyNotificationCount)"
+    )
+}
+
+@MainActor
+private func runVerification() {
     let bridge = EngineBridge()
+    assertSnapshotState(
+        bridge,
+        label: "initial",
+        counter: 0,
+        altValue: 100,
+        parityText: "Par (even)",
+        parityRuns: 1,
+        indirect: 0,
+        detail: nil,
+        detailRuns: 0,
+        nodes: 7,
+        edges: 7,
+        subgraphs: 1,
+        recalcs: 3,
+        publishes: 0,
+        dirtyNotifications: 0
+    )
+
+    bridge.incrementCounter(by: 2)
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "+2 (misma paridad)",
+        counter: 2,
+        altValue: 100,
+        parityText: "Par (even)",
+        parityRuns: 1,
+        indirect: 2,
+        detail: nil,
+        detailRuns: 0,
+        nodes: 7,
+        edges: 7,
+        subgraphs: 1,
+        recalcs: 5,
+        publishes: 1,
+        dirtyNotifications: 1
+    )
+
+    bridge.incrementCounter(by: 1)
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "+1 (cambia paridad)",
+        counter: 3,
+        altValue: 100,
+        parityText: "Impar (odd)",
+        parityRuns: 2,
+        indirect: 3,
+        detail: nil,
+        detailRuns: 0,
+        nodes: 7,
+        edges: 7,
+        subgraphs: 1,
+        recalcs: 8,
+        publishes: 2,
+        dirtyNotifications: 2
+    )
+
+    bridge.incrementAlt(by: 10)
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "alt +10",
+        counter: 3,
+        altValue: 110,
+        parityText: "Impar (odd)",
+        parityRuns: 2,
+        indirect: 3,
+        detail: nil,
+        detailRuns: 0,
+        nodes: 7,
+        edges: 7,
+        subgraphs: 1,
+        recalcs: 9,
+        publishes: 3,
+        dirtyNotifications: 3
+    )
+
+    bridge.toggleIndirectSource()
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "setSource -> alt",
+        counter: 3,
+        altValue: 110,
+        parityText: "Impar (odd)",
+        parityRuns: 2,
+        indirect: 110,
+        detail: nil,
+        detailRuns: 0,
+        nodes: 7,
+        edges: 7,
+        subgraphs: 1,
+        recalcs: 10,
+        publishes: 4,
+        dirtyNotifications: 4
+    )
+
+    bridge.setShowDetail(true)
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "mount detailSubgraph",
+        counter: 3,
+        altValue: 110,
+        parityText: "Impar (odd)",
+        parityRuns: 2,
+        indirect: 110,
+        detail: "Detalle vivo: counter=3, indirect=110",
+        detailRuns: 1,
+        nodes: 8,
+        edges: 10,
+        subgraphs: 2,
+        recalcs: 12,
+        publishes: 5,
+        dirtyNotifications: 5
+    )
+
+    bridge.incrementCounter(by: 2)
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "+2 con detail vivo",
+        counter: 5,
+        altValue: 110,
+        parityText: "Impar (odd)",
+        parityRuns: 2,
+        indirect: 110,
+        detail: "Detalle vivo: counter=5, indirect=110",
+        detailRuns: 2,
+        nodes: 8,
+        edges: 10,
+        subgraphs: 2,
+        recalcs: 15,
+        publishes: 6,
+        dirtyNotifications: 6
+    )
+
+    bridge.setShowDetail(false)
+    bridge.flushUI()
+    assertSnapshotState(
+        bridge,
+        label: "unmount detailSubgraph",
+        counter: 5,
+        altValue: 110,
+        parityText: "Impar (odd)",
+        parityRuns: 2,
+        indirect: 110,
+        detail: nil,
+        detailRuns: 2,
+        nodes: 7,
+        edges: 7,
+        subgraphs: 1,
+        recalcs: 16,
+        publishes: 7,
+        dirtyNotifications: 7
+    )
+
+    // Verify batch coalescing: multiple mutations in a single batch produce 1 dirty notification
+    // and 1 snapshot publish.
+    let publishesBeforeBatch = bridge.snapshotPublishCount
+    let dirtyBeforeBatch = bridge.dirtyNotificationCount
+    bridge.performBatch {
+        bridge.incrementCounter(by: 1)
+        bridge.incrementAlt(by: 5)
+    }
+    bridge.flushUI()
+    check(
+        bridge.dirtyNotificationCount == dirtyBeforeBatch + 1,
+        "batch should produce 1 dirty notification, got \(bridge.dirtyNotificationCount - dirtyBeforeBatch)"
+    )
+    check(
+        bridge.snapshotPublishCount == publishesBeforeBatch + 1,
+        "batch should produce 1 snapshot publish, got \(bridge.snapshotPublishCount - publishesBeforeBatch)"
+    )
+
+    print("VERIFY OK")
+}
+
+@MainActor
+private func runBenchmark() {
+    let trials = 9
+    let interactionsPerTrial = 1_000
+    let clock = ContinuousClock()
+    var perInteractionMs: [Double] = []
+    perInteractionMs.reserveCapacity(trials)
+
+    for _ in 0..<trials {
+        let bridge = EngineBridge()
+        bridge.setShowDetail(true)
+        bridge.flushUI()
+        let startPublishes = bridge.snapshotPublishCount
+        let startDirty = bridge.dirtyNotificationCount
+
+        let elapsed = clock.measure {
+            for step in 0..<interactionsPerTrial {
+                switch step % 4 {
+                case 0:
+                    bridge.incrementCounter(by: 1)
+                case 1:
+                    bridge.incrementCounter(by: 2)
+                case 2:
+                    bridge.incrementAlt(by: 3)
+                default:
+                    bridge.toggleIndirectSource()
+                }
+                bridge.flushUI()
+            }
+        }
+
+        let totalSeconds =
+            Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        let msPerInteraction = (totalSeconds * 1_000.0) / Double(interactionsPerTrial)
+        perInteractionMs.append(msPerInteraction)
+
+        let deltaPublishes = bridge.snapshotPublishCount - startPublishes
+        let deltaDirty = bridge.dirtyNotificationCount - startDirty
+        check(
+            deltaPublishes == interactionsPerTrial,
+            "expected \(interactionsPerTrial) publishes, got \(deltaPublishes)"
+        )
+        check(
+            deltaDirty == interactionsPerTrial,
+            "expected \(interactionsPerTrial) dirty notifications, got \(deltaDirty)"
+        )
+    }
+
+    let sorted = perInteractionMs.sorted()
+    let medianMs = sorted[sorted.count / 2]
+    let minMs = sorted.first ?? 0
+    let maxMs = sorted.last ?? 0
+    let budgetMs = 1.6
+
+    print(
+        String(
+            format: "BENCH (%d trials x %d interactions): median=%.4f ms/op, min=%.4f ms/op, max=%.4f ms/op, budget=%.2f ms (%.1fx headroom)",
+            trials,
+            interactionsPerTrial,
+            medianMs,
+            minMs,
+            maxMs,
+            budgetMs,
+            budgetMs / max(medianMs, 1e-9)
+        )
+    )
+    print("REFRESH_RATIO: 1.00 publishes/interaction, 1.00 dirtyNotifications/interaction")
+}
+
+@MainActor
+private func renderSnapshot(to path: String) {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let bridge = EngineBridge()
+    bridge.incrementCounter(by: 2)
+    bridge.flushUI()
+    bridge.incrementCounter(by: 1)
+    bridge.flushUI()
+    bridge.setShowDetail(true)
+
+    let size = NSSize(width: 780, height: 680)
+    let hostingView = NSHostingView(rootView: ContentView(bridge: bridge))
+    hostingView.frame = NSRect(origin: .zero, size: size)
+    hostingView.appearance = NSAppearance(named: .aqua)
+
+    let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: size),
+        styleMask: [.titled],
+        backing: .buffered,
+        defer: false
+    )
+    window.appearance = NSAppearance(named: .aqua)
+    window.contentView = hostingView
+    hostingView.layoutSubtreeIfNeeded()
+
+    guard let rep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
+        fputs("Failed to allocate bitmapImageRepForCachingDisplay\n", stderr)
+        exit(1)
+    }
+    hostingView.cacheDisplay(in: hostingView.bounds, to: rep)
+
+    guard let pngData = rep.representation(using: .png, properties: [:]) else {
+        fputs("Failed to encode PNG\n", stderr)
+        exit(1)
+    }
+
+    do {
+        try pngData.write(to: URL(fileURLWithPath: path))
+        print("Snapshot saved to \(path) (\(pngData.count) bytes)")
+    } catch {
+        fputs("Failed to write snapshot: \(error)\n", stderr)
+        exit(1)
+    }
+}
+
+@MainActor
+private final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var window: NSWindow?
+    private let bridge = EngineBridge()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let hosting = NSHostingView(rootView: ContentView(bridge: bridge))
-        let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 500),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        win.center()
-        win.title = "SwiftAttributeGraph — Mini UI"
-        win.contentView = hosting
-        win.makeKeyAndOrderFront(nil)
+        let hostingController = NSHostingController(rootView: ContentView(bridge: bridge))
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "SwiftAttributeGraph — MiniUIApp"
+        window.setContentSize(NSSize(width: 780, height: 680))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
         NSApp.activate(ignoringOtherApps: true)
-        self.window = win
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -296,74 +401,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-if let snapIdx = CommandLine.arguments.firstIndex(of: "--snapshot"),
-   snapIdx + 1 < CommandLine.arguments.count {
-    let outputPath = CommandLine.arguments[snapIdx + 1]
-    @MainActor
-    func renderSnapshot() {
-        let bridge = EngineBridge()
-        func advance(_ action: () -> Void) {
-            action()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-        }
-        advance { bridge.incrementCounter(by: 2) }
-        advance { bridge.incrementAlt(by: 10) }
-        advance { bridge.toggleIndirectSource() }
-        advance { bridge.setShowDetail(true) }
-        advance { bridge.incrementCounter(by: 2) }
-
-        let view = ContentView(bridge: bridge)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let hosting = NSHostingView(rootView: view)
-        let size = NSSize(width: 700, height: 500)
-        hosting.frame = NSRect(origin: .zero, size: size)
-        hosting.layoutSubtreeIfNeeded()
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            fputs("Failed to allocate bitmap rep\n", stderr)
-            exit(1)
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        guard let png = rep.representation(using: .png, properties: [:]) else {
-            fputs("Failed to encode PNG\n", stderr)
-            exit(1)
-        }
-        try! png.write(to: URL(fileURLWithPath: outputPath))
-        print("Saved snapshot to \(outputPath)")
-    }
-    MainActor.assumeIsolated {
-        renderSnapshot()
-    }
-    exit(0)
-}
-
-if CommandLine.arguments.contains("--verify") {
-    @MainActor
-    func runVerification() {
-        let bridge = EngineBridge()
-        func step(_ label: String, _ action: () -> Void) {
-            action()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-            let s = bridge.snapshot
-            print("[\(label)] counter=\(s.counter) parity=\(s.parityText) parityRuns=\(s.parityRuns) indirect=\(s.activeIndirectValue) detail=\(s.detailText ?? "nil") detailRuns=\(s.detailRuns) nodes=\(s.nodeCount) edges=\(s.edgeCount) subgraphs=\(s.subgraphCount) recalcs=\(s.recalculationCount)")
-        }
-
-        step("initial") {}
-        step("+2 (misma paridad)") { bridge.incrementCounter(by: 2) }
-        step("+1 (cambia paridad)") { bridge.incrementCounter(by: 1) }
-        step("alt +10") { bridge.incrementAlt(by: 10) }
-        step("setSource -> alt") { bridge.toggleIndirectSource() }
-        step("mount detailSubgraph") { bridge.setShowDetail(true) }
-        step("+2 con detail vivo") { bridge.incrementCounter(by: 2) }
-        step("unmount detailSubgraph") { bridge.setShowDetail(false) }
-    }
-    MainActor.assumeIsolated {
+@MainActor
+private func runMain() {
+    let args = CommandLine.arguments
+    if args.contains("--verify") {
         runVerification()
+        return
     }
-    exit(0)
+
+    if args.contains("--bench") {
+        runBenchmark()
+        return
+    }
+
+    if let idx = args.firstIndex(of: "--snapshot"), idx + 1 < args.count {
+        renderSnapshot(to: args[idx + 1])
+        return
+    }
+
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    app.run()
 }
 
-app.setActivationPolicy(.regular)
-let delegate = AppDelegate()
-app.delegate = delegate
-app.run()
+MainActor.assumeIsolated {
+    runMain()
+}

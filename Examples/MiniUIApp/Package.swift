@@ -8,11 +8,19 @@ let package = Package(
         .package(path: "../.."),
     ],
     targets: [
-        .executableTarget(
-            name: "MiniUIApp",
+        .target(
+            name: "MiniUIAppCore",
             dependencies: [
                 .product(name: "SwiftAttributeGraph", package: "SwiftAttributeGraph"),
             ]
+        ),
+        .executableTarget(
+            name: "MiniUIApp",
+            dependencies: ["MiniUIAppCore"]
+        ),
+        .testTarget(
+            name: "MiniUIAppTests",
+            dependencies: ["MiniUIAppCore"]
         ),
     ]
 )
