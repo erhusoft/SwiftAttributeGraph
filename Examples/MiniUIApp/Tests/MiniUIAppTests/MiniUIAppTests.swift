@@ -137,4 +137,27 @@ struct MiniUIAppTests {
             #expect(bridge.snapshot.subgraphCount == 1)
         }
     }
+
+    @Test
+    func realSwiftUIParityAgainstObservableShowsEqualityCutAdvantage() {
+        let report = runRealSwiftUIParityComparison()
+
+        // Dynamic dependency tracking matches between @Observable and SwiftAttributeGraph:
+        #expect(report.native.counterBodyRuns == 4)
+        #expect(report.engine.counterBodyRuns == 4)
+        #expect(report.native.altBodyRuns == 2)
+        #expect(report.engine.altBodyRuns == 2)
+        #expect(report.native.indirectBodyRuns == 4)
+        #expect(report.engine.indirectBodyRuns == 4)
+        #expect(report.native.detailBodyRuns == 3)
+        #expect(report.engine.detailBodyRuns == 3)
+
+        // @Observable re-runs parity body whenever `counter` changes (4 runs),
+        // while SwiftAttributeGraph cuts equal outputs ("Par" == "Par", "Impar" == "Impar") -> 2 runs.
+        #expect(report.native.parityBodyRuns == 4)
+        #expect(report.engine.parityBodyRuns == 2)
+        #expect(report.engineParityNodeRuns == 2)
+        #expect(report.engineDetailNodeRuns == 2)
+        #expect(report.engine.totalBodyRuns < report.native.totalBodyRuns)
+    }
 }

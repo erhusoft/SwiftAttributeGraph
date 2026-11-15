@@ -24,6 +24,9 @@ swift run --package-path Examples/MiniUIApp MiniUIApp --verify
 # Medir latencia por interacción en release (mediana de 9 rondas x 1000 ops) y ratio de refresco:
 swift run -c release --package-path Examples/MiniUIApp MiniUIApp --bench
 
+# Comparar ejecuciones reales de `body` en SwiftUI (`@Observable` nativo vs `SwiftAttributeGraph`):
+swift run --package-path Examples/MiniUIApp MiniUIApp --parity
+
 # Renderizar una captura PNG fuera de pantalla:
 swift run --package-path Examples/MiniUIApp MiniUIApp --snapshot /tmp/miniui-preview.png
 ```

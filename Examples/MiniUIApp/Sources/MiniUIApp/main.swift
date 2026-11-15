@@ -336,6 +336,24 @@ private func runBenchmark() {
 }
 
 @MainActor
+private func runParity() {
+    let report = runRealSwiftUIParityComparison()
+    print("PARITY NATIVE @Observable body runs:")
+    print(
+        "  counter=\(report.native.counterBodyRuns) alt=\(report.native.altBodyRuns) "
+            + "parity=\(report.native.parityBodyRuns) indirect=\(report.native.indirectBodyRuns) "
+            + "detail=\(report.native.detailBodyRuns) total=\(report.native.totalBodyRuns)"
+    )
+    print("PARITY ENGINE SwiftAttributeGraph body runs:")
+    print(
+        "  counter=\(report.engine.counterBodyRuns) alt=\(report.engine.altBodyRuns) "
+            + "parity=\(report.engine.parityBodyRuns) indirect=\(report.engine.indirectBodyRuns) "
+            + "detail=\(report.engine.detailBodyRuns) total=\(report.engine.totalBodyRuns) "
+            + "(engine parityNodeRuns=\(report.engineParityNodeRuns), detailNodeRuns=\(report.engineDetailNodeRuns))"
+    )
+}
+
+@MainActor
 private func renderSnapshot(to path: String) {
     NSApplication.shared.setActivationPolicy(.accessory)
     let bridge = EngineBridge()
@@ -411,6 +429,11 @@ private func runMain() {
 
     if args.contains("--bench") {
         runBenchmark()
+        return
+    }
+
+    if args.contains("--parity") {
+        runParity()
         return
     }
 
