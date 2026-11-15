@@ -38,8 +38,9 @@ de este Mac.** Si lo necesita el siguiente agente, hay que copiarlo.
 ## Pendiente y decisiones abiertas
 1. **Prueba vertical de `State` y `Binding` básicos hecha**, con montaje explícito y una discrepancia nativa declarada
    ([detalle](PRUEBA-VERTICAL-VISTAS.md)). Estudio de seis variantes de lectura e identidad hecho
-   ([resultados](ESTUDIO-LECTURAS-DINAMICAS.md)): también afecta a State directo. Siguiente: aislar las lecturas de Binding
-   por cierres y la identidad del propietario antes de definir el montaje automático;
+   ([resultados](ESTUDIO-LECTURAS-DINAMICAS.md)): también afecta a State directo. Estudio de dueño y construcción hecho
+   ([resultados](ESTUDIO-DUENO-Y-BINDING.md)): el constructor con cierres llama get anticipadamente, a diferencia de nuestro
+   prototipo. Siguiente: especificar proyección de State y Binding con cierres por separado antes del montaje automático;
    `Environment` y `@Observable` siguen pendientes. No hay renderizador.
 2. **M4:** definir cómo se escriben los `body` de la UI. Con cierres síncronos hay un límite de profundidad; con reglas reanudables hay que escribirlos
    por etapas. Es una decisión del dueño.

@@ -125,3 +125,10 @@ interferencia entre ventanas de las propias sondas. Windows no se implementó ni
 Siguiente estudio: separar las lecturas producidas al crear `Binding(get:set:)` de las que ocurren al evaluar al hijo,
 y variar la identidad del propietario de State frente a la del consumidor. Esas pruebas permitirán afinar H2 antes de
 promover una política de propiedades dinámicas a la implementación.
+
+### Continuación: dueño y construcción de Binding
+
+El [estudio siguiente](ESTUDIO-DUENO-Y-BINDING.md) observa que el constructor de Binding con cierres ya llama a get.
+Incluso construirlo y descartarlo dentro del body hace observable una lectura del estado; esto permite explicar parte
+de las evaluaciones del padre sin atribuirlas a una retención desconocida de dependencias del grafo.
+También se contrastan explícitamente las identidades del dueño y del consumidor.

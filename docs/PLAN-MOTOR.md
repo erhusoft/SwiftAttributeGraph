@@ -639,3 +639,19 @@ Fecha: 2026-11-14. [Estudio, predicciones y límites](ESTUDIO-LECTURAS-DINAMICAS
   aristas exactas, lectura activa/doble, recreación y vuelta de nodos/aristas a cero.
 - Solo tests y documentación; sin cambios del motor ni coste nuevo de producción. No se declara paridad general
   ni conocimiento de las estructuras internas de Apple. Windows sigue aplazado.
+
+## 21. Identidad del dueño y construcción de Binding (Mac)
+
+Fecha: 2026-11-14. [Sondas, predicciones y resultados](ESTUDIO-DUENO-Y-BINDING.md).
+
+- SwiftUI llama a get durante `Binding(get:set:)`: una llamada al construir y otra al leer wrappedValue. Refutada
+  la hipótesis de construcción sin lectura, conservando la salida fallida.
+- Construir y descartar ese Binding dentro de body basta para observar reevaluaciones del dueño tras escribir State.
+  Descartar `$state` no produce esas evaluaciones. Seis controles separan construcción, lectura y cuerpos padre/hijo.
+- Recrear solo al consumidor conserva los valores del dueño y elimina una lectura histórica del hijo. Recrear al dueño
+  reinicia valores y selección; el nuevo consumidor no responde a una entrada todavía no leída.
+- Diferencia explícita del prototipo: nuestro Binding difiere get; además State.projectedValue usa el mismo constructor
+  con cierres. La futura adaptación debe distinguir ambos caminos. No se declara compatibilidad de comportamiento.
+- Cinco tests nuevos; Views completo: 23 tests en debug y release, con el known issue previo. El nuevo oráculo del núcleo
+  verifica que retirar al hijo conserva el objeto y retirar al dueño lo libera con vuelta de nodos/aristas a cero.
+- Sin cambios de producción ni costes nuevos del motor. Windows sigue aplazado.
