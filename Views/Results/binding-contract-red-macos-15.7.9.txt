@@ -1,0 +1,74 @@
+warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.
+warning: 'views': failed storing manifest for 'views' in cache: attempt to write a readonly database
+warning: 'swiftattributegraph': failed storing manifest for 'swiftattributegraph' in cache: attempt to write a readonly database
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--58304C5D6DBC2206.txt
+[3/7] Emitting module ShellUITests
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/VerticalSliceTests.swift:102:18: warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+100 |         let scope = ViewGraphScope(graph: graph)
+101 |         var token: Token? = Token()
+102 |         weak var weakToken = token
+    |                  `- warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+103 |         var state: State<Token>? = State(wrappedValue: token!)
+104 |         state!.install(in: scope)
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[4/7] Compiling ShellUITests BindingContractTests.swift
+[5/7] Compiling ShellUITests OwnerBindingProbeTests.swift
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/OwnerBindingProbeTests.swift:205:18: warning: weak variable 'retainedPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
+203 |         let owner = graph.makeSubgraph()
+204 |         var payload: Payload? = Payload(7)
+205 |         weak var retainedPayload = payload
+    |                  `- warning: weak variable 'retainedPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
+206 |         let state = graph.withCurrent(owner) { graph.makeInput(payload!) }
+207 |         payload = nil
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[6/12] Compiling ShellUITests VerticalSliceTests.swift
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/VerticalSliceTests.swift:102:18: warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+100 |         let scope = ViewGraphScope(graph: graph)
+101 |         var token: Token? = Token()
+102 |         weak var weakToken = token
+    |                  `- warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+103 |         var state: State<Token>? = State(wrappedValue: token!)
+104 |         state!.install(in: scope)
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[7/12] Compiling ShellUITests BindingRefreshProbeTests.swift
+[8/12] Compiling ShellUITests SliceTests.swift
+[9/12] Compiling ShellUITests NativeVerticalSliceTests.swift
+[10/12] Compiling ShellUITests DynamicReadProbeTests.swift
+[10/12] Write Objects.LinkFileList
+[11/12] Linking ShellUIPackageTests
+Build complete! (3.19s)
+Test Suite 'Selected tests' started at 2026-11-14 20:27:37.334.
+Test Suite 'ShellUIPackageTests.xctest' started at 2026-11-14 20:27:37.335.
+Test Suite 'ShellUIPackageTests.xctest' passed at 2026-11-14 20:27:37.335.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 20:27:37.335.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SliceTests started.
+◇ Test bindingContractSeparatesEagerClosuresFromStateProjection() started.
+✘ Test bindingContractSeparatesEagerClosuresFromStateProjection() recorded an issue at BindingContractTests.swift:28:9: Expectation failed: (graph.inputCount(of: explicit.id) → 0) == 1
+✘ Test bindingContractSeparatesEagerClosuresFromStateProjection() recorded an issue at BindingContractTests.swift:34:9: Expectation failed: (closureRuns == 2 → false) && (projectionRuns == 1 → <not evaluated>)
+✘ Test bindingContractSeparatesEagerClosuresFromStateProjection() failed after 0.001 seconds with 2 issues.
+◇ Test bindingContractCopiesAndWritesDoNotAddGetterCalls() started.
+✘ Test bindingContractCopiesAndWritesDoNotAddGetterCalls() recorded an issue at BindingContractTests.swift:42:9: Expectation failed: (gets → 0) == 1
+✘ Test bindingContractCopiesAndWritesDoNotAddGetterCalls() recorded an issue at BindingContractTests.swift:44:9: Expectation failed: (gets → 0) == 1
+✘ Test bindingContractCopiesAndWritesDoNotAddGetterCalls() recorded an issue at BindingContractTests.swift:46:9: Expectation failed: (value == 9 → true) && (gets == 1 → false)
+✘ Test bindingContractCopiesAndWritesDoNotAddGetterCalls() recorded an issue at BindingContractTests.swift:48:9: Expectation failed: (gets → 1) == 2
+✘ Test bindingContractCopiesAndWritesDoNotAddGetterCalls() failed after 0.001 seconds with 4 issues.
+◇ Test ownerBindingPrototypeMatchesNativeConstructionReads() started.
+✘ Test ownerBindingPrototypeMatchesNativeConstructionReads() recorded an issue at OwnerBindingProbeTests.swift:194:9: Expectation failed: (gets → 0) == 1
+✘ Test ownerBindingPrototypeMatchesNativeConstructionReads() recorded an issue at OwnerBindingProbeTests.swift:196:9: Expectation failed: (gets → 1) == 2
+✘ Test ownerBindingPrototypeMatchesNativeConstructionReads() failed after 0.001 seconds with 2 issues.
+OwnerBinding prototype: afterConstruction=1 afterRead=2; native=1,2
+✘ Suite SliceTests failed after 0.001 seconds with 8 issues.
+✘ Test run with 3 tests in 1 suite failed after 0.001 seconds with 8 issues.

@@ -39,3 +39,7 @@ el banco, sin implementar entrada de plataforma.
 
 La [prueba vertical](../docs/PRUEBA-VERTICAL-VISTAS.md) registra vida de ramas, poda, profundidad, rendimiento y el contraste
 con SwiftUI real. Hay **una discrepancia conocida de recuento de body** al escribir un Binding anteriormente leído.
+
+El [contrato mínimo de Binding](../docs/CONTRATO-BINDING.md) distingue el constructor público con lectura anticipada
+mediante get de la proyección `$state`, que no lee al crearse. La actualización dinámica de propiedades y la
+reconciliación de hijos continúan pendientes; esta adaptación no completa la paridad de los recuentos de body.

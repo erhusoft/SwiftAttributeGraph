@@ -117,3 +117,9 @@ Las predicciones de reinicio y de reevaluación al descartar el Binding con cier
 Siguiente paso: especificar y probar por separado la construcción pública de Binding con cierres y la proyección de State,
 incluida la actualización del hijo que recibe un Binding sin consumirlo. Después se decidirá la implementación de esa
 capa. Estos experimentos todavía no justifican cambiar las dependencias exactas del núcleo.
+
+### Seguimiento: contrato de construcción adaptado
+
+El [contraste final y contrato](CONTRATO-BINDING.md) separa reconstrucción de argumentos de escritura del dato. ShellUI
+ya distingue constructor público con get anticipado y proyección de State sin esa lectura; queda cerrada la diferencia
+de construcción descrita arriba. La actualización dinámica y la reconciliación completas siguen pendientes.

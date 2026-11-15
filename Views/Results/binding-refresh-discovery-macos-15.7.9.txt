@@ -1,0 +1,43 @@
+warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.
+warning: 'views': failed storing manifest for 'views' in cache: attempt to write a readonly database
+warning: 'swiftattributegraph': failed storing manifest for 'swiftattributegraph' in cache: attempt to write a readonly database
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Emitting module ShellUITests
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/VerticalSliceTests.swift:102:18: warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+100 |         let scope = ViewGraphScope(graph: graph)
+101 |         var token: Token? = Token()
+102 |         weak var weakToken = token
+    |                  `- warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+103 |         var state: State<Token>? = State(wrappedValue: token!)
+104 |         state!.install(in: scope)
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[4/5] Compiling ShellUITests BindingRefreshProbeTests.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking ShellUIPackageTests
+Build complete! (1.78s)
+Test Suite 'Selected tests' started at 2026-11-14 20:28:13.500.
+Test Suite 'ShellUIPackageTests.xctest' started at 2026-11-14 20:28:13.501.
+Test Suite 'ShellUIPackageTests.xctest' passed at 2026-11-14 20:28:13.501.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 20:28:13.501.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SliceTests started.
+◇ Test bindingRefreshSeparatesReconstructionFromSourceWrites() started.
+BindingRefresh fresh read=false: parent=[1, 0, 1, 1, 0, 0, 1] child=[1, 0, 1, 1, 0, 0, 1] get=[2, 0, 2, 2, 0, 0, 2] values=["fixed", "fixed", "fixed", "fixed", "fixed", "fixed", "fixed"]
+BindingRefresh fresh read=true: parent=[1, 0, 1, 1, 0, 0, 1] child=[1, 0, 1, 1, 0, 0, 1] get=[2, 0, 2, 2, 0, 0, 2] values=["0", "0", "1", "1", "1", "1", "2"]
+BindingRefresh stable read=false: parent=[1, 0, 1, 1, 0, 0, 1] child=[0, 0, 0, 0, 0, 0, 0] get=[0, 0, 0, 0, 0, 0, 0] values=["fixed", "fixed", "fixed", "fixed", "fixed", "fixed", "fixed"]
+BindingRefresh stable read=true: parent=[1, 0, 1, 1, 0, 0, 1] child=[0, 0, 0, 0, 0, 0, 0] get=[0, 0, 0, 0, 0, 0, 0] values=["0", "0", "0", "0", "0", "0", "0"]
+BindingRefresh projected read=false: parent=[1, 0, 1, 1, 0, 0, 1] child=[0, 0, 1, 0, 0, 0, 1] get=[0, 0, 0, 0, 0, 0, 0] values=["fixed", "fixed", "fixed", "fixed", "fixed", "fixed", "fixed"]
+BindingRefresh projected read=true: parent=[1, 0, 1, 1, 0, 0, 1] child=[0, 1, 1, 0, 0, 1, 1] get=[0, 0, 0, 0, 0, 0, 0] values=["0", "1", "1", "1", "1", "2", "2"]
+✔ Test bindingRefreshSeparatesReconstructionFromSourceWrites() passed after 5.087 seconds.
+✔ Suite SliceTests passed after 5.087 seconds.
+✔ Test run with 1 test in 1 suite passed after 5.087 seconds.

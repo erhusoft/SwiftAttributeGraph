@@ -1,11 +1,19 @@
-/// A read/write projection of storage. This experimental slice supports closure-based bindings only.
+/// A read/write projection of storage. Construction follows the measured closure/state distinction;
+/// SwiftUI's full dynamic-property update and reconciliation lifecycle is not implemented.
 @propertyWrapper
 public struct Binding<Value> {
     private let get: () -> Value
     private let set: (Value) -> Void
 
-    /// Creates a binding with explicit accessors.
+    /// Creates a binding with explicit accessors, calling `get` once during construction.
+    /// Each subsequent `wrappedValue` read calls `get` again.
     public init(get: @escaping () -> Value, set: @escaping (Value) -> Void) {
+        self.init(projecting: get, set: set)
+        _ = get()
+    }
+
+    /// Projects existing state storage without reading it during construction.
+    init(projecting get: @escaping () -> Value, set: @escaping (Value) -> Void) {
         self.get = get
         self.set = set
     }

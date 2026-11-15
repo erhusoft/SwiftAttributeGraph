@@ -38,9 +38,9 @@ public struct State<Value> {
         nonmutating set { storage.value = newValue }
     }
 
-    /// Creates a binding that shares this state's storage.
+    /// Creates a binding that shares this state's storage without reading its value.
     public var projectedValue: Binding<Value> {
-        Binding(get: { storage.value }, set: { storage.value = $0 })
+        Binding(projecting: { storage.value }, set: { storage.value = $0 })
     }
 
     var attributeID: AttributeID? { storage.attribute?.id }

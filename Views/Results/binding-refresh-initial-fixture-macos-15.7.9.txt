@@ -1,0 +1,71 @@
+warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.
+warning: 'views': failed storing manifest for 'views' in cache: attempt to write a readonly database
+warning: 'swiftattributegraph': failed storing manifest for 'swiftattributegraph' in cache: attempt to write a readonly database
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--58304C5D6DBC2206.txt
+[3/6] Emitting module ShellUITests
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/VerticalSliceTests.swift:102:18: warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+100 |         let scope = ViewGraphScope(graph: graph)
+101 |         var token: Token? = Token()
+102 |         weak var weakToken = token
+    |                  `- warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+103 |         var state: State<Token>? = State(wrappedValue: token!)
+104 |         state!.install(in: scope)
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[4/6] Compiling ShellUITests BindingRefreshProbeTests.swift
+[5/11] Compiling ShellUITests VerticalSliceTests.swift
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/VerticalSliceTests.swift:102:18: warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+100 |         let scope = ViewGraphScope(graph: graph)
+101 |         var token: Token? = Token()
+102 |         weak var weakToken = token
+    |                  `- warning: weak variable 'weakToken' was never mutated; consider changing to 'let' constant [#WeakMutability]
+103 |         var state: State<Token>? = State(wrappedValue: token!)
+104 |         state!.install(in: scope)
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[6/11] Compiling ShellUITests NativeVerticalSliceTests.swift
+[7/11] Compiling ShellUITests DynamicReadProbeTests.swift
+[8/11] Compiling ShellUITests SliceTests.swift
+[9/11] Compiling ShellUITests OwnerBindingProbeTests.swift
+/Users/erhusoft/SwiftAttributeGraph/Views/Tests/ShellUITests/OwnerBindingProbeTests.swift:205:18: warning: weak variable 'retainedPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
+203 |         let owner = graph.makeSubgraph()
+204 |         var payload: Payload? = Payload(7)
+205 |         weak var retainedPayload = payload
+    |                  `- warning: weak variable 'retainedPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
+206 |         let state = graph.withCurrent(owner) { graph.makeInput(payload!) }
+207 |         payload = nil
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[9/11] Write Objects.LinkFileList
+[10/11] Linking ShellUIPackageTests
+Build complete! (3.11s)
+Test Suite 'Selected tests' started at 2026-11-14 20:26:56.717.
+Test Suite 'ShellUIPackageTests.xctest' started at 2026-11-14 20:26:56.718.
+Test Suite 'ShellUIPackageTests.xctest' passed at 2026-11-14 20:26:56.718.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 20:26:56.718.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SliceTests started.
+◇ Test bindingRefreshSeparatesReconstructionFromSourceWrites() started.
+BindingRefresh fresh read=false: parent=[1, 0, 1, 1, 0, 0, 1] child=[1, 0, 1, 1, 0, 0, 1] get=[3, 0, 3, 3, 0, 0, 3] values=["fixed", "fixed", "fixed", "fixed", "fixed", "fixed", "fixed"]
+BindingRefresh fresh read=true: parent=[1, 0, 1, 1, 0, 0, 1] child=[1, 0, 1, 1, 0, 0, 1] get=[3, 0, 3, 3, 0, 0, 3] values=["0", "0", "1", "1", "1", "1", "2"]
+BindingRefresh stable read=false: parent=[1, 0, 1, 1, 0, 0, 1] child=[0, 0, 1, 0, 0, 0, 1] get=[1, 0, 2, 1, 0, 0, 2] values=["fixed", "fixed", "fixed", "fixed", "fixed", "fixed", "fixed"]
+BindingRefresh stable read=true: parent=[1, 0, 1, 1, 0, 0, 1] child=[0, 0, 1, 0, 0, 0, 1] get=[1, 0, 2, 1, 0, 0, 2] values=["0", "0", "1", "1", "1", "1", "2"]
+✘ Test bindingRefreshSeparatesReconstructionFromSourceWrites() recorded an issue at BindingRefreshProbeTests.swift:87:17: Expectation failed: (parents → [1, 1, 1, 1, 0, 1, 1]) == [1, 0, 1, 1, 0, 0, 1]
+± inserted [1, 1], removed [0, 0]
+✘ Test bindingRefreshSeparatesReconstructionFromSourceWrites() recorded an issue at BindingRefreshProbeTests.swift:90:41: Expectation failed: (children[1] == (read ? 1 : 0) → false) && (children[5] == (read ? 1 : 0) → <not evaluated>)
+BindingRefresh projected read=false: parent=[1, 1, 1, 1, 0, 1, 1] child=[0, 1, 0, 0, 0, 1, 0] get=[1, 1, 1, 1, 0, 1, 1] values=["fixed", "fixed", "fixed", "fixed", "fixed", "fixed", "fixed"]
+✘ Test bindingRefreshSeparatesReconstructionFromSourceWrites() recorded an issue at BindingRefreshProbeTests.swift:87:17: Expectation failed: (parents → [1, 1, 1, 1, 0, 1, 1]) == [1, 0, 1, 1, 0, 0, 1]
+± inserted [1, 1], removed [0, 0]
+BindingRefresh projected read=true: parent=[1, 1, 1, 1, 0, 1, 1] child=[0, 1, 0, 0, 0, 1, 0] get=[1, 1, 1, 1, 0, 1, 1] values=["0", "1", "1", "1", "1", "2", "2"]
+✘ Test bindingRefreshSeparatesReconstructionFromSourceWrites() failed after 5.096 seconds with 3 issues.
+✘ Suite SliceTests failed after 5.096 seconds with 3 issues.
+✘ Test run with 1 test in 1 suite failed after 5.096 seconds with 3 issues.

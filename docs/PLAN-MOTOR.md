@@ -655,3 +655,21 @@ Fecha: 2026-11-14. [Sondas, predicciones y resultados](ESTUDIO-DUENO-Y-BINDING.m
 - Cinco tests nuevos; Views completo: 23 tests en debug y release, con el known issue previo. El nuevo oráculo del núcleo
   verifica que retirar al hijo conserva el objeto y retirar al dueño lo libera con vuelta de nodos/aristas a cero.
 - Sin cambios de producción ni costes nuevos del motor. Windows sigue aplazado.
+
+## 22. Contrato mínimo de construcción de Binding adaptado (Mac)
+
+Fecha: 2026-11-14. [Contrato, sondas y límites](CONTRATO-BINDING.md).
+
+- Separadas reconstrucción del padre y escritura del dato en seis variantes nativas. Un Binding con cierres nuevo puede
+  evaluar al hijo con el dato igual; conservarlo sobre almacenamiento no observable deja al hijo sin actualizar.
+  La proyección de State tiene un perfil diferente. No se deduce una regla universal de reconciliación.
+- ShellUI ahora llama get al construir Binding(get:set:); State.projectedValue usa un inicializador interno sin lectura
+  anticipada. Las firmas públicas se mantienen. No hay cambios del núcleo ni un recorrido nuevo.
+- TDD: tres tests fallan antes de implementar (ocho aserciones). Una mutación del camino de proyección detecta una arista
+  y una reevaluación indebidas (dos fallos); se restaura y se comprueba el verde.
+- Views completo: 27 tests en debug y release, con el known issue previo. Ejemplos compatibles por type-check en ambos
+  módulos. Los nuevos oráculos verifican aristas, evaluación perezosa y vuelta de nodos/aristas a cero.
+- Release: 10.000 construcciones + lecturas, **4,472 ms** con constructor público y **4,325 ms** con proyección (una muestra).
+  El público tiene dos llamadas a get por iteración y la proyección una. No es p99 de UI ni comparación nativa.
+- Quedan pendientes actualización dinámica, caché para comparación y reconciliación de argumentos de hijos. Se cierra
+  solo la diferencia de lectura en construcción, sin declarar paridad completa. Windows continúa aplazado.

@@ -188,13 +188,13 @@ extension SliceTests {
     }
 }
 extension SliceTests {
-    @Test func ownerBindingPrototypeStillDefersItsGetter() {
+    @Test func ownerBindingPrototypeMatchesNativeConstructionReads() {
         var gets = 0
         let binding = ShellUI.Binding(get: { gets += 1; return 7 }, set: { _ in })
-        #expect(gets == 0) // explicit prototype gap: native construction calls get once
-        #expect(binding.wrappedValue == 7)
         #expect(gets == 1)
-        print("OwnerBinding prototype: afterConstruction=0 afterRead=1; native=1,2")
+        #expect(binding.wrappedValue == 7)
+        #expect(gets == 2)
+        print("OwnerBinding prototype: afterConstruction=1 afterRead=2; native=1,2")
     }
 
     @Test func ownerBindingGraphOwnerRetainsStateUntilOwnerRemoval() {
