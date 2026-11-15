@@ -102,3 +102,33 @@ Una vez respondidas las preguntas **[dueño]**:
 - `PLAN-MOTOR.md` §2 y §4 se actualizan con las respuestas.
 - `Package.swift` pasa a `swift-tools-version: 6.2` y se crea la estructura de carpetas de §2.
 - Empieza M0.
+
+## 6. Preguntas de comportamiento frente al AttributeGraph de Apple
+
+Añadido tras M0–M9. La hipótesis de trabajo es que **el grafo construido coincide con el AttributeGraph original**.
+Como Apple no publica su código, la única vía es la ingeniería inversa por comportamiento: se formula una pregunta, se
+**fija la predicción antes de medir**, se observa en el nativo (`NativeProbe`) y en nuestro motor, y se comparan
+«ejecuta / salta» y los contadores por regla. Acertar sube la confianza sin demostrar nada general; una divergencia
+obliga a corregir el motor o la hipótesis.
+
+Una buena pregunta se responde observando, puede salir mal y es estrecha (una sola cosa por escenario).
+Estado: **abiertas**, salvo lo ya cubierto por los ocho escenarios de `ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md` y
+`ESTUDIO-DIAMANTES-NATIVOS.md` (reglas `Int`, grafos pequeños).
+
+| # | Tema | Pregunta |
+|---|---|---|
+| C1 | Reglas con estado | Si la regla no cambia su valor, ¿cuenta como cambio para sus dependientes? |
+| C2 | Reglas con estado | ¿Se ejecuta cuando cambia una entrada que no leyó la última vez? |
+| C3 | Reglas con estado | ¿Ve el valor anterior si se invalidó y se restauró antes de leer? |
+| C4 | Selectores | Al cambiar de rama, ¿se poda de inmediato la dependencia que ya no se lee? |
+| C5 | Selectores | ¿Importa el orden de lectura para el corte (leer A antes que B)? |
+| C6 | Selectores | Con varias entradas que cambian a la vez, ¿cuántas veces ejecuta? |
+| C7 | Diamantes | ¿Puede una regla ver una mezcla de valores viejos y nuevos? |
+| C8 | Diamantes | Si se pide primero la hoja o la raíz, ¿cambia el número de ejecuciones? |
+| C9 | Vida | Si se invalida el subgrafo durante una regla, ¿termina o falla? |
+| C10 | Vida | ¿Qué ocurre al leer un atributo ya borrado? |
+| C11 | Escrituras | ¿Escribir el mismo valor propaga algo? |
+| C12 | Escrituras | Dentro de una regla, ¿se permite escribir? |
+| C13 | Ciclos | ¿Un ciclo falla, se corta o se queda colgado? |
+
+**Límites:** lo observado vale para el runtime y chip medidos (macOS 15.7.9, M1) y puede cambiar con otra versión.
