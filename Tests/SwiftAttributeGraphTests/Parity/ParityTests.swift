@@ -229,4 +229,156 @@ import Testing
         graph.setValue(222, for: b)
         #expect(graph.value(of: rule) == 100 && runs.runs == 3)
     }
+
+    @Test func initialValueRuleWithoutFirstWriteHasValueFalseBeforeEvaluationAndCutsDownstream() {
+        struct InitialNoFirstWriteRule: StatefulRule {
+            static var initialValue: Int? { 77 }
+            typealias Value = Int
+            let input: Attribute<Int>
+            let runs: Counter
+
+            mutating func updateValue(_ context: inout RuleContext<Int>) {
+                runs.runs += 1
+                let x = input.value
+                if x != 10 && x != 15 {
+                    context.value = x * 2
+                }
+            }
+        }
+
+        let graph = Graph()
+        let input = graph.makeInput(10)
+        let rRuns = Counter(), downRuns = Counter()
+        let rule = graph.makeStatefulRule(InitialNoFirstWriteRule(input: input, runs: rRuns))
+        let down = graph.makeRule { downRuns.runs += 1; return rule.value + 1 }
+
+        #expect(!graph.hasValue(of: rule))
+        #expect(graph.value(of: down) == 78)
+        #expect(graph.hasValue(of: rule))
+        #expect((rRuns.runs, downRuns.runs) == (1, 1))
+
+        graph.setValue(15, for: input)
+        #expect(graph.value(of: down) == 78)
+        #expect((rRuns.runs, downRuns.runs) == (2, 1))
+
+        graph.setValue(20, for: input)
+        #expect(graph.value(of: down) == 41)
+        #expect((rRuns.runs, downRuns.runs) == (3, 2))
+    }
+
+    @Test func nestedWithoutUpdateAndWithoutSubgraphInvalidationRestoreContext() {
+        let graph = Graph()
+        let a = graph.makeInput(1), b = graph.makeInput(100), c = graph.makeInput(1000)
+        let runs = Counter()
+        let out = graph.makeRule {
+            runs.runs += 1
+            let va = a.value
+            let vb = graph.withoutUpdate {
+                graph.withoutUpdate { b.value }
+            }
+            let vc = c.value
+            return va + vb + vc
+        }
+
+        #expect(graph.value(of: out) == 1101 && runs.runs == 1)
+        graph.setValue(200, for: b)
+        #expect(graph.value(of: out) == 1101 && runs.runs == 1)
+        graph.setValue(2000, for: c)
+        #expect(graph.value(of: out) == 2201 && runs.runs == 2)
+
+        let sub1 = graph.makeSubgraph()
+        let sub2 = graph.makeSubgraph()
+        let x1 = graph.withCurrent(sub1) { graph.makeInput(11) }
+        let x2 = graph.withCurrent(sub2) { graph.makeInput(22) }
+        let w1 = WeakAttribute(x1), w2 = WeakAttribute(x2)
+        var between: [Int?] = []
+
+        graph.withoutSubgraphInvalidation {
+            graph.invalidate(sub1)
+            graph.withoutSubgraphInvalidation {
+                graph.invalidate(sub2)
+            }
+            between = [graph.value(of: w1), graph.value(of: w2)]
+        }
+
+        #expect(between == [11, 22])
+        #expect(graph.value(of: w1) == nil && graph.value(of: w2) == nil)
+    }
+
+    @Test func reentrantSubgraphInvalidationInObserverRunsSeriallyWithoutDuplicates() {
+        final class TrackedDeinit {
+            let name: String
+            let log: (String) -> Void
+            init(_ name: String, log: @escaping (String) -> Void) { self.name = name; self.log = log }
+            deinit { log("deinit(\(name))") }
+        }
+
+        let graph = Graph()
+        var events: [String] = []
+        let sub1 = graph.makeSubgraph()
+        let sub2 = graph.makeSubgraph()
+        let sub3 = graph.makeSubgraph()
+
+        func makeTracked(_ name: String, in sub: Subgraph, value: Int) -> Attribute<Int> {
+            let obj = TrackedDeinit(name) { events.append($0) }
+            return graph.withCurrent(sub) { graph.makeRule { _ = obj; return value } }
+        }
+
+        let r1 = makeTracked("obj1", in: sub1, value: 1)
+        let r2 = makeTracked("obj2", in: sub2, value: 2)
+        let r3 = makeTracked("obj3", in: sub3, value: 3)
+        _ = (graph.value(of: r1), graph.value(of: r2), graph.value(of: r3))
+
+        let t1 = graph.observe(sub1) {
+            events.append("notice1-start")
+            graph.invalidate(sub2)
+            events.append("notice1-end")
+        }
+        let t2 = graph.observe(sub2) {
+            events.append("notice2-start")
+            graph.invalidate(sub3)
+            events.append("notice2-end")
+        }
+        let t3 = graph.observe(sub3) {
+            events.append("notice3")
+        }
+        _ = (t1, t2, t3)
+
+        graph.invalidate(sub1)
+        #expect(!graph.isValid(sub1) && !graph.isValid(sub2) && !graph.isValid(sub3))
+        #expect(graph.nodeCount == 0)
+        #expect(events == [
+            "notice1-start", "notice1-end", "deinit(obj1)",
+            "notice2-start", "notice2-end", "deinit(obj2)",
+            "notice3", "deinit(obj3)",
+        ])
+    }
+
+    @Test func weakAttributeNeverResurrectsAcrossTwoThousandSubgraphReuseCycles() {
+        let graph = Graph()
+        let sub0 = graph.makeSubgraph()
+        let a0 = graph.withCurrent(sub0) { graph.makeInput(999) }
+        let w0 = WeakAttribute(a0)
+        var staleWeaks = [w0]
+        graph.invalidate(sub0)
+
+        for i in 0..<2_000 {
+            let sub = graph.makeSubgraph()
+            let (x, r) = graph.withCurrent(sub) {
+                let x = graph.makeInput(i)
+                let r = graph.makeRule { x.value + 1 }
+                return (x, r)
+            }
+            _ = graph.value(of: r)
+            if i % 20 == 0 {
+                staleWeaks.append(WeakAttribute(x))
+            }
+            graph.invalidate(sub)
+            #expect(graph.value(of: w0) == nil)
+        }
+
+        #expect(staleWeaks.allSatisfy { graph.value(of: $0) == nil })
+        #expect(graph.nodeCount == 0)
+        #expect(graph.liveSubgraphCount == 1)
+    }
 }

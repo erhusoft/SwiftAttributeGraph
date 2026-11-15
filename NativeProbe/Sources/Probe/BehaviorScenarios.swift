@@ -1054,3 +1054,195 @@ func statefulRuleDependencyPrunedWithoutWritingNewValue() {
     precondition([v1, v2, v3, v4] == [100, 100, 100, 100] && [r1, r2, r3, r4] == [1, 2, 2, 3])
     print("stateful-dependency-pruned-without-write|values=[\(v1), \(v2), \(v3), \(v4)]|runs=[\(r1), \(r2), \(r3), \(r4)]")
 }
+
+func initialValueNoFirstWrite() {
+    let d = Driver()
+    defer { d.close() }
+    let input = d.input(10)
+    var rRuns = 0
+    var downRuns = 0
+
+    let r = d.statefulRule(initialValue: 77) { (ctx: StatefulHandleContext<Int>) in
+        rRuns += 1
+        let x = d.read(input)
+        if x != 10 && x != 15 {
+            ctx.value = x * 2
+        }
+    }
+    let down = d.rule { () -> Int in
+        downRuns += 1
+        return d.read(r) + 1
+    }
+
+    let hvBeforeRead = d.hasValue(of: r)
+    let v1 = d.read(down)
+    let hvAfterFirstRead = d.hasValue(of: r)
+    let s1 = (rRuns, downRuns)
+
+    // Write `15`: `r` runs and reads `input`, still does not write `ctx.value`, keeps 77.
+    d.write(15, to: input)
+    let v2 = d.read(down)
+    let s2 = (rRuns, downRuns)
+
+    // Write `20`: `r` runs and writes `40`, downstream re-runs.
+    d.write(20, to: input)
+    let v3 = d.read(down)
+    let s3 = (rRuns, downRuns)
+
+    precondition([hvBeforeRead, hvAfterFirstRead] == [false, true])
+    precondition([v1, v2, v3] == [78, 78, 41])
+    precondition([s1.0, s2.0, s3.0] == [1, 2, 3] && [s1.1, s2.1, s3.1] == [1, 1, 2])
+    print(
+        "initial-value-no-first-write|hasValue=[\(hvBeforeRead), \(hvAfterFirstRead)]|"
+            + "values=[\(v1), \(v2), \(v3)]|runs=[\(s1), \(s2), \(s3)]"
+    )
+}
+
+func nestedSpecialScopesRestoreContext() {
+    let d = Driver()
+    defer { d.close() }
+
+    // Part A: nested `withoutUpdate` inside a tracked rule, followed by a tracked read after exiting.
+    let a = d.input(1)
+    let b = d.input(100)
+    let c = d.input(1000)
+    var outRuns = 0
+    let out = d.rule { () -> Int in
+        outRuns += 1
+        let va = d.read(a)
+        let vb = d.withoutUpdate {
+            d.withoutUpdate {
+                d.read(b)
+            }
+        }
+        let vc = d.read(c)
+        return va + vb + vc
+    }
+
+    let v1 = d.read(out)
+    let r1 = outRuns
+    d.write(200, to: b)
+    let v2 = d.read(out)
+    let r2 = outRuns
+    d.write(2000, to: c)
+    let v3 = d.read(out)
+    let r3 = outRuns
+
+    // Part B: nested `withoutSubgraphInvalidation`.
+    let sub1 = d.makeSubgraph()
+    let sub2 = d.makeSubgraph()
+    let x1 = d.withSubgraph(sub1) { d.input(11) }
+    let x2 = d.withSubgraph(sub2) { d.input(22) }
+    let w1 = d.weak(x1)
+    let w2 = d.weak(x2)
+    var aliveBetweenScopes: [Int?] = []
+
+    d.withoutSubgraphInvalidation {
+        d.invalidate(sub1)
+        d.withoutSubgraphInvalidation {
+            d.invalidate(sub2)
+        }
+        // After exiting the inner scope, the outer scope must still defer destruction of both sub1 and sub2.
+        aliveBetweenScopes = [d.readWeak(w1), d.readWeak(w2)]
+    }
+    let aliveAfterOuter = [d.readWeak(w1), d.readWeak(w2)]
+
+    precondition([v1, v2, v3] == [1101, 1101, 2201] && [r1, r2, r3] == [1, 1, 2])
+    precondition(aliveBetweenScopes == [11, 22] && aliveAfterOuter == [nil, nil])
+    print(
+        "nested-special-scopes|values=[\(v1), \(v2), \(v3)]|runs=[\(r1), \(r2), \(r3)]|"
+            + "between=\(aliveBetweenScopes.map { $0.map(String.init) ?? "nil" })|"
+            + "afterOuter=\(aliveAfterOuter.map { $0.map(String.init) ?? "nil" })"
+    )
+}
+
+func reentrantSubgraphInvalidationInObserver() {
+    final class TrackedDeinit {
+        let name: String
+        let log: (String) -> Void
+        init(_ name: String, log: @escaping (String) -> Void) {
+            self.name = name
+            self.log = log
+        }
+        deinit { log("deinit(\(name))") }
+    }
+
+    let d = Driver()
+    defer { d.close() }
+    var events: [String] = []
+
+    let sub1 = d.makeSubgraph()
+    let sub2 = d.makeSubgraph()
+    let sub3 = d.makeSubgraph()
+
+    func makeTracked(_ name: String, in sub: SubgraphHandle, value: Int) -> Handle<Int> {
+        let obj = TrackedDeinit(name) { events.append($0) }
+        return d.withSubgraph(sub) { d.rule { _ = obj; return value } }
+    }
+
+    let r1 = makeTracked("obj1", in: sub1, value: 1)
+    let r2 = makeTracked("obj2", in: sub2, value: 2)
+    let r3 = makeTracked("obj3", in: sub3, value: 3)
+    _ = (d.read(r1), d.read(r2), d.read(r3))
+
+    let t1 = d.observeSubgraph(sub1) {
+        events.append("notice1-start")
+        d.invalidate(sub2)
+        events.append("notice1-end")
+    }
+    let t2 = d.observeSubgraph(sub2) {
+        events.append("notice2-start")
+        d.invalidate(sub3)
+        events.append("notice2-end")
+    }
+    let t3 = d.observeSubgraph(sub3) {
+        events.append("notice3")
+    }
+    _ = (t1, t2, t3)
+
+    d.invalidate(sub1)
+    let validAfter = [!d.isValid(sub1), !d.isValid(sub2), !d.isValid(sub3)]
+    precondition(validAfter == [true, true, true] && d.nodeCount == 0)
+    precondition(
+        events == [
+            "notice1-start", "notice1-end", "deinit(obj1)",
+            "notice2-start", "notice2-end", "deinit(obj2)",
+            "notice3", "deinit(obj3)",
+        ]
+    )
+    print("reentrant-subgraph-invalidation|validAfter=\(validAfter)|nodes=\(d.nodeCount)|events=\(events)")
+}
+
+func weakAttributeNeverResurrectsAcrossReuse() {
+    let d = Driver()
+    defer { d.close() }
+
+    var staleWeaks: [WeakHandle<Int>] = []
+    let sub0 = d.makeSubgraph()
+    let a0 = d.withSubgraph(sub0) { d.input(999) }
+    let w0 = d.weak(a0)
+    staleWeaks.append(w0)
+    d.invalidate(sub0)
+
+    var resurrectionCount = 0
+    for i in 0..<2_000 {
+        let sub = d.makeSubgraph()
+        let (x, r) = d.withSubgraph(sub) { () -> (Handle<Int>, Handle<Int>) in
+            let x = d.input(i)
+            let r = d.rule { d.read(x) + 1 }
+            return (x, r)
+        }
+        _ = d.read(r)
+        if i % 20 == 0 {
+            staleWeaks.append(d.weak(x))
+        }
+        d.invalidate(sub)
+        if d.readWeak(w0) != nil {
+            resurrectionCount += 1
+        }
+    }
+
+    let nonNilAtEnd = staleWeaks.filter { d.readWeak($0) != nil }.count
+    precondition(resurrectionCount == 0 && nonNilAtEnd == 0 && d.nodeCount == 0)
+    print("weak-attribute-slot-reuse|staleCount=\(staleWeaks.count)|resurrectionsDuring=\(resurrectionCount)|nonNilAtEnd=\(nonNilAtEnd)|nodesAfter=\(d.nodeCount)")
+}

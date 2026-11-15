@@ -67,6 +67,13 @@ final class Driver {
     }
     func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
     func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
+    @discardableResult
+    func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> AnyObject {
+        final class TokenBox { init(_ cancel: @escaping () -> Void) { _ = cancel } }
+        let id = subgraph.addObserver(body)
+        return TokenBox { _ = id }
+    }
+    var nodeCount: Int { Int(graph.counter(for: .nodes)) }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
@@ -208,6 +215,12 @@ final class Driver {
     }
     func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
     func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
+    @discardableResult
+    func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> AnyObject {
+        final class TokenBox { let token: SubgraphObservationToken; init(_ token: SubgraphObservationToken) { self.token = token } }
+        return TokenBox(graph.observe(subgraph, onInvalidate: body))
+    }
+    var nodeCount: Int { graph.nodeCount }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
@@ -409,3 +422,10 @@ hasValueValidateAndUpdateValue()
 withoutSubgraphInvalidationAndAncestor()
 breadthFirstSearchTraversal()
 attributeKeyPathDynamicMember()
+branchSwitchAndInvalidateBeforeRead()
+indirectOriginalDiesWhileRedirected()
+statefulRuleDependencyPrunedWithoutWritingNewValue()
+initialValueNoFirstWrite()
+nestedSpecialScopesRestoreContext()
+reentrantSubgraphInvalidationInObserver()
+weakAttributeNeverResurrectsAcrossReuse()

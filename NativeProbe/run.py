@@ -32,6 +32,10 @@ SCENARIOS = [
     "branch-switch-and-invalidate-before-read",
     "indirect-original-dies-while-redirected",
     "stateful-dependency-pruned-without-write",
+    "initial-value-no-first-write",
+    "nested-special-scopes",
+    "reentrant-subgraph-invalidation",
+    "weak-attribute-slot-reuse",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
