@@ -132,3 +132,27 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 | 14 | `weak-attribute-in-rule` | C9, C10, C15 | Idéntico (`reader=[10, 20, 20, -1]`, `stateful=[110, 120, 120, -999]`, `runsBeforeTick=[2, 2]`, `runsAfterTick=[3, 3]`) |
 | 15 | `indirect-rule-and-redirect` | M6, C18 | Idéntico (`values=[11, 11, 11, 11, 26, 22, 25]`, `runs=[1, 1, 2, 2, 3, 4, 5]`) |
 | 16 | `focus-keypath-cut` | M6, C14 | Idéntico (`values=[20, 20, 50, 50]`, `runs=[1, 1, 2, 2]`) |
+| 17 | `slot-reuse-input-order` | C20 | Idéntico (`v1=111`, `v2=122`, `joinRuns=2`, `evalOrder=["second", "reused"]`) |
+| 18 | `duplicate-writes-before-read` | C21 | Idéntico (`v=[15, 15]`, `u=[24, 24]`, `runs=[3, 3]`) |
+| 19 | `double-read-and-prune` | C22 | Idéntico (`values=[120, 140, 100, 100]`, `runs=[1, 2, 3, 3]`) |
+| 20 | `indirect-source-invalidated` | C23 | Idéntico (`values=[78, 78, 100]`, `runs=[1, 1, 2]`) |
+| 21 | `random-graph-oracle` | C24 | Idéntico (`runs=[95, 108, 105, 100, 95, 107]`, checksums idénticos en las 6 semillas) |
+
+---
+
+## 4. Hallazgos de C20–C24
+
+1. **C20 (Asignación y reutilización de `AttributeID` y orden de entradas):**
+   - En `AttributeGraph` nativo, los `AGAttribute` (`rawValue: UInt32`) son desplazamientos dentro de páginas por subgrafo: dentro de un mismo subgrafo crecen de `40` en `40` (`536, 576, 616...`), y un segundo subgrafo recibe otra página (`1048, 1088...`).
+   - Cuando un subgrafo se invalida (`s2.invalidate()`), su página vuelve a la lista libre y el siguiente subgrafo creado reutiliza exactamente ese desplazamiento (`536`).
+   - Como ambos motores mantienen `inputs` ordenado por índice de ranura / `AttributeID` creciente, reutilizar un hueco con índice menor hace que esa entrada ocupe una posición anterior en `inputs` (`slot-reuse-input-order`).
+2. **C21 (Escrituras repetidas antes de leer):**
+   - Escribir dos veces el mismo valor (`d.write(5, to: x2); d.write(5, to: x2)`) o encadenar duplicados antes de leer (`7, 7, 8, 8` frente a `7, 8`) produce exactamente las mismas ejecuciones (`runs=[3, 3]`) gracias al corte en `setValue` y a la coalescencia perezosa (`duplicate-writes-before-read`).
+3. **C22 (Lectura duplicada de la misma entrada en una misma ejecución y poda posterior):**
+   - Cuando una regla lee `x + y + x`, `AGTrace` emite un único `add_edge` para `x` y otro para `y` (`inputs=[536, 1048]`).
+   - Al cambiar después el selector para dejar de leer `x`, esa única arista se poda limpiamente y mutaciones posteriores de `x` no reejecutan la regla (`double-read-and-prune`: `values=[120, 140, 100, 100]`, `runs=[1, 2, 3, 3]`).
+4. **C23 (Indirecto cuyo `source` pertenece a un subgrafo que se invalida):**
+   - Al invalidar el subgrafo hijo dueño del `source` de un `IndirectAttribute`, ni el indirecto ni el lector externo se marcan sucios (`ir.valueState == 88`). El lector conserva su valor cacheado (`78`, `runs=1`).
+   - Si se reevalúa una regla que intenta resolver el `IndirectAttribute` cuyo `source` sigue muerto, el nativo aborta (`SIGABRT`); pero si el indirecto se redirige antes con `setSource` a un nuevo atributo vivo (`99`), el lector se ensucia y actualiza limpiamente a `100` (`runs=2`) (`indirect-source-invalidated`).
+5. **C24 (Oráculo de grafos aleatorios nativo vs propio):**
+   - En 6 semillas deterministas × 50 pasos con grafos aleatorios de 6 entradas y 24 reglas mixtas (`Rule` y `StatefulRule` con selectores condicionales `sel % 2 == 0 ? left : right`), las ejecuciones acumuladas (`[95, 108, 105, 100, 95, 107]`) y los checksums de 64 bits coinciden al 100 % entre el `AttributeGraph` de Apple y `SwiftAttributeGraph` (`random-graph-oracle`).

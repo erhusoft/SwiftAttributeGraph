@@ -94,4 +94,22 @@ import Testing
         graph.setValue(2, for: tick)
         #expect(graph.value(of: rule) == -999)
     }
+
+    @Test func optionalAttributeResolvesWhenSetAndReturnsNilWhenEmpty() {
+        let graph = Graph()
+        let empty = OptionalAttribute<Int>()
+        #expect(graph.attribute(of: empty) == nil)
+        #expect(graph.value(of: empty) == nil)
+        #expect(graph.changedValue(of: empty) == nil)
+
+        let source = graph.makeInput(42)
+        let wrapped = OptionalAttribute(source)
+        #expect(graph.attribute(of: wrapped) == source)
+        #expect(graph.value(of: wrapped) == 42)
+
+        let reader = graph.makeRule { wrapped.value ?? -1 }
+        #expect(graph.value(of: reader) == 42)
+        graph.setValue(99, for: source)
+        #expect(graph.value(of: reader) == 99)
+    }
 }

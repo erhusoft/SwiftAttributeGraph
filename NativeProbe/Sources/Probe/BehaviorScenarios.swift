@@ -245,3 +245,195 @@ func focusKeyPathCut() {
     precondition(runHistory == [1, 1, 2, 2])
     print("focus-keypath-cut|values=\(values)|runs=\(runHistory)")
 }
+
+func slotReuseAndInputOrder() {
+    let d = Driver()
+    defer { d.close() }
+    let sub1 = d.makeSubgraph()
+    let raw = d.input(1)
+    let rFirst = d.withSubgraph(sub1) { d.rule { d.read(raw) + 1 } }
+    var secondRuns = 0
+    let rSecond = d.rule { secondRuns += 1; return d.read(raw) * 10 }
+    _ = d.read(rFirst)
+    _ = d.read(rSecond)
+    d.invalidate(sub1)
+
+    let sub2 = d.makeSubgraph()
+    var reusedRuns = 0
+    let rReused = d.withSubgraph(sub2) { d.rule { reusedRuns += 1; return d.read(raw) + 100 } }
+    var joinRuns = 0
+    var evalOrder: [String] = []
+    let rTrackedSecond = d.rule {
+        evalOrder.append("second")
+        return d.read(rSecond)
+    }
+    let rTrackedReused = d.rule {
+        evalOrder.append("reused")
+        return d.read(rReused)
+    }
+    let join = d.rule {
+        joinRuns += 1
+        // Read `rTrackedSecond` first, then `rTrackedReused` (which reused the earlier slot/page).
+        return d.read(rTrackedSecond) + d.read(rTrackedReused)
+    }
+    let v1 = d.read(join)
+    evalOrder.removeAll()
+    d.write(2, to: raw)
+    let v2 = d.read(join)
+    precondition(v1 == 111 && v2 == 122 && joinRuns == 2)
+    print("slot-reuse-input-order|v1=\(v1)|v2=\(v2)|joinRuns=\(joinRuns)|evalOrder=\(evalOrder)")
+}
+
+func duplicateWritesBeforeRead() {
+    let d = Driver()
+    defer { d.close() }
+    let x1 = d.input(1)
+    let x2 = d.input(1)
+    var runs1 = 0, runs2 = 0
+    let r1 = d.rule { runs1 += 1; return d.read(x1) * 3 }
+    let r2 = d.rule { runs2 += 1; return d.read(x2) * 3 }
+    _ = d.read(r1)
+    _ = d.read(r2)
+    // Single write on x1 vs duplicate identical writes on x2
+    d.write(5, to: x1)
+    d.write(5, to: x2)
+    d.write(5, to: x2)
+    let v1 = d.read(r1), v2 = d.read(r2)
+    // Mutate and write twice before reading vs once
+    d.write(7, to: x1); d.write(8, to: x1)
+    d.write(7, to: x2); d.write(7, to: x2); d.write(8, to: x2); d.write(8, to: x2)
+    let u1 = d.read(r1), u2 = d.read(r2)
+    precondition(v1 == 15 && v2 == 15 && u1 == 24 && u2 == 24)
+    precondition(runs1 == 3 && runs2 == 3)
+    print("duplicate-writes-before-read|v=[\(v1), \(v2)]|u=[\(u1), \(u2)]|runs=[\(runs1), \(runs2)]")
+}
+
+func doubleReadAndPrune() {
+    let d = Driver()
+    defer { d.close() }
+    let sel = d.input(true)
+    let x = d.input(10)
+    let y = d.input(100)
+    var runs = 0
+    let rule = d.rule {
+        runs += 1
+        if d.read(sel) {
+            // Read `x` twice in the same evaluation
+            return d.read(x) + d.read(y) + d.read(x)
+        } else {
+            return d.read(y)
+        }
+    }
+    var values = [d.read(rule)], runHistory = [runs]
+    // Mutating `x` once runs `rule` once even though `x` was read twice
+    d.write(20, to: x)
+    values.append(d.read(rule)); runHistory.append(runs)
+    // Switch selector so `x` is no longer read
+    d.write(false, to: sel)
+    values.append(d.read(rule)); runHistory.append(runs)
+    // Mutating `x` now must not run `rule` (both reads of `x` were deduplicated into a single edge and pruned)
+    d.write(30, to: x)
+    values.append(d.read(rule)); runHistory.append(runs)
+    precondition(values == [120, 140, 100, 100])
+    precondition(runHistory == [1, 2, 3, 3])
+    print("double-read-and-prune|values=\(values)|runs=\(runHistory)")
+}
+
+func indirectSourceInvalidated() {
+    let d = Driver()
+    defer { d.close() }
+    let child = d.makeSubgraph()
+    let target = d.withSubgraph(child) { d.input(77) }
+    let ind = d.indirect(target)
+    let indAttr = d.attribute(of: ind)
+    var runs = 0
+    let reader = d.rule {
+        runs += 1
+        return d.read(indAttr) + 1
+    }
+    let v1 = d.read(reader)
+    let runs1 = runs
+    // Invalidating the child subgraph that owns `target` detaches `ind <- target` without dirtying `ind` or `reader`
+    d.invalidate(child)
+    let v2 = d.read(reader)
+    let runs2 = runs
+    // Redirecting `ind` to a new live attribute updates `reader` cleanly
+    let replacement = d.input(99)
+    d.setSource(replacement, for: ind)
+    let v3 = d.read(reader)
+    let runs3 = runs
+    precondition(v1 == 78 && v2 == 78 && v3 == 100)
+    precondition(runs1 == 1 && runs2 == 1 && runs3 == 2)
+    print("indirect-source-invalidated|values=[\(v1), \(v2), \(v3)]|runs=[\(runs1), \(runs2), \(runs3)]")
+}
+
+private struct ProbeRNG {
+    var state: UInt64
+    mutating func next(_ bound: Int) -> Int {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return Int((state >> 32) % UInt64(bound))
+    }
+}
+
+private struct ProbeSpec {
+    let selector: Int
+    let left: Int
+    let right: Int
+    let bias: Int
+}
+
+func randomGraphOracle() {
+    let inputCount = 6, ruleCount = 24
+    var totalRunsSummary: [Int] = []
+    var checksums: [Int] = []
+    for seed in 1...6 {
+        let d = Driver()
+        var rng = ProbeRNG(state: UInt64(seed) &* 104729)
+        let totalNodes = inputCount + ruleCount
+        var counts = Array(repeating: 0, count: totalNodes)
+        var nodes: [Handle<Int>] = []
+        for _ in 0..<inputCount {
+            let v = rng.next(41) - 20
+            nodes.append(d.input(v))
+        }
+        for k in 0..<ruleCount {
+            let index = inputCount + k
+            let spec = ProbeSpec(
+                selector: rng.next(index),
+                left: rng.next(index),
+                right: rng.next(index),
+                bias: rng.next(11) - 5
+            )
+            if index % 3 == 0 {
+                nodes.append(d.statefulRule { (ctx: StatefulHandleContext<Int>) in
+                    counts[index] += 1
+                    let sel = d.read(nodes[spec.selector])
+                    let picked = sel % 2 == 0 ? d.read(nodes[spec.left]) : d.read(nodes[spec.right])
+                    ctx.value = sel &+ picked &+ spec.bias
+                })
+            } else {
+                nodes.append(d.rule {
+                    counts[index] += 1
+                    let sel = d.read(nodes[spec.selector])
+                    let picked = sel % 2 == 0 ? d.read(nodes[spec.left]) : d.read(nodes[spec.right])
+                    return sel &+ picked &+ spec.bias
+                })
+            }
+        }
+        var checksum = 0
+        for _ in 0..<50 {
+            if rng.next(4) != 0 {
+                let inp = rng.next(inputCount)
+                let val = rng.next(15) - 7
+                d.write(val, to: nodes[inp])
+            }
+            let target = inputCount + rng.next(ruleCount)
+            let v = d.read(nodes[target])
+            checksum = (checksum &* 31) &+ v
+        }
+        totalRunsSummary.append(counts.reduce(0, +))
+        checksums.append(checksum)
+        d.close()
+    }
+    print("random-graph-oracle|runs=\(totalRunsSummary)|checksums=\(checksums)")
+}

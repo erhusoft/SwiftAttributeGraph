@@ -2,29 +2,16 @@ warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessib
 warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
 [0/1] Planning build
 Building for debugging...
-[0/6] Write sources
-[2/6] Write swift-version--58304C5D6DBC2206.txt
-[4/8] Emitting module SwiftAttributeGraph
-[5/8] Compiling SwiftAttributeGraph Focus.swift
-[6/22] Compiling SwiftAttributeGraph Graph+Invalidation.swift
-[7/22] Compiling SwiftAttributeGraph Graph+Propagation.swift
-[8/22] Compiling SwiftAttributeGraph Graph+ResumableUpdate.swift
-[9/22] Compiling SwiftAttributeGraph InputEdge.swift
-[10/22] Compiling SwiftAttributeGraph ResumableEvaluation.swift
-[11/22] Compiling SwiftAttributeGraph Graph+Observation.swift
-[12/22] Compiling SwiftAttributeGraph Graph+ResumableRules.swift
-[13/22] Compiling SwiftAttributeGraph Graph+Introspection.swift
-[14/22] Compiling SwiftAttributeGraph Graph+IndirectResolution.swift
-[15/22] Compiling SwiftAttributeGraph Graph+Update.swift
-[16/22] Compiling SwiftAttributeGraph ResumableRuleContext.swift
-[17/22] Compiling SwiftAttributeGraph RuleContext.swift
-[18/22] Compiling SwiftAttributeGraph Graph.swift
-[19/22] Compiling SwiftAttributeGraph WeakAttribute.swift
-[20/26] Compiling Probe BehaviorScenarios.swift
-[21/26] Compiling Probe DiamondScenarios.swift
-[22/26] Compiling Probe main.swift
-[23/26] Emitting module Probe
-[23/26] Write Objects.LinkFileList
-[24/26] Linking Probe
-[25/26] Applying Probe
-Build complete! (1.73s)
+[0/5] Write sources
+[2/5] Write swift-version--58304C5D6DBC2206.txt
+[4/7] Compiling SwiftAttributeGraph ComparisonPlan.swift
+[5/7] Emitting module SwiftAttributeGraph
+[6/8] Compiling SwiftAttributeGraph ValueComparator.swift
+[7/13] Compiling Probe DiamondScenarios.swift
+[8/13] Emitting module Probe
+[9/13] Compiling Probe main.swift
+[10/13] Compiling Probe BehaviorScenarios.swift
+[10/13] Write Objects.LinkFileList
+[11/13] Linking Probe
+[12/13] Applying Probe
+Build complete! (1.66s)

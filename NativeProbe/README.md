@@ -38,9 +38,9 @@ productos, targets ni dependencias nuevos; este banco es un paquete independient
 
 ## Cobertura y límites
 
-Quince secuencias directas:
+Veintiuna secuencias directas:
 - Cuatro básicas (`dynamic`, `cut`, `lazy`, `lifetime`) descritas en el [primer estudio directo](../docs/ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md).
 - Cuatro variantes de diamantes (`diamond-source-forward/reverse`, `diamond-multiple-forward/reverse`) descritas en el [estudio de diamantes](../docs/ESTUDIO-DIAMANTES-NATIVOS.md).
-- Siete escenarios de la auditoría C1–C19 (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`) descritos en la [auditoría C1–C19](../docs/ESTUDIO-AUDITORIA-C1-C19.md).
+- Trece escenarios de la auditoría C1–C24 (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`, `focus-keypath-cut`, `slot-reuse-input-order`, `duplicate-writes-before-read`, `double-read-and-prune`, `indirect-source-invalidated`, `random-graph-oracle`) descritos en la [auditoría C1–C24](../docs/ESTUDIO-AUDITORIA-C1-C19.md).
 
 Se comprueba en todos los escenarios que ambos motores producen las mismas salidas y contadores de ejecución en procesos independientes de debug y release (3 pares por configuración) y vuelven a cero nodos vivos al cerrar el ámbito.

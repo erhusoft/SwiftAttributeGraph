@@ -19,6 +19,8 @@ SCENARIOS = [
     "stateful-no-write-cut", "stateful-unread-input", "stateful-has-value-and-revert",
     "selector-input-order", "invalidate-in-rule", "weak-attribute-in-rule",
     "indirect-rule-and-redirect", "focus-keypath-cut",
+    "slot-reuse-input-order", "duplicate-writes-before-read",
+    "double-read-and-prune", "indirect-source-invalidated", "random-graph-oracle",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

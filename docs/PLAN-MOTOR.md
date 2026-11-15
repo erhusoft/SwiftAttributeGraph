@@ -728,12 +728,12 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Estudio detallado 
    - Se añadieron `graph.source(of:)` y `graph.setSource(_:for:)`: reasignar el mismo `source` es un *no-op*; redirigir a un atributo distinto desconecta el anterior, sube la versión del indirecto y marca a sus lectores `dirty | pending` aunque el valor numérico coincida (idéntico a `IndirectAttribute` de Apple). Detecta ciclos de redirección con `precondition`.
    - Cada indirecto mantiene su arista `indirect <- source` y los lectores registran una única arista `reader <- indirect`.
    - Se añadieron `Focus<Root, Value>` y `graph.makeFocus(_:keyPath:comparison:)` (proyección de un campo por `KeyPath` con corte por versión propio cuando cambian otros campos del `struct` raíz, idéntico a `AttributeGraph.Focus` de Apple).
-4. **Pieza 4 (limpieza de `lastVerified`, ampliación de `NativeProbe` a 16 escenarios y documentación):**
+4. **Pieza 4 (limpieza de `lastVerified`, ampliación de `NativeProbe` a 21 escenarios C1–C24 y documentación):**
    - Se eliminó el arreglo paralelo `lastVerified` de `NodeTable` (se escribía pero nunca se leía), ahorrando 4 bytes por ranura.
-   - Se añadieron 8 escenarios directos a `NativeProbe` (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`, `focus-keypath-cut`).
+   - Se añadieron 13 escenarios directos a `NativeProbe` (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`, `focus-keypath-cut`, `slot-reuse-input-order`, `duplicate-writes-before-read`, `double-read-and-prune`, `indirect-source-invalidated`, `random-graph-oracle`), incluyendo un oráculo de grafos aleatorios mixtos (`Rule` + `StatefulRule`) comparado paso a paso contra el `AttributeGraph` de Apple.
 
 **Validación y medidas (Mac M1, Swift 6.2.4):**
-- **`NativeProbe`:** **16 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
+- **`NativeProbe`:** **21 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
 - **Tests funcionales:** **213 pruebas en 26 suites** pasan en depuración y **212 pruebas** en release con **0 *known issues*** (se resolvieron también los 2 *known issues* de M2 para `enum` con carga no `Equatable`, comparando caso activo y payload con las reglas del modo).
 - **Rendimiento en release (18 pruebas en 3 suites en verde):**
   - Regla de 20.000 entradas que pierde la mitad: **4,85 ms** (frente a 76,83 ms antes de la Pieza 1: **15,8× más rápido**).

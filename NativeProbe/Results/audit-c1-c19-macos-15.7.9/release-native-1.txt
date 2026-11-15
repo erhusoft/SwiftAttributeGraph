@@ -14,3 +14,8 @@ invalidate-in-rule|v1=42|v2=43|validDuring=false|weakDuring=Optional(42)|validAf
 weak-attribute-in-rule|reader=[10, 20, 20, -1]|stateful=[110, 120, 120, -999]|runsBeforeTick=[2, 2]|runsAfterTick=[3, 3]
 indirect-rule-and-redirect|values=[11, 11, 11, 11, 26, 22, 25]|runs=[1, 1, 2, 2, 3, 4, 5]
 focus-keypath-cut|values=[20, 20, 50, 50]|runs=[1, 1, 2, 2]
+slot-reuse-input-order|v1=111|v2=122|joinRuns=2|evalOrder=["second", "reused"]
+duplicate-writes-before-read|v=[15, 15]|u=[24, 24]|runs=[3, 3]
+double-read-and-prune|values=[120, 140, 100, 100]|runs=[1, 2, 3, 3]
+indirect-source-invalidated|values=[78, 78, 100]|runs=[1, 1, 2]
+random-graph-oracle|runs=[95, 108, 105, 100, 95, 107]|checksums=[-6384035391814883880, 2389317347123615024, 5471729883617613176, -4317106022044399919, -4151220179606527950, 5605945499268791697]
