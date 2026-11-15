@@ -136,4 +136,97 @@ import Testing
         _ = graph.value(of: childConstant); _ = graph.value(of: childRandom)
         #expect((constantRuns.runs, randomRuns.runs) == (1, 2))
     }
+
+    @Test func branchSwitchAndInvalidateBeforeReadWorksInEitherOrder() {
+        func runOrder(switchFirst: Bool) -> (Int, Int, Int, Int, Int) {
+            let graph = Graph()
+            let subA = graph.makeSubgraph()
+            let aRuns = Counter(), bRuns = Counter(), outRuns = Counter()
+            let inputA = graph.withCurrent(subA) { graph.makeInput(10) }
+            let branchA = graph.withCurrent(subA) {
+                graph.makeRule { aRuns.runs += 1; return inputA.value + 1 }
+            }
+            let inputB = graph.makeInput(200)
+            let branchB = graph.makeRule { bRuns.runs += 1; return inputB.value + 2 }
+            let useB = graph.makeInput(false)
+            let out = graph.makeRule {
+                outRuns.runs += 1
+                return useB.value ? branchB.value : branchA.value
+            }
+
+            let v1 = graph.value(of: out)
+            if switchFirst {
+                graph.setValue(true, for: useB)
+                graph.invalidate(subA)
+            } else {
+                graph.invalidate(subA)
+                graph.setValue(true, for: useB)
+            }
+            let v2 = graph.value(of: out)
+            return (v1, v2, aRuns.runs, bRuns.runs, outRuns.runs)
+        }
+
+        #expect(runOrder(switchFirst: true) == (11, 202, 1, 1, 2))
+        #expect(runOrder(switchFirst: false) == (11, 202, 1, 1, 2))
+    }
+
+    @Test func indirectSurvivesDeathOfOriginalSourceWhileRedirected() {
+        let graph = Graph()
+        let subA = graph.makeSubgraph()
+        let srcA = graph.withCurrent(subA) { graph.makeInput(10) }
+        let srcB = graph.makeInput(200)
+        let ind = graph.makeIndirect(srcA)
+        let readerRuns = Counter()
+        let reader = graph.makeRule { readerRuns.runs += 1; return ind.value + 1 }
+
+        let v1 = graph.value(of: reader)
+        graph.setSource(srcB, for: ind)
+        let v2 = graph.value(of: reader)
+        graph.invalidate(subA)
+        let v3 = graph.value(of: reader)
+        graph.setValue(205, for: srcB)
+        let v4 = graph.value(of: reader)
+
+        #expect([v1, v2, v3, v4] == [11, 201, 201, 206])
+        #expect(readerRuns.runs == 3)
+    }
+
+    @Test func statefulRulePrunesOldDependencyEvenWhenNoNewValueIsWritten() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let b = graph.makeInput(20)
+        let useB = graph.makeInput(false)
+        let runs = Counter()
+
+        struct PruneWithoutWriteRule: StatefulRule {
+            typealias Value = Int
+            let a: Attribute<Int>
+            let b: Attribute<Int>
+            let useB: Attribute<Bool>
+            let runs: Counter
+
+            mutating func updateValue(_ context: inout RuleContext<Int>) {
+                runs.runs += 1
+                if useB.value {
+                    _ = b.value
+                    // Preserve previous value (100) without assigning `context.value`.
+                } else {
+                    _ = a.value
+                    context.value = 100
+                }
+            }
+        }
+
+        let rule = graph.makeStatefulRule(
+            PruneWithoutWriteRule(a: a, b: b, useB: useB, runs: runs)
+        )
+
+        #expect(graph.value(of: rule) == 100 && runs.runs == 1)
+        graph.setValue(true, for: useB)
+        #expect(graph.value(of: rule) == 100 && runs.runs == 2)
+        graph.setValue(999, for: a)
+        #expect(graph.value(of: rule) == 100 && runs.runs == 2)
+        graph.setValue(222, for: b)
+        #expect(graph.value(of: rule) == 100 && runs.runs == 3)
+    }
 }

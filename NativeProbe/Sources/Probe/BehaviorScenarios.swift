@@ -447,7 +447,9 @@ func randomGraphOracle() {
             }
         }
         var checksum = 0
-        for _ in 0..<50 {
+        var stepTraces: [String] = []
+        var prevCounts = counts
+        for step in 0..<50 {
             if rng.next(4) != 0 {
                 let inp = rng.next(inputCount)
                 let val = rng.next(15) - 7
@@ -455,10 +457,20 @@ func randomGraphOracle() {
             }
             let target = inputCount + rng.next(ruleCount)
             let v = d.read(nodes[target])
+            var deltas: [String] = []
+            for idx in inputCount..<totalNodes {
+                let diff = counts[idx] - prevCounts[idx]
+                if diff != 0 {
+                    deltas.append("\(idx)+\(diff)")
+                    prevCounts[idx] = counts[idx]
+                }
+            }
+            stepTraces.append("\(step):\(v){\(deltas.joined(separator: ","))}")
             checksum = (checksum &* 31) &+ v
         }
         totalRunsSummary.append(counts.reduce(0, +))
         checksums.append(checksum)
+        print("random-graph-oracle-trace|seed=\(seed)|\(stepTraces.joined(separator: ";"))")
         d.close()
     }
     print("random-graph-oracle|runs=\(totalRunsSummary)|checksums=\(checksums)")
@@ -932,4 +944,113 @@ func attributeKeyPathDynamicMember() {
 
     precondition([v1, v2, v3] == [6, 6, 18] && [r1, r2, r3] == [1, 1, 2])
     print("attribute-keypath-dynamic-member|values=[\(v1), \(v2), \(v3)]|runs=[\(r1), \(r2), \(r3)]")
+}
+
+func branchSwitchAndInvalidateBeforeRead() {
+    func runOrder(switchFirst: Bool) -> (v1: Int, v2: Int, aRuns: Int, bRuns: Int, outRuns: Int) {
+        let d = Driver()
+        defer { d.close() }
+        let subA = d.makeSubgraph()
+        var aRuns = 0
+        var bRuns = 0
+        var outRuns = 0
+
+        let inputA = d.withSubgraph(subA) { d.input(10) }
+        let branchA = d.withSubgraph(subA) {
+            d.rule { () -> Int in
+                aRuns += 1
+                return d.read(inputA) + 1
+            }
+        }
+        let inputB = d.input(200)
+        let branchB = d.rule { () -> Int in
+            bRuns += 1
+            return d.read(inputB) + 2
+        }
+        let useB = d.input(false)
+        let out = d.rule { () -> Int in
+            outRuns += 1
+            return d.read(useB) ? d.read(branchB) : d.read(branchA)
+        }
+
+        let v1 = d.read(out)
+        if switchFirst {
+            d.write(true, to: useB)
+            d.invalidate(subA)
+        } else {
+            d.invalidate(subA)
+            d.write(true, to: useB)
+        }
+        let v2 = d.read(out)
+        return (v1, v2, aRuns, bRuns, outRuns)
+    }
+
+    let orderA = runOrder(switchFirst: true)
+    let orderB = runOrder(switchFirst: false)
+
+    precondition(orderA == (11, 202, 1, 1, 2))
+    precondition(orderB == (11, 202, 1, 1, 2))
+    print("branch-switch-and-invalidate-before-read|switchFirst=\(orderA)|invalidateFirst=\(orderB)")
+}
+
+func indirectOriginalDiesWhileRedirected() {
+    let d = Driver()
+    defer { d.close() }
+    let subA = d.makeSubgraph()
+    let srcA = d.withSubgraph(subA) { d.input(10) }
+    let srcB = d.input(200)
+    let ind = d.indirect(srcA)
+    let attr = d.attribute(of: ind)
+
+    var readerRuns = 0
+    let reader = d.rule { () -> Int in
+        readerRuns += 1
+        return d.read(attr) + 1
+    }
+
+    let v1 = d.read(reader)
+    d.setSource(srcB, for: ind)
+    let v2 = d.read(reader)
+    d.invalidate(subA)
+    let v3 = d.read(reader)
+    d.write(205, to: srcB)
+    let v4 = d.read(reader)
+
+    precondition([v1, v2, v3, v4] == [11, 201, 201, 206] && readerRuns == 3)
+    print("indirect-original-dies-while-redirected|values=[\(v1), \(v2), \(v3), \(v4)]|runs=\(readerRuns)")
+}
+
+func statefulRuleDependencyPrunedWithoutWritingNewValue() {
+    let d = Driver()
+    defer { d.close() }
+    let a = d.input(10)
+    let b = d.input(20)
+    let useB = d.input(false)
+    var runs = 0
+
+    let r = d.statefulRule { (ctx: StatefulHandleContext<Int>) in
+        runs += 1
+        if d.read(useB) {
+            _ = d.read(b)
+            // Intentionally do NOT write `ctx.value`; preserve previous value (100).
+        } else {
+            _ = d.read(a)
+            ctx.value = 100
+        }
+    }
+
+    let v1 = d.read(r)
+    let r1 = runs
+    d.write(true, to: useB)
+    let v2 = d.read(r)
+    let r2 = runs
+    d.write(999, to: a)
+    let v3 = d.read(r)
+    let r3 = runs
+    d.write(222, to: b)
+    let v4 = d.read(r)
+    let r4 = runs
+
+    precondition([v1, v2, v3, v4] == [100, 100, 100, 100] && [r1, r2, r3, r4] == [1, 2, 2, 3])
+    print("stateful-dependency-pruned-without-write|values=[\(v1), \(v2), \(v3), \(v4)]|runs=[\(r1), \(r2), \(r3), \(r4)]")
 }

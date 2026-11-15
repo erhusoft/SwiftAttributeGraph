@@ -20,12 +20,18 @@ SCENARIOS = [
     "selector-input-order", "invalidate-in-rule", "weak-attribute-in-rule",
     "indirect-rule-and-redirect", "focus-keypath-cut",
     "slot-reuse-input-order", "duplicate-writes-before-read",
-    "double-read-and-prune", "indirect-source-invalidated", "random-graph-oracle",
+    "double-read-and-prune", "indirect-source-invalidated",
+    "random-graph-oracle-trace", "random-graph-oracle-trace", "random-graph-oracle-trace",
+    "random-graph-oracle-trace", "random-graph-oracle-trace", "random-graph-oracle-trace",
+    "random-graph-oracle",
     "random-subgraph-weak-indirect-oracle", "map-and-property-wrappers",
     "without-update-read", "mutate-body-and-invalidate-value",
     "indirect-dependency-cut-and-redirect", "subgraph-flags-forEach-and-update",
     "has-value-validate-update-value", "without-subgraph-invalidation-and-ancestor",
     "breadth-first-search", "attribute-keypath-dynamic-member",
+    "branch-switch-and-invalidate-before-read",
+    "indirect-original-dies-while-redirected",
+    "stateful-dependency-pruned-without-write",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
