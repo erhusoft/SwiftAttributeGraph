@@ -13,6 +13,30 @@ import Testing
         #expect(used["padding"] == 2)
     }
 
+    /// The row closures of `List` and `ForEach` are not called (nothing renders), so only what the screen builds directly counts.
+    @Test func theSecondSampleRecordsStacksListsAndButtons() {
+        ShellCoverage.reset()
+        _ = makeListScreenBody()
+        let used = ShellCoverage.counts
+        #expect(used["ZStack"] == 1 && used["List"] == 1 && used["VStack"] == 1 && used["HStack"] == 1)
+        #expect(used["ForEach"] == 4)          // three written by the screen and the one `List` builds for its rows
+        #expect(used["Button"] == 1 && used["Spacer"] == 1)
+        #expect(used["Text"] == 3)             // "end", "Go" and the branch of `if` that is taken
+    }
+
+    @Test func listAndForEachDoNotCallTheirRowClosuresWithoutARenderer() {
+        ShellCoverage.reset()
+        nonisolated(unsafe) var calls = 0
+        _ = ForEach([1, 2, 3], id: \.self) { (n: Int) -> Text in calls += 1; return Text("\(n)") }
+        #expect(calls == 0)
+    }
+
+    @Test func alignmentsAndTheirNamesExist() {
+        #expect(VerticalAlignment.top != VerticalAlignment.bottom)
+        #expect(Alignment.topLeading != Alignment.bottomTrailing)
+        #expect(Alignment.center == Alignment.center)
+    }
+
     @Test func aShellThatIsNotImplementedReportsItself() {
         ShellCoverage.reset()
         _ = Text("x")
