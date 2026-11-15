@@ -39,8 +39,9 @@ de este Mac.** Si lo necesita el siguiente agente, hay que copiarlo.
 1. **Foco actual: núcleo y AttributeGraph nativo.** ShellUI está aparcado por instrucción del dueño: su propósito es
    el cascarón de API para una UI futura. Los estudios de body/State/Binding de las rondas anteriores no cuentan como
    validación directa del núcleo. La [primera sonda directa](ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md) compara cuatro secuencias
-   con el binario de Apple, sin SwiftUI ni ShellUI, y coincide en debug/release. Siguiente: ampliar casos de reglas
-   con estado, grafos con diamantes y cambios de dependencias antes de considerar cambios del núcleo.
+   con el binario de Apple, sin SwiftUI ni ShellUI. El [estudio de diamantes](ESTUDIO-DIAMANTES-NATIVOS.md) amplía a ocho
+   escenarios: coinciden en debug/release, con predicciones previas para los diamantes. Siguiente: reglas con estado
+   y cambios de selector con varias entradas antes de considerar cambios del núcleo.
 2. **M4:** definir cómo se escriben los `body` de la UI. Con cierres síncronos hay un límite de profundidad; con reglas reanudables hay que escribirlos
    por etapas. Es una decisión del dueño.
 3. **Apps de ejemplo** para contar qué API se usa más y ordenar prioridades. Sin definir.

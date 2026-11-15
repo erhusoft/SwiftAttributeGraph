@@ -1,0 +1,6 @@
+{
+  "mutation": "increment join counter by 2 instead of 1 without changing numeric output",
+  "returncode": -5,
+  "rejected": true,
+  "first_error": "probe/DiamondScenarios.swift:30: Precondition failed"
+}

@@ -694,3 +694,18 @@ Fecha: 2026-11-14. [Método, resultados y límites](ESTUDIO-ATTRIBUTEGRAPH-NATIV
   investigación se descargan a /private/tmp, fijadas a una revisión; el paquete raíz no incorpora dependencias.
 - No demuestra paridad general ni rendimiento equivalente. Los apartados 19–22 son estudios de UI y no validación
   directa del núcleo. ShellUI y Windows quedan aplazados según la indicación del dueño.
+
+## 24. Diamantes y cortes directos contra AttributeGraph nativo (Mac)
+
+Fecha: 2026-11-14. [Predicciones, tablas y límites](ESTUDIO-DIAMANTES-NATIVOS.md).
+
+- Cuatro escenarios nuevos: diamante con fuente compartida y diamante con dos entradas y consumidor final, cada uno
+  con dos órdenes de lectura. Las predicciones de valores, contadores y pares consumidos se fijaron antes de ejecutar.
+- Coinciden ambos motores: sin ejecuciones duplicadas observadas, lectura anticipada de una rama sin repetirla en el
+  consumidor y omisión del consumidor final cuando ambas ramas cambian pero su suma se conserva.
+- Cambiar y restaurar una entrada antes de leer recalcula las ramas, pero omite la unión si sus valores no cambian.
+  Se comprueba evaluación perezosa y vuelta de nodos vivos a cero en cada escenario.
+- Batería directa total: ocho escenarios, tres pares debug y tres release; 96 ejecuciones en 12 procesos, sin diferencias.
+  Son ocho escenarios repetidos, no 96 casos nuevos. Una mutación de contador en una copia temporal es rechazada.
+- Solo sondas y documentación; no se cambió el motor ni se introdujo un coste o recorrido de producción nuevo.
+  No demuestra paridad general ni rendimiento equivalente. ShellUI y Windows siguen aplazados.

@@ -1,0 +1,25 @@
+warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
+warning: /Users/erhusoft/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.
+warning: 'nativeprobe': failed storing manifest for 'nativeprobe' in cache: attempt to write a readonly database
+warning: 'swiftattributegraph': failed storing manifest for 'swiftattributegraph' in cache: attempt to write a readonly database
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--58304C5D6DBC2206.txt
+[3/8] Compiling Probe main.swift
+/Users/erhusoft/SwiftAttributeGraph/NativeProbe/Sources/Probe/main.swift:115:14: warning: weak variable 'weakPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
+113 |     let d = Driver()
+114 |     var payload: Payload? = Payload(7)
+115 |     weak var weakPayload = payload
+    |              `- warning: weak variable 'weakPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
+116 |     let input = d.input(payload!)
+117 |     payload = nil
+
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[4/8] Emitting module Probe
+[5/8] Compiling Probe DiamondScenarios.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking Probe
+[7/8] Applying Probe
+Build complete! (0.96s)

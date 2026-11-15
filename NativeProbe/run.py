@@ -12,6 +12,8 @@ import urllib.request
 REVISION = "511cc728141f57dc325753f23898568ccd49c339"
 REPOSITORY = "https://github.com/OpenSwiftUIProject/DarwinPrivateFrameworks"
 PREFIX = "AG/2024/AttributeGraph.xcframework/macos-arm64e-arm64-x86_64/AttributeGraph.framework/Versions/A/"
+SCENARIOS = ["dynamic", "cut", "lazy", "lifetime", "diamond-source-forward", "diamond-source-reverse",
+             "diamond-multiple-forward", "diamond-multiple-reverse"]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
 
@@ -66,17 +68,17 @@ def main():
     env["CLANG_MODULE_CACHE_PATH"] = str(args.scratch / "clang-modules")
     prepare_interfaces(args.interfaces, sdk)
     package = Path(__file__).resolve().parent
-    source = package / "Sources/Probe/main.swift"
+    sources = sorted(str(p) for p in (package / "Sources/Probe").glob("*.swift"))
     metadata = {"system": capture(["sw_vers", "-productVersion"]), "build": capture(["sw_vers", "-buildVersion"]),
                 "swift": capture([compiler, "--version"]), "interface_revision": REVISION,
                 "interface_repository": REPOSITORY, "sdk": sdk, "native_image": SYSTEM_IMAGE,
-                "repeats": args.repeats, "probe_only": True}
+                "repeats": args.repeats, "scenarios": SCENARIOS, "probe_only": True}
     (args.output / "environment.json").write_text(json.dumps(metadata, indent=2) + "\n")
     for configuration in ["debug", "release"]:
         native = args.scratch / f"native-{configuration}"
         command = [compiler, "-sdk", sdk, "-target", "arm64-apple-macos15.0", "-module-cache-path",
                    str(args.scratch / "native-modules"), "-F", str(args.interfaces), "-D", "NATIVE_ATTRIBUTE_GRAPH",
-                   "-O" if configuration == "release" else "-Onone", str(source), "-o", str(native)]
+                   "-O" if configuration == "release" else "-Onone", *sources, "-o", str(native)]
         with (args.output / f"compile-native-{configuration}.txt").open("w") as log:
             subprocess.run(command, env=env, stdout=log, stderr=log, check=True)
         linkage = capture(["otool", "-L", str(native)])
@@ -102,9 +104,10 @@ def main():
                     (args.output / f"{configuration}-{label}-{run}.stderr.txt").write_text(result.stderr)
                 result.check_returncode()
                 outputs.append(result.stdout)
-            if outputs[0] != outputs[1] or len(outputs[0].splitlines()) != 4:
+            names = [line.split("|", 1)[0] for line in outputs[0].splitlines()]
+            if outputs[0] != outputs[1] or names != SCENARIOS:
                 raise RuntimeError(f"Trace mismatch: {configuration} run {run}; inspect {args.output}")
-            print(f"PASS {configuration} run {run}: four direct graph traces match", flush=True)
+            print(f"PASS {configuration} run {run}: {len(SCENARIOS)} direct graph traces match", flush=True)
     print(f"Results: {args.output}", flush=True)
 
 
