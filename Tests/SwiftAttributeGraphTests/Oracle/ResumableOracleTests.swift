@@ -102,7 +102,10 @@ import Testing
                 if starts[node] == 0 || result != values[node] { versions[node] += 1; values[node] = result }
                 starts[node] += 1
                 reads[node] = [(spec.selector, versions[spec.selector])]
-                if source != spec.selector { reads[node].append((source, versions[source])) }
+                if source != spec.selector {
+                    reads[node].append((source, versions[source]))
+                    reads[node].sort { $0.source < $1.source }
+                }
                 done.insert(node)
                 stack.removeLast()
             }

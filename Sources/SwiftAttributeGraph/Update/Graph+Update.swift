@@ -3,10 +3,10 @@
 /// Resuming at `next` instead of rescanning the inputs is the update-stack idea of Compute (`UpdateStack`).
 struct UpdateFrame {
     var node: UInt32
-    /// A nonnegative input cursor, or `-readCursor - 1` while a resumable rule is suspended.
+    /// A nonnegative input cursor, or `-1` while a resumable rule is suspended.
     var next: Int
-    /// A stateful rule keeps scanning after it found an input that changed; if it then has to bring a later input up
-    /// to date, the frame is left and resumed, so what it found is kept here.
+    /// Remembers whether an earlier input edge already had a changed version when the frame leaves to update a later
+    /// dirty input edge.
     var inputChanged = false
     /// Fits the original frame's padding on 64-bit platforms; no source is freed while an update is active.
     var waiting: UInt32 = Graph.noNode
@@ -80,9 +80,9 @@ extension Graph {
 
     /// Brings a dirty node up to date with an explicit stack: no recursion that depends on the graph's depth.
     ///
-    /// A dirty node verifies its inputs in the order they were read, bringing dirty rules up to date first, and stops
-    /// at the first input whose version differs from the one it saw. Only then does its own rule run. If no input
-    /// changed, the rule is skipped and the node is just marked clean (the cut by versions).
+    /// A dirty node verifies all its previous input edges in ascending attribute index order, bringing dirty rules up
+    /// to date first. Only then, if any input's version differs from the one it saw (or the node never ran or lost an
+    /// input), does its own rule run. If no input changed, the rule is skipped and the node is marked clean.
     ///
     /// A rule that reads an input it did not read before reaches this function again from inside the rule; that
     /// nested call still uses the native stack and is the documented limit that M4 removes.
@@ -99,24 +99,19 @@ extension Graph {
             }
             var mustRun = table.state[n] & NodeState.hasValue == 0 || table.state[n] & NodeState.pending != 0
                 || frames[top].inputChanged
-            // A stateful rule needs every input up to date (to know what changed), so it does not stop at the first
-            // input that changed and it does not skip the scan when it must run anyway.
-            let stateful = table.state[n] & NodeState.stateful != 0
 
-            if !mustRun || stateful {
-                var i = frames[top].next
-                while i < table.inputs[n].count {
-                    let edge = table.inputs[n][i]
-                    let source = Int(edge.source)
-                    if table.state[source] & NodeState.dirty != 0 {
-                        frames[top].next = i
-                        frames[top].inputChanged = mustRun
-                        push(edge.source)
-                        continue outer
-                    }
-                    if table.versions[source] != edge.seenVersion { mustRun = true; if !stateful { break } }
-                    i += 1
+            var i = frames[top].next
+            while i < table.inputs[n].count {
+                let edge = table.inputs[n][i]
+                let source = Int(edge.source)
+                if table.state[source] & NodeState.dirty != 0 {
+                    frames[top].next = i
+                    frames[top].inputChanged = mustRun
+                    push(edge.source)
+                    continue outer
                 }
+                if table.versions[source] != edge.seenVersion { mustRun = true }
+                i += 1
             }
 
             if mustRun {
@@ -156,9 +151,7 @@ extension Graph {
         }
 
         let previousNode = evaluatingNode
-        let previousCursor = trackCursor
         evaluatingNode = node
-        trackCursor = 0
         let previousGraph = ThreadLocalGraph.install(self)
         let previousSubgraph = currentSubgraph
         let owner = table.owner(at: node)
@@ -171,11 +164,9 @@ extension Graph {
 
         currentSubgraph = previousSubgraph
         _ = ThreadLocalGraph.install(previousGraph)
-        let cursor = trackCursor
         evaluatingNode = previousNode
-        trackCursor = previousCursor
 
-        pruneEdges(of: node, keeping: cursor)
+        pruneEdges(of: node)
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
             | NodeState.hasValue
         if changed {
@@ -213,7 +204,14 @@ extension Graph {
     @inline(__always)
     @usableFromInline
     func inputChanged(of node: UInt32, source: UInt32) -> Bool? {
-        for edge in table.inputs[Int(node)] where edge.source == source { return edge.changed }
+        let edges = table.inputs[Int(node)]
+        var low = 0, high = edges.count
+        while low < high {
+            let mid = (low + high) >> 1
+            let midSource = edges[mid].source
+            if midSource == source { return edges[mid].changed }
+            if midSource < source { low = mid + 1 } else { high = mid }
+        }
         return nil
     }
 
@@ -227,49 +225,63 @@ extension Graph {
 
     // MARK: Tracking
 
-    /// Records that the running rule read `source`. Edges stay in read order: a read moves its edge to the cursor,
-    /// and whatever is left after the cursor when the rule ends was not read and is pruned.
+    /// Records that the running rule read `source`. Edges are kept sorted by ascending `source` index; edges not
+    /// marked `read` when the rule ends are pruned by `pruneEdges(of:)`.
     @usableFromInline func recordRead(of source: UInt32) {
         let consumer = Int(evaluatingNode)
         precondition(source != evaluatingNode, "a rule cannot read itself")
         let version = table.versions[Int(source)]
         let count = table.inputs[consumer].count
 
-        if trackCursor < count, table.inputs[consumer][trackCursor].source == source {
-            table.inputs[consumer][trackCursor].read = true
-            table.inputs[consumer][trackCursor].seenVersion = version
-            trackCursor += 1
+        if count == 0 || table.inputs[consumer][count - 1].source < source {
+            table.outputs[Int(source)].append(evaluatingNode)
+            let position = UInt32(table.outputs[Int(source)].count - 1)
+            table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true,
+                                                    positionInOutputs: position))
             return
         }
 
-        var found = -1
-        for j in 0..<count where table.inputs[consumer][j].source == source { found = j; break }
+        var low = 0, high = count
+        while low < high {
+            let mid = (low + high) >> 1
+            if table.inputs[consumer][mid].source < source {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
 
-        if found >= 0 {
-            if found < trackCursor { return }            // read twice in the same run: keep the first position
-            var edge = table.inputs[consumer].remove(at: found)
-            edge.read = true
-            edge.seenVersion = version
-            table.inputs[consumer].insert(edge, at: trackCursor)
-            trackCursor += 1
+        if low < count, table.inputs[consumer][low].source == source {
+            table.inputs[consumer][low].read = true
+            table.inputs[consumer][low].seenVersion = version
             return
         }
 
         table.outputs[Int(source)].append(evaluatingNode)
         let position = UInt32(table.outputs[Int(source)].count - 1)
         table.inputs[consumer].insert(InputEdge(source: source, seenVersion: version, read: true,
-                                                positionInOutputs: position), at: trackCursor)
-        trackCursor += 1
+                                                positionInOutputs: position), at: low)
     }
 
-    /// Removes the edges after `cursor`: the ones the rule did not read in its last run.
-    func pruneEdges(of node: UInt32, keeping cursor: Int) {
+    /// Removes the edges that the rule did not read in its last run (mark-and-sweep preserving ascending `source` order).
+    func pruneEdges(of node: UInt32) {
         let n = Int(node)
-        guard cursor < table.inputs[n].count else { return }
-        for edge in table.inputs[n][cursor...] {
-            removeOutput(node, from: edge.source, at: edge.positionInOutputs)
+        let count = table.inputs[n].count
+        var writeIndex = 0
+        for readIndex in 0..<count {
+            let edge = table.inputs[n][readIndex]
+            if edge.read {
+                if writeIndex != readIndex {
+                    table.inputs[n][writeIndex] = edge
+                }
+                writeIndex += 1
+            } else {
+                removeOutput(node, from: edge.source, at: edge.positionInOutputs)
+            }
         }
-        table.inputs[n].removeSubrange(cursor...)
+        if writeIndex < count {
+            table.inputs[n].removeSubrange(writeIndex..<count)
+        }
     }
 
     /// Removes `dependent` from the output list of `source` at the given position (swap with the last: the list has
@@ -290,13 +302,19 @@ extension Graph {
     }
 
     /// Finds the edge of `node` that reads `source` and updates its `positionInOutputs` to `position`.
-    /// O(number of inputs of `node`), which is normally small; the costly part (searching `outputs[source]`) is gone.
+    /// O(log(number of inputs of `node`)).
     @inline(__always)
     func updatePositionInOutputs(_ node: UInt32, from source: UInt32, to position: UInt32) {
         let n = Int(node)
-        for i in table.inputs[n].indices where table.inputs[n][i].source == source {
-            table.inputs[n][i].positionInOutputs = position
-            return
+        var low = 0, high = table.inputs[n].count
+        while low < high {
+            let mid = (low + high) >> 1
+            let midSource = table.inputs[n][mid].source
+            if midSource == source {
+                table.inputs[n][mid].positionInOutputs = position
+                return
+            }
+            if midSource < source { low = mid + 1 } else { high = mid }
         }
     }
 }

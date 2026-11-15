@@ -60,7 +60,7 @@ import Testing
             if !mustRun {
                 for (source, seen) in reads[node] {
                     update(source)
-                    if versions[source] != seen { mustRun = true; if !stateful(node) { break } }
+                    if versions[source] != seen { mustRun = true }
                 }
             }
             if mustRun { run(node) }
@@ -68,7 +68,12 @@ import Testing
 
         private mutating func read(_ source: Int, into list: inout [(node: Int, seen: Int)]) -> Int {
             update(source)
-            list.append((source, versions[source]))
+            if let index = list.firstIndex(where: { $0.node == source }) {
+                list[index].seen = versions[source]
+            } else {
+                list.append((source, versions[source]))
+                list.sort { $0.node < $1.node }
+            }
             return values[source]
         }
 
@@ -76,8 +81,8 @@ import Testing
             runs[node] += 1
             let spec = specs[node - inputCount]
             if stateful(node) {
-                // `hasChanged(selector)` before reading: the first read of the previous run against what it saw.
-                changedLog[node].append(reads[node].first.map { versions[$0.node] != $0.seen } ?? false)
+                // `hasChanged(selector)` before reading: the previous run's edge for `selector` against what it saw.
+                changedLog[node].append(reads[node].first(where: { $0.node == spec.selector }).map { versions[$0.node] != $0.seen } ?? false)
             }
             var list: [(node: Int, seen: Int)] = []
             let selector = read(spec.selector, into: &list)

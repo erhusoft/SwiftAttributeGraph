@@ -26,7 +26,6 @@ public final class Graph {
     // Update machinery (see `Graph+Update.swift`).
     var frames: [UpdateFrame] = []
     @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
-    var trackCursor = 0
     var isResumingStep = false
     /// Number of times a rule has been executed (recalculations) since the graph was created.
     public internal(set) var recalculationCount = 0

@@ -97,17 +97,61 @@ import Testing
         #expect(graph.value(of: output) == 33)
     }
 
-    /// E10: inputs are kept in the order they were read, and re-reads keep that order after pruning.
-    @Test func inputsKeepTheOrderTheyWereRead() {
+    /// C5 / C17: inputs are kept sorted by ascending attribute index, regardless of read order.
+    @Test func inputsAreKeptInAscendingAttributeIDOrder() {
         let graph = Graph()
         let a = graph.makeInput(1), b = graph.makeInput(2), c = graph.makeInput(3)
         let flip = graph.makeInput(false)
         let output = graph.makeRule { flip.value ? c.value + a.value : a.value + b.value + c.value }
         _ = graph.value(of: output)
-        #expect(graph.inputs(of: output.id) == [flip.id, a.id, b.id, c.id])
+        #expect(graph.inputs(of: output.id) == [a.id, b.id, c.id, flip.id])
         graph.setValue(true, for: flip)
         _ = graph.value(of: output)
-        #expect(graph.inputs(of: output.id) == [flip.id, c.id, a.id])
+        #expect(graph.inputs(of: output.id) == [a.id, c.id, flip.id])
+    }
+
+    /// C5 / C17: before running a dirty rule, all its dirty previous inputs are brought up to date in ascending
+    /// attribute index order (no early exit on the first changed input).
+    @Test func updateVerifiesAllDirtyPreviousInputsInAttributeIDOrderBeforeRunning() {
+        final class Log { var events: [String] = [] }
+        let log = Log()
+        let graph = Graph()
+
+        let in1 = graph.makeInput(1), in2 = graph.makeInput(2), in3 = graph.makeInput(3)
+        let e1 = graph.makeRule { log.events.append("E1"); return in1.value }
+        let e2 = graph.makeRule { log.events.append("E2"); return in2.value }
+        let e3 = graph.makeRule { log.events.append("E3"); return in3.value }
+        // Read in non-monotonic order: E2, E3, E1
+        let r = graph.makeRule {
+            log.events.append("R")
+            return e2.value + e3.value + e1.value
+        }
+        _ = graph.value(of: r)
+        #expect(log.events == ["R", "E2", "E3", "E1"])
+
+        log.events.removeAll()
+        graph.setValue(10, for: in1)
+        graph.setValue(20, for: in2)
+        graph.setValue(30, for: in3)
+        #expect(graph.value(of: r) == 60)
+        #expect(log.events == ["E1", "E2", "E3", "R"])
+
+        // Selector + dirty old branch: even when `sel` (lower index) already changed, `branchA` is updated before `selRule` runs.
+        log.events.removeAll()
+        let sel = graph.makeInput(0)
+        let rawA = graph.makeInput(1), rawB = graph.makeInput(2)
+        let branchA = graph.makeRule { log.events.append("branchA"); return rawA.value * 10 }
+        let branchB = graph.makeRule { log.events.append("branchB"); return rawB.value * 10 }
+        let selectorRule = graph.makeRule {
+            log.events.append("selectorRule")
+            return sel.value == 0 ? branchA.value : branchB.value
+        }
+        #expect(graph.value(of: selectorRule) == 10)
+        log.events.removeAll()
+        graph.setValue(1, for: sel)
+        graph.setValue(5, for: rawA)
+        #expect(graph.value(of: selectorRule) == 20)
+        #expect(log.events == ["branchA", "selectorRule", "branchB"])
     }
 
     /// E10: rules run from the top down, children in the order they were read.

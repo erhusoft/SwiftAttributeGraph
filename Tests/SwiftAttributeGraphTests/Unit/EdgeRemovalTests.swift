@@ -37,9 +37,9 @@ import Testing
         #expect(graph.value(of: rule) == 1)
         #expect(Self.inputsCount(of: rule, in: graph) == 2)
 
-        // The selector and `a` remain in read order.
-        #expect(Self.inputSource(of: rule, at: 0, in: graph) == flag.id
-                && Self.inputSource(of: rule, at: 1, in: graph) == a.id)
+        // `a` and `flag` remain in ascending attribute index order.
+        #expect(Self.inputSource(of: rule, at: 0, in: graph) == a.id
+                && Self.inputSource(of: rule, at: 1, in: graph) == flag.id)
 
         // Writing to `b` must no longer dirty the rule (its edge was pruned).
         graph.setValue(99, for: b)

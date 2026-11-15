@@ -1,7 +1,6 @@
 /// An input edge of a rule: which attribute it read and the version of that attribute it saw.
 ///
-/// Edges are kept in the order the rule read them, so verification can stop at the first source that changed
-/// (all four studied engines agree on this).
+/// Edges are kept sorted by ascending `source` slot index, matching native AttributeGraph.
 struct InputEdge {
     var source: UInt32
     var seenVersion: UInt32
