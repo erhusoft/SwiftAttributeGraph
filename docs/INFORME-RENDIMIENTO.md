@@ -96,3 +96,46 @@ Simulación de entrada y salida de pantallas complejas:
 6. **Memoria total y percentiles de memoria**, que siguen sin medirse.
 7. **Ruido.** Las medidas varían del orden de 5 a 10 % entre ejecuciones (p. ej. «50 ciclos de 1.000 reglas»: 18,2 a
    20,3 ms en distintas sesiones); no se deben leer diferencias menores como mejoras o regresiones.
+
+---
+
+## 7. Banco comparativo, escenario S1: motor frente a SwiftUI real
+
+Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4. Diseño y criterios: [DISENO-BANCO-COMPARATIVO.md](DISENO-BANCO-COMPARATIVO.md).
+El código está en `parity/Bench` (local, no versionado); los resultados en bruto, en
+`parity/Bench/resultados-macos-15.7.9-S1-run1..5.txt`.
+
+**Escenario:** 1.000 filas. Cada fila tiene un estado, un `body` de fila que lo lee y dos hijos que leen el resultado de la fila.
+Cambiar el estado de una fila ejecuta **3 `body`** (en el motor, 3 reglas). En cada fotograma se cambian k filas
+(k = 1, 10, 50, 100). Cada ejecución del proceso mide **1.000 fotogramas** tras 50 de calentamiento, para cada k y
+cada implementación; **5 ejecuciones** alternando qué implementación va primero. Los `body` hacen un trabajo trivial
+idéntico. En SwiftUI la latencia va de justo antes de la primera mutación a la marca de tiempo del último `body`; en el motor,
+de antes de la primera escritura al final de las lecturas de lo que se ensució.
+
+| k filas cambiadas | Motor: mediana | Motor: peor p99 de las 5 ejecuciones | SwiftUI: mediana | SwiftUI: peor p99 | SwiftUI / motor |
+|---|---|---|---|---|---|
+| 1 | 0,002 ms | 0,002 ms | 0,647 ms | 0,869 ms | ≈ 324× |
+| 10 | 0,018 ms | 0,023 ms | 2,521 ms | 2,866 ms | ≈ 140× |
+| 50 | 0,087 ms | 0,118 ms | 9,018 ms | 9,977 ms | ≈ 104× |
+| 100 | 0,175 ms | 0,196 ms | 17,495 ms | 19,028 ms | ≈ 100× |
+
+- **Paridad:** en las 5 ejecuciones y en los 4 valores de k, **0 fotogramas** con un recuento de `body` distinto del esperado, en las dos
+  implementaciones.
+- **Escala:** el motor cuesta ≈ **1,75 µs por fila cambiada** (3 reglas y una escritura) de forma casi constante; SwiftUI ≈ 175 µs
+  por fila. Ambos crecen casi linealmente con k.
+- **Dispersión entre ejecuciones:** las medianas del motor varían ≤ 3 % entre ejecuciones; las de SwiftUI, hasta ≈ 7 % (k = 1).
+- **Memoria al montar 1.000 filas** (memoria residente del proceso, bytes por fila): motor **475 a 1.376** (el dato es muy
+  ruidoso a esta escala; falta usar `estimatedMemoryFootprint`); SwiftUI **118.000 a 128.000**.
+
+**Criterios de la nota (§6), para S1:** (1) paridad: **cumple**; (2) p99 del motor ≤ 1,6 ms con k = 50: **0,118 ms en el peor caso**,
+unas 13 veces por debajo; (3) escala casi lineal: **cumple**; (4) memoria registrada, sin umbral aún; (5) sin regresión: no se
+tocó el motor. **S2 a S6 siguen sin medir.**
+
+**Cómo leer estas cifras (límites):**
+1. La razón de 100× no es una medida de «el algoritmo del motor es 100 veces mejor». SwiftUI incluye planificación,
+   diferencial y layout, y el motor aquí solo evalúa las reglas. Lo que dice es que **el motor consume del orden del 1 % de lo
+   que cuesta actualizar esas filas en SwiftUI**, y que con 100 filas cambiadas el motor gasta 0,18 ms de un fotograma de 16,6 ms.
+2. Los `body` son triviales; los reales cuestan más, y eso lo pagará quien los escriba.
+3. Las filas del motor son 4 reglas por fila escritas a mano, sin capa de vistas, y menos que las 5 a 10 del objetivo.
+4. La ventana está fuera de pantalla; la latencia de SwiftUI incluye su planificador y no se puede separar del coste del grafo.
+5. Un solo Mac M1 y macOS 15.7.9; no se extrapola a Windows.
