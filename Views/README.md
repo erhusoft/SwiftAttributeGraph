@@ -24,8 +24,18 @@ cd Views && swift test            # cobertura y modo estricto
 Comprobado con mutaciones: renombrar un parámetro de `ScrollView` o de `Spacer`, o cambiar el tipo de alineación de `HStack`, hace fallar la comprobación.
 
 ## Límites
-- **Faltan** `LocalizedStringKey` en `Text` y `Button`, la selección de `List`, `Button(role:)`, el resto de modificadores, `State`, `Binding`, `Environment` y `@Observable`.
+- **Faltan** `LocalizedStringKey` en `Text` y `Button`, la selección de `List`, `Button(role:)`, el resto de modificadores, `Environment` y `@Observable` (State/Binding básicos experimentales: ver abajo).
 - **`@MainActor`:** SwiftUI aísla `body` y `Button.action` al actor principal; los cascarones no, y por ahora no lo comprobamos.
 - Una firma que compila **no** garantiza el mismo comportamiento; el comportamiento sale de las medidas contra SwiftUI (`docs/`).
-- No depende del motor todavía; el enlace entre las vistas y el motor es la siguiente etapa.
+- Depende del motor para el banco semántico experimental descrito abajo.
 - Escrito a mano a partir de la API pública y de la documentación; no se copió ninguna declaración del SDK.
+
+## Conexión experimental al motor
+
+`State` y `Binding` básicos ya se prueban con el motor mediante `ViewGraphScope`, un banco interno de montaje explícito.
+`StateScreen.swift` también pasa la comprobación de firmas contra SwiftUI. No hay instalación automática de propiedades
+ni renderizador; los ejemplos de pantallas siguen sin montarse por sí solos. `Button` permite invocar su acción desde
+el banco, sin implementar entrada de plataforma.
+
+La [prueba vertical](../docs/PRUEBA-VERTICAL-VISTAS.md) registra vida de ramas, poda, profundidad, rendimiento y el contraste
+con SwiftUI real. Hay **una discrepancia conocida de recuento de body** al escribir un Binding anteriormente leído.

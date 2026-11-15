@@ -605,3 +605,20 @@ Validado con Swift 6.2.4 de Xcode: **202 pruebas funcionales de depuración y 20
 conocidos de M2. Rendimiento ejecutado en suites separadas: 20.000 aliases, escritura más lectura, **0,970 ms**
 (mediana de siete); presupuesto M4 **34,96 / 36,91 ms = 0,947**, por debajo de 1,30. Pasan las tres pruebas de
 rendimiento seleccionadas. Esto no sustituye toda la batería final de M9 ni su caso objetivo de UI; M9 sigue pendiente.
+
+## 19. Primera conexión experimental con vistas (Mac)
+
+Fecha: 2026-11-14. Implementación fuera del motor, en `Views/`. Detalle y límites en
+[PRUEBA-VERTICAL-VISTAS.md](PRUEBA-VERTICAL-VISTAS.md).
+
+- `State` y `Binding` básicos conectados al grafo mediante instalación explícita; `body` montado como regla perezosa.
+  Una acción de `Button` cambia estado y produce un nuevo `Text`. Sin montador automático, layout, dibujo ni entrada nativa.
+- Comprobados poda de dependencias, aislamiento de un cuerpo independiente, 100 cambios de rama con estado reiniciado,
+  liberación de objetos y vuelta de `nodeCount` a la base; 20.000 ámbitos anidados se desmontan desde el padre.
+- 15 tests de Views pasan en debug y release con **1 discrepancia nativa declarada como known issue**: escribir un
+  Binding previamente leído pero ahora inactivo ejecuta un cuerpo adicional en SwiftUI; el grafo exacto lo omite.
+  Coinciden todos los textos observados. No se declara paridad completa.
+- Release: 10.000 escrituras por Binding + body + Text en **14,104 ms** (una muestra; ≈1,41 µs/actualización).
+  No es p99 de UI ni una medida del renderizado. TDD y mutación verificados.
+- Los 202 tests funcionales de debug del motor siguen pasando, con los 2 known issues preexistentes de M2.
+  No se cambiaron fuentes del motor. Windows sigue aplazado.

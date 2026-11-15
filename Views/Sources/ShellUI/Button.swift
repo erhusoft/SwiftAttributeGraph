@@ -1,4 +1,4 @@
-/// Shell of `Button`. The action is stored and never called: there is no input yet.
+/// Shell of `Button`. The semantic probe can invoke the action; platform input is not implemented.
 public struct Button<Label: View>: View {
     private let action: () -> Void
     private let label: Label
@@ -8,6 +8,8 @@ public struct Button<Label: View>: View {
         self.label = label()
         ShellCoverage.record("Button")
     }
+
+    func activate() { action() }
 
     public typealias Body = Never
     public var body: Never { fatalError("Button is a primitive view") }

@@ -36,8 +36,9 @@ swift test -c release -Xswiftc -enable-testing                      # release co
 de este Mac.** Si lo necesita el siguiente agente, hay que copiarlo.
 
 ## Pendiente y decisiones abiertas
-1. **`State`, `Binding`, `Environment` y `@Observable`** en `Views/`, enlazados al motor. Es lo siguiente y es donde los cascarones pasan a tener
-   comportamiento; debe coincidir con el recuento de `body` medido en SwiftUI.
+1. **Prueba vertical de `State` y `Binding` básicos hecha**, con montaje explícito y una discrepancia nativa declarada
+   ([detalle](PRUEBA-VERTICAL-VISTAS.md)). Siguiente: aislar esa invalidación de Binding y definir el montaje automático;
+   `Environment` y `@Observable` siguen pendientes. No hay renderizador.
 2. **M4:** definir cómo se escriben los `body` de la UI. Con cierres síncronos hay un límite de profundidad; con reglas reanudables hay que escribirlos
    por etapas. Es una decisión del dueño.
 3. **Apps de ejemplo** para contar qué API se usa más y ordenar prioridades. Sin definir.

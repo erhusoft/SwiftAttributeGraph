@@ -1,6 +1,6 @@
 /// Shell of `Text`. The slice has the string forms only (no `LocalizedStringKey`, no styling).
 public struct Text: View {
-    private let content: String
+    let content: String
 
     public init<S: StringProtocol>(_ content: S) {
         self.content = String(content)
