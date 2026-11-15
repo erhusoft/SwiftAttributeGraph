@@ -112,4 +112,105 @@ import Testing
         graph.setValue(42, for: indirect)
         #expect(graph.value(of: indirect) == 42)
     }
+
+    // MARK: - Indirect to a rule and source redirection (M6 / C18)
+
+    @Test func anIndirectAttributeCanRedirectToARule() {
+        let graph = Graph()
+        let input = graph.makeInput(5)
+        var runs = 0
+        let rule = graph.makeRule {
+            runs += 1
+            return input.value * 3
+        }
+        let indirect = graph.makeIndirect(rule)
+        #expect(graph.source(of: indirect) == rule)
+        #expect(runs == 0, "creating an indirect to a rule is lazy")
+
+        let reader = graph.makeRule { indirect.value + 1 }
+        #expect(graph.value(of: reader) == 16)
+        #expect(runs == 1)
+        // Reader only records the single edge to the indirect attribute (matching native AttributeGraph).
+        #expect(graph.inputs(of: reader.id) == [indirect.id])
+
+        // Mutating the underlying input dirties the rule and the reader through the indirect attribute.
+        graph.setValue(7, for: input)
+        #expect(graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 22)
+        #expect(runs == 2)
+    }
+
+    @Test func redirectingAnIndirectAttributeToTheSameSourceDoesNotDirtyReaders() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let indirect = graph.makeIndirect(a)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return indirect.value * 2
+        }
+        #expect(graph.value(of: reader) == 20)
+        #expect(runs == 1)
+
+        // Setting the exact same source is a no-op.
+        graph.setSource(a, for: indirect)
+        #expect(!graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 20)
+        #expect(runs == 1)
+    }
+
+    @Test func redirectingAnIndirectAttributeDirtiesReadersEvenWhenValuesMatchAndDetachesOldSource() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let b = graph.makeInput(10)
+        let indirect = graph.makeIndirect(a)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return indirect.value * 2
+        }
+        #expect(graph.value(of: reader) == 20)
+        #expect(runs == 1)
+
+        // Redirecting to a different attribute with the same value still marks the reader dirty and re-evaluates it.
+        graph.setSource(b, for: indirect)
+        #expect(graph.source(of: indirect) == b)
+        #expect(graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 20)
+        #expect(runs == 2)
+
+        // Changing the old source `a` no longer dirties `reader`; changing `b` does.
+        graph.setValue(99, for: a)
+        #expect(!graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 20)
+        #expect(runs == 2)
+
+        graph.setValue(25, for: b)
+        #expect(graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 50)
+        #expect(runs == 3)
+    }
+
+    @Test func statefulRuleDetectsChangeWhenIndirectIsRedirectedOrItsSourceChanges() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let b = graph.makeInput(20)
+        let indirect = graph.makeIndirect(a)
+        var changes: [Bool] = []
+        let rule = graph.makeStatefulRule(initialValue: 0) { context in
+            let cv = context.changedValue(of: indirect)
+            changes.append(cv.changed)
+            context.value = cv.value
+        }
+        #expect(graph.value(of: rule) == 10)
+        #expect(changes == [true])
+
+        graph.setSource(b, for: indirect)
+        #expect(graph.value(of: rule) == 20)
+        #expect(changes == [true, true])
+
+        graph.setValue(30, for: b)
+        #expect(graph.value(of: rule) == 30)
+        #expect(changes == [true, true, true])
+    }
 }

@@ -137,16 +137,79 @@ public final class Graph {
 
     /// Creates an indirect attribute that redirects to `source`, in the current subgraph.
     ///
-    /// Reading the indirect attribute reads `source`; writing it writes to `source`. It has no
-    /// value of its own and shares `source`'s version, so the value cut applies to `source`.
-    /// `source` must not be a rule (rules cannot be written to).
+    /// Reading the indirect attribute reads `source`; writing it writes to `source` (if the terminal source is an
+    /// input). Its target can be redirected with ``setSource(_:for:)``.
     public func makeIndirect<Value>(_ source: Attribute<Value>) -> Attribute<Value> {
         assertOwnThread()
         precondition(table.isLive(source.id), "makeIndirect: the source attribute is dead")
-        precondition(table.state[Int(source.id.index)] & NodeState.isRule == 0,
-                     "makeIndirect: cannot redirect to a rule")
-        let id = allocate(IndirectNode<Value>(source: source.id), state: NodeState.hasValue | NodeState.indirect)
+        let s = Int(source.id.index)
+        let initialState: UInt16 = NodeState.hasValue | NodeState.indirect
+            | (table.state[s] & NodeState.dirty)
+        let id = allocate(IndirectNode<Value>(source: source.id), state: initialState)
+        attachIndirectEdge(from: id.index, to: source.id.index)
         return Attribute(id: id)
+    }
+
+    /// Returns the attribute that `indirect` currently redirects to.
+    public func source<Value>(of indirect: Attribute<Value>) -> Attribute<Value> {
+        assertOwnThread()
+        precondition(table.isLive(indirect.id), "source(of:): the indirect attribute is dead")
+        precondition(table.state[Int(indirect.id.index)] & NodeState.indirect != 0,
+                     "source(of:): the attribute is not an indirect attribute")
+        let box = table.box(at: indirect.id.index) as! IndirectNode<Value>
+        return Attribute(id: box.source)
+    }
+
+    /// Redirects `indirect` to `newSource`.
+    ///
+    /// Setting the same source does nothing. Redirecting to a different attribute detaches the previous source and
+    /// marks readers of `indirect` dirty and pending so they re-evaluate against `newSource` even when both hold equal
+    /// values (matching native AttributeGraph).
+    public func setSource<Value>(_ newSource: Attribute<Value>, for indirect: Attribute<Value>) {
+        assertOwnThread()
+        precondition(evaluatingNode == Graph.noNode, "setSource(_:for:): a rule must not redirect an indirect attribute")
+        precondition(table.isLive(indirect.id), "setSource(_:for:): the indirect attribute is dead")
+        precondition(table.isLive(newSource.id), "setSource(_:for:): the source attribute is dead")
+        let index = indirect.id.index
+        let n = Int(index)
+        precondition(table.state[n] & NodeState.indirect != 0,
+                     "setSource(_:for:): the attribute is not an indirect attribute")
+        let box = table.box(at: index) as! IndirectNode<Value>
+        if box.source == newSource.id { return }
+
+        // Reject cycles through chains of indirect attributes.
+        var cursor = newSource.id
+        while table.isLive(cursor), table.state[Int(cursor.index)] & NodeState.indirect != 0 {
+            precondition(cursor.index != index,
+                         "setSource(_:for:): cycle detected (an indirect attribute cannot redirect to itself)")
+            let nextBox = table.box(at: cursor.index) as! IndirectNode<Value>
+            cursor = nextBox.source
+        }
+        precondition(cursor.index != index,
+                     "setSource(_:for:): cycle detected (an indirect attribute cannot redirect to itself)")
+
+        if !table.inputs[n].isEmpty {
+            let oldEdge = table.inputs[n][0]
+            removeOutput(index, from: oldEdge.source, at: oldEdge.positionInOutputs)
+            table.inputs[n].removeAll(keepingCapacity: true)
+        }
+
+        box.source = newSource.id
+        attachIndirectEdge(from: index, to: newSource.id.index)
+
+        globalVersion &+= 1
+        table.versions[n] &+= 1
+        if table.state[Int(newSource.id.index)] & NodeState.dirty != 0 {
+            table.state[n] |= NodeState.dirty
+        } else {
+            table.state[n] &= ~NodeState.dirty
+        }
+        if table.state[n] & NodeState.observed != 0 { queueNotification(index) }
+        for dependent in table.outputs[n] {
+            table.state[Int(dependent)] |= NodeState.pending
+        }
+        propagateDirty(from: index)
+        flushNotifications()
     }
 
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.

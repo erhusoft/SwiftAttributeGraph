@@ -34,10 +34,22 @@ extension Graph {
         let index = attribute.id.index
         let n = Int(index)
 
-        // An indirect attribute redirects to another attribute: reading it reads the source,
-        // so the rule that reads it depends on the source too.
+        // An indirect attribute redirects to another attribute: bringing the indirect up to date updates its source,
+        // and the reader records a single dependency edge on the indirect attribute itself.
         if table.state[n] & NodeState.indirect != 0 {
-            return read(resolveIndirect(attribute, tracking: evaluatingNode != Graph.noNode))
+            if table.state[n] & NodeState.dirty != 0 {
+                precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
+                update(index)
+            }
+            if evaluatingNode != Graph.noNode { recordRead(of: index) }
+            let resolved = resolveIndirect(attribute)
+            if table.state[Int(resolved.id.index)] & NodeState.dirty != 0 {
+                precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
+                update(resolved.id.index)
+            }
+            let value = typedNode(resolved).value.unsafelyUnwrapped
+            if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+            return value
         }
 
         if table.state[n] & NodeState.dirty != 0 {
@@ -61,9 +73,9 @@ extension Graph {
         let index = Int(attribute.id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
 
-        // An indirect attribute redirects to another attribute: writing it writes to the source.
+        // An indirect attribute redirects to another attribute: writing it writes to the terminal source.
         if table.state[index] & NodeState.indirect != 0 {
-            setValue(value, for: resolveIndirect(attribute, tracking: false))
+            setValue(value, for: resolveIndirect(attribute))
             return
         }
 
@@ -115,6 +127,18 @@ extension Graph {
             }
 
             if mustRun {
+                if table.state[n] & NodeState.indirect != 0 {
+                    if !table.inputs[n].isEmpty {
+                        let source = Int(table.inputs[n][0].source)
+                        table.inputs[n][0].seenVersion = table.versions[source]
+                    }
+                    globalVersion &+= 1
+                    table.versions[n] &+= 1
+                    table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.pending)
+                    table.lastVerified[n] = globalVersion
+                    frames.removeLast()
+                    continue
+                }
                 if table.state[n] & NodeState.resumable != 0 {
                     advanceResumable(top: top, firstStep: true)
                     continue

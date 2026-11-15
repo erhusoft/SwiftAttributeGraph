@@ -43,10 +43,10 @@ public struct ResumableRuleContext<Value> {
     /// Reads a current attribute and records a dependency, or reports that an input update must be requested first.
     @inlinable public func poll<T>(_ attribute: Attribute<T>) -> ReadResult<T> {
         let graph = checkedGraph()
-        let resolved = graph.resolveIndirect(attribute, tracking: true)
-        let source = resolved.id.index
+        if graph.resumableInputIsDirty(attribute.id) { return .pending }
+        let resolved = graph.resolveIndirect(attribute)
         if graph.resumableInputIsDirty(resolved.id) { return .pending }
-        graph.recordRead(of: source)
+        graph.recordRead(of: attribute.id.index)
         return .ready(graph.typedNode(resolved).value.unsafelyUnwrapped)
     }
 

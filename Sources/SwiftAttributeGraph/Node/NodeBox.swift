@@ -75,11 +75,10 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
 }
 
 /// A node that redirects to another attribute. It has no value of its own: reading
-/// it reads the source, and writing it writes to the source. Its version is the
-/// source's version, so it shares the source's value cut.
+/// it reads the source, and writing it writes to the source (when the terminal source is an input).
 final class IndirectNode<Value>: NodeBox {
     /// The attribute this indirect redirects to.
-    let source: AttributeID
+    var source: AttributeID
 
     init(source: AttributeID) {
         self.source = source
