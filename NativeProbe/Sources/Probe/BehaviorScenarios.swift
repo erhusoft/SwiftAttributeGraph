@@ -1265,3 +1265,196 @@ func weakAttributeNeverResurrectsAcrossReuse() {
     precondition(resurrectionCount == 0 && nonNilAtEnd == 0 && d.nodeCount == 0)
     print("weak-attribute-slot-reuse|staleCount=\(staleWeaks.count)|resurrectionsDuring=\(resurrectionCount)|nonNilAtEnd=\(nonNilAtEnd)|nodesAfter=\(d.nodeCount)")
 }
+
+func indirectResetSourceAfterMultipleRedirects() {
+    let d = Driver()
+    defer { d.close() }
+    let a = d.input(10)
+    let b = d.input(20)
+    let c = d.input(30)
+    let ind = d.indirect(a)
+    let attr = d.attribute(of: ind)
+
+    var readerRuns = 0
+    let reader = d.rule { () -> Int in
+        readerRuns += 1
+        return d.read(attr) + 1
+    }
+
+    let v1 = d.read(reader)
+    d.setSource(b, for: ind)
+    let v2 = d.read(reader)
+    d.setSource(c, for: ind)
+    let v3 = d.read(reader)
+    d.resetSource(of: ind)
+    let v4 = d.read(reader)
+    d.write(15, to: a)
+    let v5 = d.read(reader)
+
+    precondition([v1, v2, v3, v4, v5] == [11, 21, 31, 11, 16] && readerRuns == 5)
+    print("indirect-reset-source-multi-redirect|values=[\(v1), \(v2), \(v3), \(v4), \(v5)]|runs=\(readerRuns)")
+}
+
+func indirectChainAndIntermediateDeath() {
+    let d = Driver()
+    defer { d.close() }
+    let a = d.input(10)
+    let aSame = d.input(10)
+    let b = d.input(20)
+
+    let subChild = d.makeSubgraph()
+    let c = d.withSubgraph(subChild) { d.input(30) }
+
+    var dep1Runs = 0
+    let dep1 = d.rule { () -> Int in dep1Runs += 1; return d.read(a) * 10 }
+    var dep2Runs = 0
+    let dep2 = d.rule { () -> Int in dep2Runs += 1; return d.read(b) * 100 }
+
+    let ind1 = d.indirect(a)
+    d.setDependency(of: ind1, to: dep1)
+    let ind1Attr = d.attribute(of: ind1)
+
+    let ind2 = d.indirect(ind1Attr)
+    d.setDependency(of: ind2, to: dep2)
+    let ind2Attr = d.attribute(of: ind2)
+
+    var readerRuns = 0
+    let reader = d.rule { () -> Int in
+        readerRuns += 1
+        return d.read(ind2Attr) + 1
+    }
+
+    let v1 = d.read(reader)
+    let r1 = readerRuns
+
+    // Redirect ind1 from a(10) to aSame(10): same numeric value! Does ind2 / reader re-run?
+    d.setSource(aSame, for: ind1)
+    let v2 = d.read(reader)
+    let r2 = readerRuns
+
+    // Redirect ind1 to c(30) in child subgraph, then invalidate child subgraph -> ind1 resets to aSame or initial `a`?
+    d.setSource(c, for: ind1)
+    let v3 = d.read(reader)
+    let r3 = readerRuns
+
+    d.invalidate(subChild)
+    let v4 = d.read(reader)
+    let r4 = readerRuns
+
+    precondition([v1, v2, v3, v4] == [11, 11, 31, 31] && [r1, r2, r3, r4] == [1, 2, 3, 3] && dep1Runs == 1 && dep2Runs == 1)
+    print(
+        "indirect-chain-and-intermediate-death|values=[\(v1), \(v2), \(v3), \(v4)]|"
+            + "readerRuns=[\(r1), \(r2), \(r3), \(r4)]|deps=[\(dep1Runs), \(dep2Runs)]"
+    )
+}
+
+func changedValueAfterSkippedReadsAndIndirect() {
+    let d = Driver()
+    defer { d.close() }
+
+    // Part A: skipped reads while input changed and returned to original value.
+    let flag = d.input(true)
+    let x = d.input(10)
+    let y = d.input(99)
+    var changedLog: [(Int, Bool)] = []
+    var runs = 0
+
+    let sr = d.statefulRule { (ctx: StatefulHandleContext<Int>) in
+        runs += 1
+        let f = d.read(flag)
+        if f {
+            let cv = ctx.changedValue(of: x)
+            changedLog.append(cv)
+            ctx.value = cv.value
+        } else {
+            let cy = ctx.changedValue(of: y)
+            ctx.value = cy.value
+        }
+    }
+
+    let v1 = d.read(sr)
+    d.write(false, to: flag)
+    let v2 = d.read(sr)
+    // Mutate x away and back while sr is not reading x.
+    d.write(50, to: x)
+    d.write(10, to: x)
+    d.write(true, to: flag)
+    let v3 = d.read(sr)
+
+    // Part B: changedValue of an IndirectAttribute redirected to a different source with the SAME value.
+    let s1 = d.input(50)
+    let s2 = d.input(50)
+    let ind = d.indirect(s1)
+    let indAttr = d.attribute(of: ind)
+    let tick = d.input(0)
+    var indLog: [(Int, Bool)] = []
+
+    let srInd = d.statefulRule { (ctx: StatefulHandleContext<Int>) in
+        _ = d.read(tick)
+        let cv = ctx.changedValue(of: indAttr)
+        indLog.append(cv)
+        ctx.value = cv.value + d.read(tick)
+    }
+
+    let iv1 = d.read(srInd)
+    d.setSource(s2, for: ind)
+    let iv2 = d.read(srInd)
+    d.write(1, to: tick)
+    let iv3 = d.read(srInd)
+
+    let aChangedStrings = changedLog.map { "\($0.0):\($0.1)" }
+    let bChangedStrings = indLog.map { "\($0.0):\($0.1)" }
+    precondition([v1, v2, v3] == [10, 99, 10] && aChangedStrings == ["10:true", "10:true"])
+    precondition([iv1, iv2, iv3] == [50, 50, 51] && bChangedStrings == ["50:true", "50:true", "50:false"])
+    print(
+        "changed-value-after-skipped-and-indirect|aVals=[\(v1), \(v2), \(v3)]|"
+            + "aChanged=\(aChangedStrings)|"
+            + "bVals=[\(iv1), \(iv2), \(iv3)]|"
+            + "bChanged=\(bChangedStrings)"
+    )
+}
+
+func multiObserverTreeOrderAndCancel() {
+    let d = Driver()
+    defer { d.close() }
+    var events: [String] = []
+
+    let parent = d.makeSubgraph()
+    let child1 = d.withSubgraph(parent) { d.makeSubgraph() }
+    let grand1 = d.withSubgraph(child1) { d.makeSubgraph() }
+    let child2 = d.withSubgraph(parent) { d.makeSubgraph() }
+
+    var cancelC1Obs2: SubgraphObserverHandle? = nil
+    var cancelC2Obs2: SubgraphObserverHandle? = nil
+    let c1Obs1 = d.observeSubgraph(child1) {
+        events.append("child1-obs1")
+        cancelC1Obs2?.cancel()
+    }
+    let c1Obs2 = d.observeSubgraph(child1) {
+        events.append("child1-obs2")
+    }
+    cancelC1Obs2 = c1Obs2
+
+    let g1Obs1 = d.observeSubgraph(grand1) {
+        events.append("grand1-obs1")
+    }
+    let c2Obs1 = d.observeSubgraph(child2) {
+        events.append("child2-obs1")
+    }
+    let c2Obs2 = d.observeSubgraph(child2) {
+        events.append("child2-obs2")
+    }
+    cancelC2Obs2 = c2Obs2
+    let pObs1 = d.observeSubgraph(parent) {
+        events.append("parent-obs1")
+        cancelC2Obs2?.cancel()
+    }
+    let pObs2 = d.observeSubgraph(parent) {
+        events.append("parent-obs2")
+    }
+    _ = (c1Obs1, c1Obs2, g1Obs1, c2Obs1, c2Obs2, pObs1, pObs2)
+
+    d.invalidate(parent)
+    precondition(events == ["parent-obs1", "parent-obs2", "child2-obs1", "child1-obs1", "child1-obs2", "grand1-obs1"])
+    print("multi-observer-tree-order-and-cancel|events=\(events)")
+}

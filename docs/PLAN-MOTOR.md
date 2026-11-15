@@ -749,3 +749,18 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Estudio detallado 
   - Cadena fría de 100.000 reglas reanudables en hilo con pila de 512 KB: **76,20 ms** (20.000 reglas: **15,38 ms**).
   - Borrado de la mitad de 100.000 salidas en un nodo común: **169,89 ms**.
   - `StressBenchmark` (10.000 componentes, 60 frames con 500 mutaciones/frame): media **0,524 ms**, p50 **0,513 ms**, p95 **0,650 ms**, máx/p99 **0,654 ms** (≤ 1,6 ms); fan-out 50.000 lectores: propagación **0,477 ms**, recálculo **17,052 ms**; churn 10.000 subgrafos (30.000 atributos): creación **6,75 ms**, invalidación **7,64 ms**, **0 nodos residuales**.
+
+## 26. Casos límite combinados en `NativeProbe` y orden de avisos de subgrafo (Mac)
+
+Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
+
+**Hecho (4 escenarios nuevos en `NativeProbe` — total 54 trazas directas):**
+1. **`indirect-reset-source-multi-redirect`:** tras encadenar `A -> B -> C`, `AGGraphResetIndirectAttribute` / `resetSource` vuelve al origen inicial `A` (no al previo `B`). Coincide.
+2. **`indirect-chain-and-intermediate-death`:** cadena `ind2 -> ind1 -> source` con `.dependency`; redirigir `ind1` a otro origen distinto con el mismo valor reevalúa al lector; invalidar el subgrafo del origen intermedio `c` deja al lector con el último valor sin reevaluarlo. Coincide.
+3. **`changed-value-after-skipped-and-indirect`:** volver a leer un atributo podado tras mutar su valor y restaurarlo reporta `changed == true`; `changedValue(of:)` sobre un `IndirectAttribute` redirigido a otro atributo con el mismo valor numérico también reporta `changed == true` hasta la siguiente evaluación estable (`false`). Coincide.
+4. **`multi-observer-tree-order-and-cancel`:** el `AttributeGraph.framework` nativo notifica primero al subgrafo padre y después a los hijos en **orden inverso de creación** (preorden con hijos invertidos: `parent -> child2 -> child1 -> grand1`), idéntico al recorrido ya usado por `Subgraph.forEach` / `update(flags:)`. Cancelar un observador de un subgrafo hijo desde el padre lo cancela antes de ejecutarse, mientras que cancelar un observador hermano del mismo subgrafo desde su observador previo no impide que el hermano siga ejecutándose en la instantánea actual.
+   - Se alineó `Graph+Invalidation.swift` (`for index in order.reversed()`) y su documentación DocC; se actualizaron los tres tests M5 que asumían el antiguo posorden (`SubgraphTests`, `ResumableRuleTests`, `BranchParityTests`) y se añadieron cuatro pruebas espejo en `ParityTests.swift`.
+
+**Validación y límites:**
+- **`NativeProbe`:** **54 trazas directas** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %**. Para invocar `resetSource` en el `AttributeGraph.framework` nativo desde `NativeProbe/Sources/Probe/main.swift` se usa `AGGraphResetIndirectAttribute(_ attribute: AnyAttribute)` porque `IndirectAttribute.resetSource()` está en `.tbd` pero omitido de `.swiftinterface`.
+- **Tests funcionales:** **257 pruebas en 29 suites** en verde con `swift test` en depuración tras el cambio final. No se reejecutaron las mediciones de rendimiento en `release` (el cambio en `Graph+Invalidation.swift` solo sustituye la iteración `order` por `order.reversed()`, de coste O(1)).

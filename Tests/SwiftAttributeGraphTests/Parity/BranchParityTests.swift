@@ -25,10 +25,10 @@ import Testing
         return outer
     }
 
-    /// E7 / round 7: the new branch is built first; then the old one says it disappears, **children before the
-    /// parent and all of it before any state is released**; then the states are released. (The order among siblings is
-    /// not promised: SwiftUI shows both orders.)
-    @Test func switchingBranchBuildsTheNewOneFirstThenNoticesChildrenFirstThenReleasesState() {
+    /// E7 / round 7: the new branch is built first; then the old one says it disappears, **parents before children
+    /// (children in reverse creation order, matching native AttributeGraph) and all of it before any state is
+    /// released**; then the states are released.
+    @Test func switchingBranchBuildsTheNewOneFirstThenNoticesParentsFirstThenReleasesState() {
         let graph = Graph()
         let log = Log()
         let old = makeBranch(graph, log, prefix: "A")
@@ -42,8 +42,8 @@ import Testing
         let released = events.indices.filter { events[$0].hasSuffix("state deinit") }
         #expect(disappear.count == 3 && released.count == 2)
         #expect(disappear.max()! < released.min()!, "every notice comes before any state is released")
-        #expect(events.firstIndex(of: "A outer disappear")! > events.firstIndex(of: "A1 disappear")!)
-        #expect(events.firstIndex(of: "A outer disappear")! > events.firstIndex(of: "A2 disappear")!)
+        #expect(events.firstIndex(of: "A outer disappear")! < events.firstIndex(of: "A1 disappear")!)
+        #expect(events.firstIndex(of: "A outer disappear")! < events.firstIndex(of: "A2 disappear")!)
         #expect(graph.isLive(new) && graph.nodeCount == 0)
     }
 

@@ -381,4 +381,136 @@ import Testing
         #expect(graph.nodeCount == 0)
         #expect(graph.liveSubgraphCount == 1)
     }
+
+    private struct ClosureStateful<Value>: StatefulRule {
+        let body: (inout RuleContext<Value>) -> Void
+        mutating func updateValue(_ context: inout RuleContext<Value>) { body(&context) }
+    }
+
+    @Test func resetSourceRevertsToInitialAfterMultipleRedirects() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let b = graph.makeInput(20)
+        let c = graph.makeInput(30)
+        let ind = graph.makeIndirect(a)
+        var runs = 0
+        let reader = graph.makeRule { runs += 1; return ind.value + 1 }
+
+        #expect(graph.value(of: reader) == 11)
+        graph.setSource(b, for: ind)
+        #expect(graph.value(of: reader) == 21)
+        graph.setSource(c, for: ind)
+        #expect(graph.value(of: reader) == 31)
+        graph.resetSource(for: ind)
+        #expect(graph.value(of: reader) == 11)
+        graph.setValue(15, for: a)
+        #expect(graph.value(of: reader) == 16)
+        #expect(runs == 5)
+    }
+
+    @Test func indirectChainAndIntermediateSubgraphDeath() {
+        let graph = Graph()
+        let a = graph.makeInput(10)
+        let aSame = graph.makeInput(10)
+        let b = graph.makeInput(20)
+        let child = graph.makeSubgraph()
+        let c = graph.withCurrent(child) { graph.makeInput(30) }
+
+        var dep1Runs = 0
+        let dep1 = graph.makeRule { dep1Runs += 1; return a.value * 10 }
+        var dep2Runs = 0
+        let dep2 = graph.makeRule { dep2Runs += 1; return b.value * 100 }
+
+        let ind1 = graph.makeIndirect(a)
+        graph.setDependency(dep1.erased, for: ind1)
+        let ind2 = graph.makeIndirect(ind1)
+        graph.setDependency(dep2.erased, for: ind2)
+
+        var readerRuns = 0
+        let reader = graph.makeRule { readerRuns += 1; return ind2.value + 1 }
+
+        #expect(graph.value(of: reader) == 11)
+        #expect(readerRuns == 1)
+        graph.setSource(aSame, for: ind1)
+        #expect(graph.value(of: reader) == 11)
+        #expect(readerRuns == 2)
+        graph.setSource(c, for: ind1)
+        #expect(graph.value(of: reader) == 31)
+        #expect(readerRuns == 3)
+        graph.invalidate(child)
+        #expect(graph.value(of: reader) == 31)
+        #expect(readerRuns == 3 && dep1Runs == 1 && dep2Runs == 1)
+    }
+
+    @Test func changedValueReportsChangedAfterSkippedReadsAndSameValueRedirect() {
+        let graph = Graph()
+        let flag = graph.makeInput(true)
+        let x = graph.makeInput(10)
+        let y = graph.makeInput(99)
+        var changedLog: [(Int, Bool)] = []
+        let sr = graph.makeStatefulRule(ClosureStateful<Int> { ctx in
+            if flag.value {
+                let cv = ctx.changedValue(of: x)
+                changedLog.append(cv)
+                ctx.value = cv.value
+            } else {
+                ctx.value = ctx.changedValue(of: y).value
+            }
+        })
+        #expect(graph.value(of: sr) == 10)
+        graph.setValue(false, for: flag)
+        #expect(graph.value(of: sr) == 99)
+        graph.setValue(50, for: x)
+        graph.setValue(10, for: x)
+        graph.setValue(true, for: flag)
+        #expect(graph.value(of: sr) == 10)
+        #expect(changedLog.map { "\($0.0):\($0.1)" } == ["10:true", "10:true"])
+
+        let s1 = graph.makeInput(50)
+        let s2 = graph.makeInput(50)
+        let ind = graph.makeIndirect(s1)
+        let tick = graph.makeInput(0)
+        var indLog: [(Int, Bool)] = []
+        let srInd = graph.makeStatefulRule(ClosureStateful<Int> { ctx in
+            _ = tick.value
+            let cv = ctx.changedValue(of: ind)
+            indLog.append(cv)
+            ctx.value = cv.value + tick.value
+        })
+        #expect(graph.value(of: srInd) == 50)
+        graph.setSource(s2, for: ind)
+        #expect(graph.value(of: srInd) == 50)
+        graph.setValue(1, for: tick)
+        #expect(graph.value(of: srInd) == 51)
+        #expect(indLog.map { "\($0.0):\($0.1)" } == ["50:true", "50:true", "50:false"])
+    }
+
+    @Test func multiObserverTreeNotifiesParentsFirstReverseChildrenAndSnapshotsPerSubgraph() {
+        let graph = Graph()
+        var events: [String] = []
+        let parent = graph.makeSubgraph()
+        let child1 = graph.makeSubgraph(parent: parent)
+        let grand1 = graph.makeSubgraph(parent: child1)
+        let child2 = graph.makeSubgraph(parent: parent)
+
+        var c1Obs2: SubgraphObservationToken?
+        var c2Obs2: SubgraphObservationToken?
+        let c1Obs1 = graph.observe(child1) {
+            events.append("child1-obs1")
+            c1Obs2?.cancel()
+        }
+        c1Obs2 = graph.observe(child1) { events.append("child1-obs2") }
+        let g1Obs1 = graph.observe(grand1) { events.append("grand1-obs1") }
+        let c2Obs1 = graph.observe(child2) { events.append("child2-obs1") }
+        c2Obs2 = graph.observe(child2) { events.append("child2-obs2") }
+        let pObs1 = graph.observe(parent) {
+            events.append("parent-obs1")
+            c2Obs2?.cancel()
+        }
+        let pObs2 = graph.observe(parent) { events.append("parent-obs2") }
+        _ = (c1Obs1, c1Obs2, g1Obs1, c2Obs1, c2Obs2, pObs1, pObs2)
+
+        graph.invalidate(parent)
+        #expect(events == ["parent-obs1", "parent-obs2", "child2-obs1", "child1-obs1", "child1-obs2", "grand1-obs1"])
+    }
 }

@@ -39,6 +39,10 @@ SCENARIOS = [
     "nested-special-scopes",
     "reentrant-subgraph-invalidation",
     "weak-attribute-slot-reuse",
+    "indirect-reset-source-multi-redirect",
+    "indirect-chain-and-intermediate-death",
+    "changed-value-after-skipped-and-indirect",
+    "multi-observer-tree-order-and-cancel",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

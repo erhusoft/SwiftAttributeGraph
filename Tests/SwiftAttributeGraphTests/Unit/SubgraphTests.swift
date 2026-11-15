@@ -76,7 +76,7 @@ import Testing
 
     // MARK: The notice before disappearing
 
-    @Test func theNoticeComesOnceChildrenBeforeParentsAndBeforeAnythingIsFreed() {
+    @Test func theNoticeComesOnceParentsBeforeChildrenAndBeforeAnythingIsFreed() {
         let graph = Graph()
         let log = Log()
         let parent = graph.makeSubgraph()
@@ -89,7 +89,7 @@ import Testing
             }
         }
         graph.invalidate(parent)
-        #expect(log.events == ["first alive=true", "state=41", "second alive=true", "parent alive=true"])
+        #expect(log.events == ["parent alive=true", "second alive=true", "first alive=true", "state=41"])
         #expect(!graph.contains(state.id))
     }
 

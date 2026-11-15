@@ -1,6 +1,15 @@
 #if NATIVE_ATTRIBUTE_GRAPH
 import AttributeGraph
 
+@_silgen_name("AGGraphResetIndirectAttribute")
+private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
+
+final class SubgraphObserverHandle {
+    private let onCancel: () -> Void
+    init(_ onCancel: @escaping () -> Void) { self.onCancel = onCancel }
+    func cancel() { onCancel() }
+}
+
 typealias Handle<Value> = AttributeGraph.Attribute<Value>
 typealias SubgraphHandle = AttributeGraph.Subgraph
 typealias WeakHandle<Value> = AttributeGraph.WeakAttribute<Value>
@@ -68,10 +77,11 @@ final class Driver {
     func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
     func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
     @discardableResult
-    func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> AnyObject {
-        final class TokenBox { init(_ cancel: @escaping () -> Void) { _ = cancel } }
+    func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> SubgraphObserverHandle {
         let id = subgraph.addObserver(body)
-        return TokenBox { _ = id }
+        return SubgraphObserverHandle { [weak subgraph] in
+            subgraph?.removeObserver(id)
+        }
     }
     var nodeCount: Int { Int(graph.counter(for: .nodes)) }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
@@ -81,6 +91,9 @@ final class Driver {
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.projectedValue }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.source }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { indirect.source = newSource }
+    func resetSource<V>(of indirect: IndirectHandle<V>) {
+        _agResetIndirectAttribute(indirect.identifier)
+    }
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
         currentSubgraph.apply { Handle(AttributeGraph.Focus(root: root, keyPath: keyPath)) }
     }
@@ -161,6 +174,12 @@ final class Driver {
 #else
 import SwiftAttributeGraph
 
+final class SubgraphObserverHandle {
+    private let onCancel: () -> Void
+    init(_ onCancel: @escaping () -> Void) { self.onCancel = onCancel }
+    func cancel() { onCancel() }
+}
+
 typealias Handle<Value> = Attribute<Value>
 typealias SubgraphHandle = Subgraph
 typealias WeakHandle<Value> = WeakAttribute<Value>
@@ -216,9 +235,9 @@ final class Driver {
     func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
     func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
     @discardableResult
-    func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> AnyObject {
-        final class TokenBox { let token: SubgraphObservationToken; init(_ token: SubgraphObservationToken) { self.token = token } }
-        return TokenBox(graph.observe(subgraph, onInvalidate: body))
+    func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> SubgraphObserverHandle {
+        let token = graph.observe(subgraph, onInvalidate: body)
+        return SubgraphObserverHandle { token.cancel() }
     }
     var nodeCount: Int { graph.nodeCount }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
@@ -228,6 +247,7 @@ final class Driver {
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { graph.source(of: indirect) }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
+    func resetSource<V>(of indirect: IndirectHandle<V>) { graph.resetSource(for: indirect) }
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
         graph.withCurrent(currentSubgraph) { graph.makeFocus(root, keyPath: keyPath) }
     }
@@ -429,3 +449,7 @@ initialValueNoFirstWrite()
 nestedSpecialScopesRestoreContext()
 reentrantSubgraphInvalidationInObserver()
 weakAttributeNeverResurrectsAcrossReuse()
+indirectResetSourceAfterMultipleRedirects()
+indirectChainAndIntermediateDeath()
+changedValueAfterSkippedReadsAndIndirect()
+multiObserverTreeOrderAndCancel()

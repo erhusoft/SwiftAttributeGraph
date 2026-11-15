@@ -233,7 +233,7 @@ import Testing
         graph.observe(child) { notices.append("child") }
         graph.observe(owner) { notices.append("parent") }
         #expect(graph.value(of: rule) == 5)
-        #expect(notices == ["child", "parent"])
+        #expect(notices == ["parent", "child"])
         #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1 && graph.frames.isEmpty)
     }
 

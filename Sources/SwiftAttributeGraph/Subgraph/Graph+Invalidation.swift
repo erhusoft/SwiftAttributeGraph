@@ -22,9 +22,9 @@ extension Graph {
     /// Calls `onInvalidate` once, when the subgraph is about to be freed (because it or an ancestor was invalidated).
     ///
     /// The notice comes before anything is freed, so the callback can still read what the subgraph owns. For several
-    /// subgraphs invalidated together, children are told before their parents; the order among siblings is the order
-    /// of creation and is not promised. If the invalidation was asked for from inside a rule, the notices are delivered
-    /// when the outermost update ends, never inside it.
+    /// subgraphs invalidated together, parents are notified before their children and children are visited in reverse
+    /// creation order (matching native AttributeGraph). If the invalidation was asked for from inside a rule or during
+    /// `withoutSubgraphInvalidation`, the notices are delivered when the outermost scope ends, never inside it.
     @discardableResult
     public func observe(_ subgraph: Subgraph, onInvalidate: @escaping () -> Void) -> SubgraphObservationToken {
         assertOwnThread()
@@ -98,8 +98,8 @@ extension Graph {
         let order = subgraphs.postOrder(from: root.id.index)           // children before parents
         for index in order { subgraphs.setFalling(index: index, true) }
 
-        // 1. The notices, with everything still alive and readable.
-        for index in order {
+        // 1. The notices, with everything still alive and readable (parents before children, reverse child creation order).
+        for index in order.reversed() {
             guard let callbacks = subgraphObservers.removeValue(forKey: index) else { continue }
             for observer in callbacks { observer.callback() }
         }
