@@ -2,10 +2,9 @@ warning: /Users/erhusoft/Library/org.swift.swiftpm/configuration is not accessib
 warning: /Users/erhusoft/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.
 [0/1] Planning build
 Building for production...
-[0/4] Write sources
-[2/4] Write swift-version--58304C5D6DBC2206.txt
-[4/5] Compiling SwiftAttributeGraph Comparison.swift
-[5/7] Compiling Probe BehaviorScenarios.swift
-[5/7] Write Objects.LinkFileList
-[6/7] Linking Probe
-Build complete! (3.79s)
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/4] Compiling Probe BehaviorScenarios.swift
+[3/5] Write Objects.LinkFileList
+[4/5] Linking Probe
+Build complete! (1.86s)

@@ -15,9 +15,9 @@ Este informe consolida las mediciones y la verificación experimental de **Swift
 > prueba»).
 
 El motor ha sido auditado contra los principios no negociables de arquitectura de grafos reactivos:
-1. **Presupuesto de Frame UI ($\le 1,6\text{ ms}$)**: cumplido **en una carga sintética** (10.000 reglas independientes de una sola operación, sin jerarquía ni cuerpos de vista): media de **$0,513\text{ ms}$** y máximo de **$1,253\text{ ms}$** en 60 frames con 500 mutaciones cada uno. No es el caso objetivo de `DISENO-M0.md` §7 (1.000 filas con 5–10 atributos por fila).
+1. **Presupuesto de Frame UI ($\le 1,6\text{ ms}$)**: cumplido **en una carga sintética** (10.000 reglas independientes de una sola operación, sin jerarquía ni cuerpos de vista): media de **$0,524\text{ ms}$** y máximo de **$0,654\text{ ms}$** en 60 frames con 500 mutaciones cada uno. No es el caso objetivo de `DISENO-M0.md` §7 (1.000 filas con 5–10 atributos por fila).
 2. **Sin recursión nativa en el camino reanudable**: cadenas de hasta 100.000 niveles evaluadas en frío en hilos con pila reducida (512 KB) sin desbordamiento, **solo con `ResumableRule`**. Los cierres síncronos (`Rule`, `StatefulRule`, `makeRule`) conservan su límite de profundidad en lecturas dinámicas nuevas (unos miles de niveles; medido en `DISENO-M4.md` §2).
-3. **Borrado de aristas $O(1)$**: 50.000 desconexiones sobre un nodo común resueltas en **174,08 ms** lineales mediante swap-with-last con posición guardada.
+3. **Borrado de aristas $O(1)$**: 50.000 desconexiones sobre un nodo común resueltas en **174,08 ms** lineales mediante swap-with-last con posición guardada, y poda de la mitad de 20.000 entradas de una regla en **4,85 ms** mediante marca y barrido.
 4. **Ausencia total de fugas de memoria**: Tras crear y destruir 10.000 subgrafos (30.000 atributos), el contador de nodos regresa exactamente a la línea base (**0 nodos residuales**).
 5. **Corte por versiones**: una escritura que la primera regla corta cuesta **$0,72\text{ ms}$**, frente a **$5,85\text{ ms}$** cuando el cambio se propaga por toda la cadena de 20.000 reglas. Son dos escenarios distintos del mismo banco, ya presentes en M0 (0,7 ms y 5,5 ms); **no es una aceleración atribuible al atajo de M1**.
 
@@ -25,17 +25,17 @@ El motor ha sido auditado contra los principios no negociables de arquitectura d
 
 ## 2. Auditoría de Latencia de Frame (60 Frames Consecutivos @ 60 fps)
 
-Simulación interactiva con 10.000 componentes montados en subgrafos independientes (`StressBenchmark`). Cada frame introduce 500 mutaciones directas (5% de la superficie de estado) y evalúa los dependientes observados:
+Simulación interactiva con 10.000 componentes montados en subgrafos independientes (`StressBenchmark`, revalidado tras la alineación C1–C24 y la eliminación de `NodeTable.lastVerified`). Cada frame introduce 500 mutaciones directas (5% de la superficie de estado) y evalúa los dependientes observados:
 
 | Métrica | Medida | Presupuesto Objetivo | Estado |
 |---|---|---|---|
-| **Montaje del árbol (10.000 componentes)** | **6,73 ms** | Inicial | — |
-| **Frame 0 (render en frío)** | **10,70 ms** | Arranque | — |
-| **Latencia media por frame** | **0,513 ms** | $\le 1,6\text{ ms}$ | ✅ CUMPLE |
-| **Percentil 50 (Mediana)** | **0,477 ms** | $\le 1,6\text{ ms}$ | ✅ CUMPLE |
-| **Percentil 95** | **0,648 ms** | $\le 1,6\text{ ms}$ | ✅ CUMPLE |
-| **Percentil 99 (p99)** | **1,253 ms** (con 60 muestras es la última, es decir, **el máximo**) | $\le 1,6\text{ ms}$ | ✅ CUMPLE, sin valor estadístico como p99 |
-| **Latencia máxima observada** | **1,253 ms** | $\le 2,5\text{ ms}$ | ✅ CUMPLE |
+| **Montaje del árbol (10.000 componentes)** | **9,58 ms** | Inicial | — |
+| **Frame 0 (render en frío)** | **9,75 ms** | Arranque | — |
+| **Latencia media por frame** | **0,524 ms** | $\le 1,6\text{ ms}$ | ✅ CUMPLE |
+| **Percentil 50 (Mediana)** | **0,513 ms** | $\le 1,6\text{ ms}$ | ✅ CUMPLE |
+| **Percentil 95** | **0,650 ms** | $\le 1,6\text{ ms}$ | ✅ CUMPLE |
+| **Percentil 99 (p99)** | **0,654 ms** (con 60 muestras es la última, es decir, **el máximo**) | $\le 1,6\text{ ms}$ | ✅ CUMPLE, sin valor estadístico como p99 |
+| **Latencia máxima observada** | **0,654 ms** | $\le 2,5\text{ ms}$ | ✅ CUMPLE |
 | **Vistas actualizadas por frame** | **500** | — | — |
 
 ---
@@ -44,8 +44,8 @@ Simulación interactiva con 10.000 componentes montados en subgrafos independien
 
 Simulación de una variable global de entorno (`@Environment` / tema) leída por 50.000 reglas:
 
-- **Tiempo de propagación dirty**: **0,506 ms** (marca iterativa de suciedad sin duplicados ni recursión).
-- **Recálculo perezoso de los 50.000 lectores**: **17,169 ms** (~$0,34\ \mu\text{s}$ por regla evaluada).
+- **Tiempo de propagación dirty**: **0,477 ms** (marca iterativa de suciedad sin duplicados ni recursión).
+- **Recálculo perezoso de los 50.000 lectores**: **17,052 ms** (~$0,34\ \mu\text{s}$ por regla evaluada).
 
 ---
 
@@ -53,9 +53,10 @@ Simulación de una variable global de entorno (`@Environment` / tema) leída por
 
 Simulación de entrada y salida de pantallas complejas:
 
-- **Creación de 10.000 subgrafos (30.000 atributos)**: **7,11 ms**.
-- **Liberación e invalidación de 10.000 subgrafos**: **8,38 ms**.
+- **Creación de 10.000 subgrafos (30.000 atributos)**: **6,75 ms**.
+- **Liberación e invalidación de 10.000 subgrafos**: **7,64 ms**.
 - **Fugas de memoria / Nodos residuales**: **0**.
+- **Huella de tablas en `UISimulator` (paso 8)**: **684 bytes** (8 recálculos totales, 7 aristas activas).
 
 ---
 
@@ -76,8 +77,8 @@ Simulación de entrada y salida de pantallas complejas:
 | **Subgrafos y vida** | Destrucción jerárquica con invalidación diferida | `SubgraphTable` con árbol O(1) y posorden | ✅ Coincide con el diseño y tiene pruebas |
 | **Comparación en caliente** | Comparación de bytes para tipos triviales | `ValueComparator` con caché de `ComparisonPlan` | ✅ Coincide con el diseño y tiene pruebas |
 | **Reglas con estado** | Soporte de acumuladores y cambios diferenciales | `StatefulRule` y `RuleContext` | ✅ Coincide con el diseño y tiene pruebas |
-| **Redirecciones indirectas** | Alias y proyecciones sin nodo extra | `IndirectNode` con resolución iterativa | ✅ Coincide con el diseño y tiene pruebas |
-| **Batería de especificación** | Oráculos aleatorios y profundidad | M9 completo: 202 pruebas funcionales en verde | ✅ Coincide con el diseño y tiene pruebas |
+| **Redirecciones indirectas** | Alias y proyecciones sin nodo extra | `IndirectNode` con resolución iterativa, `setSource`, `resetSource` y `Focus` | ✅ Coincide con el diseño y con `AttributeGraph` nativo |
+| **Batería de especificación** | Oráculos aleatorios y profundidad | M9 + C1–C24: **215 pruebas funcionales en verde (0 known issues)** y **22 escenarios `NativeProbe` al 100 %** | ✅ Coincide con el diseño y con `AttributeGraph` nativo |
 
 ---
 

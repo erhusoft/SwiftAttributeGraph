@@ -214,6 +214,49 @@ import Testing
         #expect(changes == [true, true, true])
     }
 
+    @Test func invalidatingRedirectedSourceSubgraphResetsIndirectToInitialSourceWithoutDirtyingReaders() {
+        let graph = Graph()
+        let initial = graph.makeInput(10)
+        let indirect = graph.makeIndirect(initial)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return indirect.value + 1
+        }
+        #expect(graph.value(of: reader) == 11)
+        #expect(runs == 1)
+
+        let child = graph.makeSubgraph()
+        let childTarget = graph.withCurrent(child) { graph.makeInput(77) }
+        graph.setSource(childTarget, for: indirect)
+        #expect(graph.source(of: indirect) == childTarget)
+        #expect(graph.value(of: reader) == 78)
+        #expect(runs == 2)
+
+        // Invalidating `child` resets `indirect` back to `initial` without dirtying `reader`.
+        graph.invalidate(child)
+        #expect(graph.source(of: indirect) == initial)
+        #expect(!graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 78)
+        #expect(runs == 2)
+
+        // Writing to `initial` propagates through `indirect` and updates `reader`.
+        graph.setValue(100, for: initial)
+        #expect(graph.value(of: reader) == 101)
+        #expect(runs == 3)
+
+        // Explicit `resetSource(for:)` redirects back to `initial` and dirties `reader`.
+        let another = graph.makeInput(50)
+        graph.setSource(another, for: indirect)
+        #expect(graph.value(of: reader) == 51)
+        #expect(runs == 4)
+
+        graph.resetSource(for: indirect)
+        #expect(graph.source(of: indirect) == initial)
+        #expect(graph.value(of: reader) == 101)
+        #expect(runs == 5)
+    }
+
     // MARK: - KeyPath projection / Focus (M6 / C14)
 
     private struct Pair {

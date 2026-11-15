@@ -212,6 +212,19 @@ public final class Graph {
         flushNotifications()
     }
 
+    /// Resets `indirect` back to the initial source attribute it was created with (matching
+    /// `IndirectAttribute.resetSource()` in native AttributeGraph).
+    public func resetSource<Value>(for indirect: Attribute<Value>) {
+        assertOwnThread()
+        precondition(evaluatingNode == Graph.noNode, "resetSource(for:): a rule must not redirect an indirect attribute")
+        precondition(table.isLive(indirect.id), "resetSource(for:): the indirect attribute is dead")
+        let index = indirect.id.index
+        precondition(table.state[Int(index)] & NodeState.indirect != 0,
+                     "resetSource(for:): the attribute is not an indirect attribute")
+        let box = table.box(at: index) as! IndirectNode<Value>
+        setSource(Attribute(id: box.initialSource), for: indirect)
+    }
+
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
     public func makeRule<R: Rule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()

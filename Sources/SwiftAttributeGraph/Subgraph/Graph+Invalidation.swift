@@ -97,7 +97,22 @@ extension Graph {
                 removeOutput(node, from: edge.source, at: edge.positionInOutputs)
             }
             for dependent in table.outputs[n] where !freeing.contains(table.owner(at: dependent)) {
-                table.inputs[Int(dependent)].removeAll { $0.source == node }
+                let dep = Int(dependent)
+                table.inputs[dep].removeAll { $0.source == node }
+                if table.state[dep] & NodeState.indirect != 0,
+                   let indBox = table.box(at: dependent) as? AnyIndirectNode,
+                   indBox.source.index == node {
+                    indBox.source = indBox.initialSource
+                    let initial = indBox.initialSource
+                    if table.isLive(initial) && !freeing.contains(table.owner(at: initial.index)) {
+                        attachIndirectEdge(from: dependent, to: initial.index)
+                        if table.state[Int(initial.index)] & NodeState.dirty != 0 {
+                            table.state[dep] |= NodeState.dirty
+                        } else {
+                            table.state[dep] &= ~NodeState.dirty
+                        }
+                    }
+                }
             }
         }
 

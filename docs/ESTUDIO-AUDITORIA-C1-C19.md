@@ -110,7 +110,7 @@ La auditoría del código fuente detectó que `NodeTable.lastVerified: [UInt32]`
 
 ---
 
-## 3. Resultados del banco `NativeProbe` (15 escenarios)
+## 3. Resultados del banco `NativeProbe` (22 escenarios)
 
 Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audit-c1-c19-macos-15.7.9/`:
 
@@ -135,8 +135,9 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 | 17 | `slot-reuse-input-order` | C20 | Idéntico (`v1=111`, `v2=122`, `joinRuns=2`, `evalOrder=["second", "reused"]`) |
 | 18 | `duplicate-writes-before-read` | C21 | Idéntico (`v=[15, 15]`, `u=[24, 24]`, `runs=[3, 3]`) |
 | 19 | `double-read-and-prune` | C22 | Idéntico (`values=[120, 140, 100, 100]`, `runs=[1, 2, 3, 3]`) |
-| 20 | `indirect-source-invalidated` | C23 | Idéntico (`values=[78, 78, 100]`, `runs=[1, 1, 2]`) |
+| 20 | `indirect-source-invalidated` | C23 | Idéntico (`values=[11, 78, 78, 100]`, `runs=[2, 2, 3]`, `resetToInitial=true`) |
 | 21 | `random-graph-oracle` | C24 | Idéntico (`runs=[95, 108, 105, 100, 95, 107]`, checksums idénticos en las 6 semillas) |
+| 22 | `random-subgraph-weak-indirect-oracle` | C9, C10, C15, C18, C20, C23, C24 | Idéntico (`runs=[115, 96, 106, 66, 96, 89]`, checksums idénticos en las 6 semillas) |
 
 ---
 
@@ -151,8 +152,10 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 3. **C22 (Lectura duplicada de la misma entrada en una misma ejecución y poda posterior):**
    - Cuando una regla lee `x + y + x`, `AGTrace` emite un único `add_edge` para `x` y otro para `y` (`inputs=[536, 1048]`).
    - Al cambiar después el selector para dejar de leer `x`, esa única arista se poda limpiamente y mutaciones posteriores de `x` no reejecutan la regla (`double-read-and-prune`: `values=[120, 140, 100, 100]`, `runs=[1, 2, 3, 3]`).
-4. **C23 (Indirecto cuyo `source` pertenece a un subgrafo que se invalida):**
-   - Al invalidar el subgrafo hijo dueño del `source` de un `IndirectAttribute`, ni el indirecto ni el lector externo se marcan sucios (`ir.valueState == 88`). El lector conserva su valor cacheado (`78`, `runs=1`).
-   - Si se reevalúa una regla que intenta resolver el `IndirectAttribute` cuyo `source` sigue muerto, el nativo aborta (`SIGABRT`); pero si el indirecto se redirige antes con `setSource` a un nuevo atributo vivo (`99`), el lector se ensucia y actualiza limpiamente a `100` (`runs=2`) (`indirect-source-invalidated`).
-5. **C24 (Oráculo de grafos aleatorios nativo vs propio):**
-   - En 6 semillas deterministas × 50 pasos con grafos aleatorios de 6 entradas y 24 reglas mixtas (`Rule` y `StatefulRule` con selectores condicionales `sel % 2 == 0 ? left : right`), las ejecuciones acumuladas (`[95, 108, 105, 100, 95, 107]`) y los checksums de 64 bits coinciden al 100 % entre el `AttributeGraph` de Apple y `SwiftAttributeGraph` (`random-graph-oracle`).
+4. **C23 (Indirecto cuyo `source` pertenece a un subgrafo que se invalida y restablecimiento automático a `initialSource`):**
+   - Cada `IndirectAttribute` recuerda el `initialSource` con el que fue creado (`init(source:)` / `makeIndirect(_:)`).
+   - Al invalidar el subgrafo hijo dueño del `source` actual al que fue redirigido el indirecto, `AttributeGraph` restablece automáticamente `ind.source` a su `initialSource` original (reconectando la arista `ind <- initialSource`) **sin** marcar sucios ni al indirecto ni a sus lectores externos (`reader` conserva su valor cacheado `78` con `runs=2`).
+   - Si después cambia `initialSource` (`99`) o otra entrada del lector, la lectura se propaga limpiamente a través de `ind <- initialSource` (`100`, `runs=3`) (`indirect-source-invalidated`). Además, `resetSource(for:)` permite restablecer explícitamente un indirecto a su `initialSource`.
+5. **C24 (Oráculos de grafos aleatorios nativo vs propio):**
+   - En `random-graph-oracle` (6 semillas × 50 pasos con 6 entradas y 24 reglas mixtas `Rule` y `StatefulRule` con selectores condicionales), las ejecuciones acumuladas (`[95, 108, 105, 100, 95, 107]`) y los checksums de 64 bits coinciden al 100 %.
+   - En `random-subgraph-weak-indirect-oracle` (6 semillas × 45 pasos combinando creación e invalidación dinámica de subgrafos hijos, lecturas mediante `WeakAttribute` y redirecciones dinámicas de `IndirectAttribute` con `setSource`), las ejecuciones acumuladas (`[115, 96, 106, 66, 96, 89]`) y los checksums de 64 bits coinciden también al 100 % entre `AttributeGraph` nativo y `SwiftAttributeGraph`.

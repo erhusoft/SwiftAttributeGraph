@@ -74,16 +74,23 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     }
 }
 
-/// A node that redirects to another attribute. It has no value of its own: reading
-/// it reads the source, and writing it writes to the source (when the terminal source is an input).
-final class IndirectNode<Value>: NodeBox {
-    /// The attribute this indirect redirects to.
+/// Type-erased base for ``IndirectNode`` so subgraph invalidation can reset an indirect attribute's source to its
+/// initial source without knowing its generic value type.
+class AnyIndirectNode: NodeBox {
+    /// The attribute this indirect redirected to when it was first created.
+    let initialSource: AttributeID
+    /// The attribute this indirect currently redirects to.
     var source: AttributeID
 
     init(source: AttributeID) {
+        self.initialSource = source
         self.source = source
     }
 }
+
+/// A node that redirects to another attribute. It has no value of its own: reading
+/// it reads the source, and writing it writes to the source (when the terminal source is an input).
+final class IndirectNode<Value>: AnyIndirectNode {}
 
 /// A stateful rule given as a closure.
 final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {

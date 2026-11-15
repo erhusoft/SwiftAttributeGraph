@@ -28,7 +28,8 @@
     "duplicate-writes-before-read",
     "double-read-and-prune",
     "indirect-source-invalidated",
-    "random-graph-oracle"
+    "random-graph-oracle",
+    "random-subgraph-weak-indirect-oracle"
   ],
   "probe_only": true
 }

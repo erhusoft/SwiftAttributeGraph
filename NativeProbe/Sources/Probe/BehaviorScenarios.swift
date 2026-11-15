@@ -342,29 +342,32 @@ func doubleReadAndPrune() {
 func indirectSourceInvalidated() {
     let d = Driver()
     defer { d.close() }
+    let initial = d.input(10)
     let child = d.makeSubgraph()
     let target = d.withSubgraph(child) { d.input(77) }
-    let ind = d.indirect(target)
+    let ind = d.indirect(initial)
     let indAttr = d.attribute(of: ind)
     var runs = 0
     let reader = d.rule {
         runs += 1
         return d.read(indAttr) + 1
     }
+    let v0 = d.read(reader)
+    d.setSource(target, for: ind)
     let v1 = d.read(reader)
     let runs1 = runs
-    // Invalidating the child subgraph that owns `target` detaches `ind <- target` without dirtying `ind` or `reader`
+    // Invalidating `child` resets `ind.source` back to `initial` without dirtying `reader`
     d.invalidate(child)
+    let resetToInitial = d.source(of: ind) == initial
     let v2 = d.read(reader)
     let runs2 = runs
-    // Redirecting `ind` to a new live attribute updates `reader` cleanly
-    let replacement = d.input(99)
-    d.setSource(replacement, for: ind)
+    // Mutating `initial` propagates through the restored `ind <- initial` edge
+    d.write(99, to: initial)
     let v3 = d.read(reader)
     let runs3 = runs
-    precondition(v1 == 78 && v2 == 78 && v3 == 100)
-    precondition(runs1 == 1 && runs2 == 1 && runs3 == 2)
-    print("indirect-source-invalidated|values=[\(v1), \(v2), \(v3)]|runs=[\(runs1), \(runs2), \(runs3)]")
+    precondition(v0 == 11 && v1 == 78 && v2 == 78 && v3 == 100 && resetToInitial)
+    precondition(runs1 == 2 && runs2 == 2 && runs3 == 3)
+    print("indirect-source-invalidated|values=[\(v0), \(v1), \(v2), \(v3)]|runs=[\(runs1), \(runs2), \(runs3)]|resetToInitial=\(resetToInitial)")
 }
 
 private struct ProbeRNG {
@@ -436,4 +439,140 @@ func randomGraphOracle() {
         d.close()
     }
     print("random-graph-oracle|runs=\(totalRunsSummary)|checksums=\(checksums)")
+}
+
+private struct ChildSlot {
+    let sub: SubgraphHandle
+    let input: Handle<Int>
+    let rule: Handle<Int>
+    let weakRule: WeakHandle<Int>
+    var alive: Bool
+}
+
+func randomSubgraphWeakIndirectOracle() {
+    var totalRunsSummary: [Int] = []
+    var checksums: [Int] = []
+    for seed in 1...6 {
+        let d = Driver()
+        var rng = ProbeRNG(state: UInt64(seed) &* 314159)
+        var runs = 0
+        var rootInputs: [Handle<Int>] = []
+        for _ in 0..<4 {
+            rootInputs.append(d.input(rng.next(31) - 15))
+        }
+        let ind0 = d.indirect(rootInputs[0])
+        let ind1 = d.indirect(rootInputs[1])
+        let ind0Attr = d.attribute(of: ind0)
+        let ind1Attr = d.attribute(of: ind1)
+
+        var children: [ChildSlot] = []
+        func spawnChild() {
+            let sub = d.makeSubgraph()
+            let rIdx = rng.next(rootInputs.count)
+            let existingWeak: WeakHandle<Int>? = children.isEmpty ? nil : children[rng.next(children.count)].weakRule
+            let initVal = rng.next(21) - 10
+            var cInput: Handle<Int>!
+            var cRule: Handle<Int>!
+            d.withSubgraph(sub) {
+                cInput = d.input(initVal)
+                cRule = d.rule {
+                    runs += 1
+                    let base = d.read(cInput) &+ d.read(rootInputs[rIdx])
+                    let viaWeak = existingWeak.map { d.readWeak($0) ?? -50 } ?? 0
+                    return base &+ viaWeak
+                }
+            }
+            children.append(ChildSlot(
+                sub: sub,
+                input: cInput,
+                rule: cRule,
+                weakRule: d.weak(cRule),
+                alive: true
+            ))
+        }
+
+        for _ in 0..<3 {
+            spawnChild()
+        }
+
+        var rootRules: [Handle<Int>] = []
+        for k in 0..<12 {
+            let selInput = rng.next(rootInputs.count)
+            let altInput = rng.next(rootInputs.count)
+            let wIdx0 = rng.next(children.count)
+            let wIdx1 = rng.next(children.count)
+            let w0 = children[wIdx0].weakRule
+            let w1 = children[wIdx1].weakRule
+            let bias = rng.next(13) - 6
+            if k % 3 == 0 {
+                rootRules.append(d.statefulRule { (ctx: StatefulHandleContext<Int>) in
+                    runs += 1
+                    let s = d.read(rootInputs[selInput])
+                    let branch = (s & 1) == 0
+                        ? (d.read(ind0Attr) &+ (d.readWeak(w0) ?? -100))
+                        : (d.read(ind1Attr) &+ (d.readWeak(w1) ?? -200) &+ d.read(rootInputs[altInput]))
+                    ctx.value = s &+ branch &+ bias
+                })
+            } else {
+                rootRules.append(d.rule {
+                    runs += 1
+                    let s = d.read(rootInputs[selInput])
+                    let branch = (s & 1) == 0
+                        ? (d.read(ind0Attr) &+ (d.readWeak(w0) ?? -100))
+                        : (d.read(ind1Attr) &+ (d.readWeak(w1) ?? -200) &+ d.read(rootInputs[altInput]))
+                    return s &+ branch &+ bias
+                })
+            }
+        }
+
+        var checksum = 0
+        for _ in 0..<45 {
+            let action = rng.next(6)
+            switch action {
+            case 0, 1:
+                let idx = rng.next(rootInputs.count)
+                d.write(rng.next(19) - 9, to: rootInputs[idx])
+            case 2:
+                let liveIndices = children.indices.filter { children[$0].alive }
+                if !liveIndices.isEmpty {
+                    let pick = liveIndices[rng.next(liveIndices.count)]
+                    d.write(rng.next(19) - 9, to: children[pick].input)
+                }
+            case 3:
+                let targetInd = rng.next(2) == 0 ? ind0 : ind1
+                let liveIndices = children.indices.filter { children[$0].alive }
+                if !liveIndices.isEmpty && rng.next(2) == 0 {
+                    let pick = liveIndices[rng.next(liveIndices.count)]
+                    d.setSource(children[pick].rule, for: targetInd)
+                } else {
+                    let idx = rng.next(rootInputs.count)
+                    d.setSource(rootInputs[idx], for: targetInd)
+                }
+            case 4:
+                let liveIndices = children.indices.filter { children[$0].alive }
+                if !liveIndices.isEmpty {
+                    let pick = liveIndices[rng.next(liveIndices.count)]
+                    d.invalidate(children[pick].sub)
+                    children[pick].alive = false
+                }
+            default:
+                spawnChild()
+                if let newest = children.last {
+                    let targetInd = rng.next(2) == 0 ? ind0 : ind1
+                    d.setSource(newest.rule, for: targetInd)
+                }
+            }
+
+            let r0 = d.read(rootRules[rng.next(rootRules.count)])
+            let r1 = d.read(rootRules[rng.next(rootRules.count)])
+            let cIdx = rng.next(children.count)
+            let validBit = d.isValid(children[cIdx].sub) ? 1 : 0
+            let weakVal = d.readWeak(children[cIdx].weakRule) ?? -999
+            checksum = (checksum &* 31) &+ r0 &+ (r1 &* 3) &+ validBit &+ weakVal
+        }
+        totalRunsSummary.append(runs)
+        checksums.append(checksum)
+        d.close()
+    }
+    print("random-subgraph-weak-indirect-oracle|runs=\(totalRunsSummary)|checksums=\(checksums)")
 }
