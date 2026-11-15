@@ -77,6 +77,9 @@ final class Driver {
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
         currentSubgraph.apply { Handle(AttributeGraph.Focus(root: root, keyPath: keyPath)) }
     }
+    func keyPathSubscript<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
+        currentSubgraph.apply { root[keyPath: keyPath] }
+    }
     func map<Source, V>(_ arg: Handle<Source>, _ body: @escaping (Source) -> V) -> Handle<V> {
         currentSubgraph.apply { Handle(AttributeGraph.Map(arg, body)) }
     }
@@ -117,6 +120,30 @@ final class Driver {
     func validate<V>(_ attribute: Handle<V>) { attribute.validate() }
     func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { subgraph.isAncestor(of: other) }
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
+    func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
+        var count = 0
+        _ = attribute.breadthFirstSearch(options: .searchInputs) { _ in
+            count += 1
+            return false
+        }
+        return count
+    }
+    func breadthFirstCountOutputs<V>(from attribute: Handle<V>) -> Int {
+        var count = 0
+        _ = attribute.breadthFirstSearch(options: .searchOutputs) { _ in
+            count += 1
+            return false
+        }
+        return count
+    }
+    func breadthFirstStopAt<V, Target>(from attribute: Handle<V>, target: Handle<Target>) -> (found: Bool, visited: Int) {
+        var count = 0
+        let found = attribute.breadthFirstSearch(options: .searchInputs) { current in
+            count += 1
+            return current == target.identifier
+        }
+        return (found, count)
+    }
     func read<V>(_ attribute: Handle<V>) -> V { attribute.value }
     func write<V>(_ value: V, to attribute: Handle<V>) { attribute.value = value }
     func close() {
@@ -191,6 +218,9 @@ final class Driver {
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
         graph.withCurrent(currentSubgraph) { graph.makeFocus(root, keyPath: keyPath) }
     }
+    func keyPathSubscript<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
+        graph.withCurrent(currentSubgraph) { graph.makeFocus(root, keyPath: keyPath) }
+    }
     func map<Source, V>(_ arg: Handle<Source>, _ body: @escaping (Source) -> V) -> Handle<V> {
         graph.withCurrent(currentSubgraph) { graph.makeMap(arg, body) }
     }
@@ -231,6 +261,30 @@ final class Driver {
     func validate<V>(_ attribute: Handle<V>) { graph.validate(attribute) }
     func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { graph.isAncestor(subgraph, of: other) }
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
+    func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
+        var count = 0
+        _ = graph.breadthFirstSearch(from: attribute, options: .searchInputs) { _ in
+            count += 1
+            return false
+        }
+        return count
+    }
+    func breadthFirstCountOutputs<V>(from attribute: Handle<V>) -> Int {
+        var count = 0
+        _ = graph.breadthFirstSearch(from: attribute, options: .searchOutputs) { _ in
+            count += 1
+            return false
+        }
+        return count
+    }
+    func breadthFirstStopAt<V, Target>(from attribute: Handle<V>, target: Handle<Target>) -> (found: Bool, visited: Int) {
+        var count = 0
+        let found = graph.breadthFirstSearch(from: attribute, options: .searchInputs) { current in
+            count += 1
+            return current == target.erased
+        }
+        return (found, count)
+    }
     func read<V>(_ attribute: Handle<V>) -> V { graph.value(of: attribute) }
     func write<V>(_ value: V, to attribute: Handle<V>) { graph.setValue(value, for: attribute) }
     func close() {
@@ -353,3 +407,5 @@ indirectDependencyCutAndRedirect()
 subgraphFlagsForEachAndUpdate()
 hasValueValidateAndUpdateValue()
 withoutSubgraphInvalidationAndAncestor()
+breadthFirstSearchTraversal()
+attributeKeyPathDynamicMember()

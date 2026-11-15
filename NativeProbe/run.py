@@ -25,6 +25,7 @@ SCENARIOS = [
     "without-update-read", "mutate-body-and-invalidate-value",
     "indirect-dependency-cut-and-redirect", "subgraph-flags-forEach-and-update",
     "has-value-validate-update-value", "without-subgraph-invalidation-and-ancestor",
+    "breadth-first-search", "attribute-keypath-dynamic-member",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

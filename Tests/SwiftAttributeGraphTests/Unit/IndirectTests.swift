@@ -399,4 +399,31 @@ import Testing
             graph.setDependency(childProducer.erased, for: ind)
         }
     }
+
+    // MARK: - C33: Attribute[keyPath:] and @dynamicMemberLookup
+
+    @Test func attributeDynamicMemberAndKeyPathSubscriptsProjectFieldsAndCutOnUnchangedField() {
+        let graph = Graph()
+        let p = graph.makeInput(Pair(left: 1, right: 100))
+        var runs = 0
+        let reader = graph.makeRule { () -> Int in
+            runs += 1
+            let leftSub = p[keyPath: \.left]
+            let leftDyn = p.left
+            return leftSub.value + leftDyn.value
+        }
+
+        #expect(graph.value(of: reader) == 2)
+        #expect(runs == 1)
+
+        // Changing `right` leaves `left` unchanged -> `reader` is cut.
+        graph.setValue(Pair(left: 1, right: 200), for: p)
+        #expect(graph.value(of: reader) == 2)
+        #expect(runs == 1)
+
+        // Changing `left` updates the projected fields and re-runs `reader`.
+        graph.setValue(Pair(left: 5, right: 200), for: p)
+        #expect(graph.value(of: reader) == 10)
+        #expect(runs == 2)
+    }
 }

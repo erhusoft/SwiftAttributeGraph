@@ -892,3 +892,44 @@ func withoutSubgraphInvalidationAndAncestor() {
     precondition(!validInside && weakInside == 42 && !validAfter && weakAfter == nil)
     print("without-subgraph-invalidation-and-ancestor|ancestor=\(anc)|validInside=\(validInside)|weakInside=\(String(describing: weakInside))|weakAfter=\(String(describing: weakAfter))")
 }
+
+func breadthFirstSearchTraversal() {
+    let d = Driver()
+    defer { d.close() }
+    let a = d.input(1)
+    let b = d.input(2)
+    let r1 = d.rule { d.read(a) + d.read(b) }
+    let r2 = d.rule { d.read(r1) + d.read(a) }
+    _ = d.read(r2)
+
+    let inputsCount = d.breadthFirstCountInputs(from: r2)
+    let outputsCount = d.breadthFirstCountOutputs(from: a)
+    let stop = d.breadthFirstStopAt(from: r2, target: r1)
+
+    precondition(inputsCount == 4 && outputsCount == 3 && stop.found && stop.visited == 3)
+    print("breadth-first-search|inputs=\(inputsCount)|outputs=\(outputsCount)|stop=\(stop.found)|visited=\(stop.visited)")
+}
+
+func attributeKeyPathDynamicMember() {
+    let d = Driver()
+    defer { d.close() }
+    let pair = d.input(ProbePair(left: 3, right: 100))
+    let leftSub = d.keyPathSubscript(pair, keyPath: \.left)
+    var runs = 0
+    let reader = d.rule { () -> Int in
+        runs += 1
+        return d.read(leftSub) * 2
+    }
+
+    let v1 = d.read(reader)
+    let r1 = runs
+    d.write(ProbePair(left: 3, right: 200), to: pair)
+    let v2 = d.read(reader)
+    let r2 = runs
+    d.write(ProbePair(left: 9, right: 200), to: pair)
+    let v3 = d.read(reader)
+    let r3 = runs
+
+    precondition([v1, v2, v3] == [6, 6, 18] && [r1, r2, r3] == [1, 1, 2])
+    print("attribute-keypath-dynamic-member|values=[\(v1), \(v2), \(v3)]|runs=[\(r1), \(r2), \(r3)]")
+}

@@ -136,4 +136,27 @@ import Testing
         _ = graph.value(of: rule)
         #expect(graph.liveSubgraphCount == 1)
     }
+
+    @Test func breadthFirstSearchTraversesTwentyThousandNodesWithoutRecursion() {
+        let graph = Graph()
+        let root = graph.makeInput(0)
+        let chain = warmChain(of: graph, root: root)
+        let last = chain[chain.count - 1]
+
+        var visitedInputs = 0
+        let foundInput = graph.breadthFirstSearch(from: last, options: .searchInputs) { attr in
+            visitedInputs += 1
+            return attr.id == root.id
+        }
+        #expect(foundInput)
+        #expect(visitedInputs == depth)
+
+        var visitedOutputs = 0
+        let foundOutput = graph.breadthFirstSearch(from: root, options: .searchOutputs) { attr in
+            visitedOutputs += 1
+            return attr.id == last.id
+        }
+        #expect(foundOutput)
+        #expect(visitedOutputs == depth)
+    }
 }

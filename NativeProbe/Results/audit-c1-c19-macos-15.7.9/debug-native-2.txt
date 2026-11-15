@@ -27,3 +27,5 @@ indirect-dependency-cut-and-redirect|values=[20, 20, 200, 200]|producerRuns=[1, 
 subgraph-flags-forEach-and-update|count0=5|order=["a2", "a1", "d1", "b2", "b1", "d2"]|dirty=[true, false, true, false]
 has-value-validate-update-value|hasValue=[false, false, true]|innerRuns=[0, 1, 1, 2, 2]|values=[11, 60]
 without-subgraph-invalidation-and-ancestor|ancestor=[true, true, true, false, false]|validInside=false|weakInside=Optional(42)|weakAfter=nil
+breadth-first-search|inputs=4|outputs=3|stop=true|visited=3
+attribute-keypath-dynamic-member|values=[6, 6, 18]|runs=[1, 1, 2]

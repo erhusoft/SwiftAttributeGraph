@@ -737,11 +737,11 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Estudio detallado 
      - **C28 (`AttributeFlags` / `Subgraph.Flags`):** `AttributeFlags` (`UInt8`), `graph.flags(of:)`, `graph.setFlags(_:for:)`, `graph.intersects(_:flags:)`, `graph.isDirty(_:flags:)`, `graph.forEach(in:flags:_:)` y `graph.update(_:flags:)`, visitando miembros e hijos en orden inverso de creación idéntico al `AttributeGraph` nativo.
      - **C29 (`hasValue`, `updateValue`, `validate`):** `graph.hasValue(of:)`, `graph.updateValue(of:)` (actualiza sin registrar dependencia) y `graph.validate(_:)`.
      - **C30 (`withoutSubgraphInvalidation` e `isAncestor`):** `graph.withoutSubgraphInvalidation(_:)` (difiere la destrucción física y los avisos hasta cerrar el ámbito exterior mientras marca `isValid == false` al instante) y `graph.isAncestor(_:of:)`.
-   - Se añadieron 21 escenarios directos a `NativeProbe` (total **29 escenarios C1–C30**), incluyendo dos oráculos de grafos aleatorios comparados paso a paso contra el `AttributeGraph` de Apple.
+   - Se añadieron 23 escenarios directos a `NativeProbe` (total **31 escenarios C1–C32**), incluyendo dos oráculos de grafos aleatorios comparados paso a paso contra el `AttributeGraph` de Apple, `breadthFirstSearch(from:options:_:)` con `SearchOptions` y `@dynamicMemberLookup` / `subscript(keyPath:)` en `Attribute<Value>`.
 
 **Validación y medidas (Mac M1, Swift 6.2.4):**
-- **`NativeProbe`:** **29 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
-- **Tests funcionales:** **225 pruebas en 26 suites** pasan en depuración y **224 pruebas** en release con **0 *known issues*** (se resolvieron también los 2 *known issues* de M2 para `enum` con carga no `Equatable`, comparando caso activo y payload con las reglas del modo).
+- **`NativeProbe`:** **31 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
+- **Tests funcionales:** **228 pruebas en 26 suites** pasan en depuración y **227 pruebas** en release con **0 *known issues*** (se resolvieron también los 2 *known issues* de M2 para `enum` con carga no `Equatable`, comparando caso activo y payload con las reglas del modo).
 - **Rendimiento en release (18 pruebas en 3 suites en verde):**
   - Regla de 20.000 entradas que pierde la mitad: **4,85 ms** (frente a 76,83 ms antes de la Pieza 1: **15,8× más rápido**).
   - Presupuesto M4 (50 ciclos × 1.000 reglas reanudables frente a síncronas): **33,20 ms / 36,56 ms = 0,908** (≤ 1,30).

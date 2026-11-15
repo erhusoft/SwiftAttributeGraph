@@ -131,4 +131,51 @@ import Testing
         let withEdges = graph.estimatedMemoryFootprint
         #expect(withEdges > base)
     }
+
+    // MARK: - C31: breadthFirstSearch
+
+    @Test func breadthFirstSearchVisitsStartThenNeighboursInOrderAndStopsOnMatch() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        let b = graph.makeInput(2)
+        let r1 = graph.makeRule { a.value + b.value }
+        let r2 = graph.makeRule { r1.value + a.value }
+        _ = graph.value(of: r2)
+
+        // Search inputs from `r2`: visits `r2`, then its inputs in ascending ID order (`a`, `r1`), then `b`.
+        var visitedInputs: [AttributeID] = []
+        let foundAllInputs = graph.breadthFirstSearch(from: r2, options: .searchInputs) { attr in
+            visitedInputs.append(attr.id)
+            return false
+        }
+        #expect(!foundAllInputs)
+        #expect(visitedInputs == [r2.id, a.id, r1.id, b.id])
+
+        // Search outputs from `a`: visits `a`, then `r1`, `r2`.
+        var visitedOutputs: [AttributeID] = []
+        let foundAllOutputs = graph.breadthFirstSearch(from: a, options: .searchOutputs) { attr in
+            visitedOutputs.append(attr.id)
+            return false
+        }
+        #expect(!foundAllOutputs)
+        #expect(visitedOutputs == [a.id, r1.id, r2.id])
+
+        // Early exit when predicate returns `true`.
+        var visitedStop: [AttributeID] = []
+        let stopped = graph.breadthFirstSearch(from: r2, options: .searchInputs) { attr in
+            visitedStop.append(attr.id)
+            return attr.id == r1.id
+        }
+        #expect(stopped)
+        #expect(visitedStop == [r2.id, a.id, r1.id])
+
+        // Empty options visit only the start node.
+        var visitedEmpty: [AttributeID] = []
+        let foundEmpty = graph.breadthFirstSearch(from: r2, options: []) { attr in
+            visitedEmpty.append(attr.id)
+            return false
+        }
+        #expect(!foundEmpty)
+        #expect(visitedEmpty == [r2.id])
+    }
 }

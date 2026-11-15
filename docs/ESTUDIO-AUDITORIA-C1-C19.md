@@ -145,6 +145,8 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 | 27 | `subgraph-flags-forEach-and-update` | C28 | Idéntico (`count0=5`, `order=["a2", "a1", "d1", "b2", "b1", "d2"]`, `dirty=[true, false, true, false]`) |
 | 28 | `has-value-validate-update-value` | C29 | Idéntico (`hasValue=[false, false, true]`, `innerRuns=[0, 1, 1, 2, 2]`, `values=[11, 60]`) |
 | 29 | `without-subgraph-invalidation-and-ancestor` | C30 | Idéntico (`ancestor=[true, true, true, false, false]`, `validInside=false`, `weakInside=Optional(42)`, `weakAfter=nil`) |
+| 30 | `breadth-first-search` | C31 | Idéntico (`inputs=4`, `outputs=3`, `stop=true`, `visited=3`) |
+| 31 | `attribute-keypath-dynamic-member` | C32 / M6 | Idéntico (`values=[6, 6, 18]`, `runs=[1, 1, 2]`) |
 
 ---
 

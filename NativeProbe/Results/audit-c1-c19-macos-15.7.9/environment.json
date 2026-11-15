@@ -36,7 +36,9 @@
     "indirect-dependency-cut-and-redirect",
     "subgraph-flags-forEach-and-update",
     "has-value-validate-update-value",
-    "without-subgraph-invalidation-and-ancestor"
+    "without-subgraph-invalidation-and-ancestor",
+    "breadth-first-search",
+    "attribute-keypath-dynamic-member"
   ],
   "probe_only": true
 }

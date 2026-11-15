@@ -38,6 +38,62 @@ extension Graph {
         table.inputs.reduce(0) { $0 + $1.count }
     }
 
+    /// Performs a breadth-first traversal starting at `attribute`, visiting `attribute` first and then traversing its
+    /// neighbors according to `options` (`Attribute.breadthFirstSearch(options:_:)` in native AttributeGraph).
+    ///
+    /// Returns `true` as soon as `body` returns `true` for a visited attribute (stopping the search immediately), or
+    /// `false` once all reachable attributes have been visited. Uses an explicit queue with no recursion.
+    @discardableResult
+    public func breadthFirstSearch<Value>(from attribute: Attribute<Value>, options: SearchOptions = [],
+                                          _ body: (AnyAttribute) -> Bool) -> Bool {
+        breadthFirstSearch(from: attribute.erased, options: options, body)
+    }
+
+    /// Performs a breadth-first traversal starting at `attribute`, visiting `attribute` first and then traversing its
+    /// neighbors according to `options` (`AnyAttribute.breadthFirstSearch(options:_:)` in native AttributeGraph).
+    ///
+    /// Returns `true` as soon as `body` returns `true` for a visited attribute (stopping the search immediately), or
+    /// `false` once all reachable attributes have been visited. Uses an explicit queue with no recursion.
+    @discardableResult
+    public func breadthFirstSearch(from attribute: AnyAttribute, options: SearchOptions = [],
+                                   _ body: (AnyAttribute) -> Bool) -> Bool {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "breadthFirstSearch(from:options:_:): the attribute is dead")
+
+        var visited = [Bool](repeating: false, count: table.slotCount)
+        var queue: [UInt32] = [attribute.id.index]
+        visited[Int(attribute.id.index)] = true
+        var head = 0
+
+        while head < queue.count {
+            let current = queue[head]
+            head += 1
+            let c = Int(current)
+            let handle = AnyAttribute(id: AttributeID(index: current, generation: table.generations[c]))
+            if body(handle) { return true }
+
+            if options.contains(.searchInputs) {
+                for edge in table.inputs[c] {
+                    let s = Int(edge.source)
+                    if !visited[s] && table.isLive(index: edge.source) {
+                        visited[s] = true
+                        queue.append(edge.source)
+                    }
+                }
+            }
+            if options.contains(.searchOutputs) {
+                for dependent in table.outputs[c] {
+                    let d = Int(dependent)
+                    if !visited[d] && table.isLive(index: dependent) {
+                        visited[d] = true
+                        queue.append(dependent)
+                    }
+                }
+            }
+        }
+        return false
+    }
+
     // MARK: Dump
 
     /// A text dump of the whole graph: every live attribute with its state, version, owner subgraph and edges.
