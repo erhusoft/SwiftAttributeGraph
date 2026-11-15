@@ -490,7 +490,8 @@ func randomSubgraphWeakIndirectOracle() {
     for seed in 1...6 {
         let d = Driver()
         var rng = ProbeRNG(state: UInt64(seed) &* 314159)
-        var runs = 0
+        var rootCounts = Array(repeating: 0, count: 12)
+        var childCounts: [Int] = []
         var rootInputs: [Handle<Int>] = []
         for _ in 0..<4 {
             rootInputs.append(d.input(rng.next(31) - 15))
@@ -502,6 +503,8 @@ func randomSubgraphWeakIndirectOracle() {
 
         var children: [ChildSlot] = []
         func spawnChild() {
+            let childIndex = childCounts.count
+            childCounts.append(0)
             let sub = d.makeSubgraph()
             let rIdx = rng.next(rootInputs.count)
             let existingWeak: WeakHandle<Int>? = children.isEmpty ? nil : children[rng.next(children.count)].weakRule
@@ -511,7 +514,7 @@ func randomSubgraphWeakIndirectOracle() {
             d.withSubgraph(sub) {
                 cInput = d.input(initVal)
                 cRule = d.rule {
-                    runs += 1
+                    childCounts[childIndex] += 1
                     let base = d.read(cInput) &+ d.read(rootInputs[rIdx])
                     let viaWeak = existingWeak.map { d.readWeak($0) ?? -50 } ?? 0
                     return base &+ viaWeak
@@ -541,7 +544,7 @@ func randomSubgraphWeakIndirectOracle() {
             let bias = rng.next(13) - 6
             if k % 3 == 0 {
                 rootRules.append(d.statefulRule { (ctx: StatefulHandleContext<Int>) in
-                    runs += 1
+                    rootCounts[k] += 1
                     let s = d.read(rootInputs[selInput])
                     let branch = (s & 1) == 0
                         ? (d.read(ind0Attr) &+ (d.readWeak(w0) ?? -100))
@@ -550,7 +553,7 @@ func randomSubgraphWeakIndirectOracle() {
                 })
             } else {
                 rootRules.append(d.rule {
-                    runs += 1
+                    rootCounts[k] += 1
                     let s = d.read(rootInputs[selInput])
                     let branch = (s & 1) == 0
                         ? (d.read(ind0Attr) &+ (d.readWeak(w0) ?? -100))
@@ -561,7 +564,10 @@ func randomSubgraphWeakIndirectOracle() {
         }
 
         var checksum = 0
-        for _ in 0..<45 {
+        var prevRoot = rootCounts
+        var prevChild: [Int] = Array(repeating: 0, count: childCounts.count)
+        var stepTraces: [String] = []
+        for step in 0..<45 {
             let action = rng.next(6)
             switch action {
             case 0, 1:
@@ -592,6 +598,7 @@ func randomSubgraphWeakIndirectOracle() {
                 }
             default:
                 spawnChild()
+                prevChild.append(0)
                 if let newest = children.last {
                     let targetInd = rng.next(2) == 0 ? ind0 : ind1
                     d.setSource(newest.rule, for: targetInd)
@@ -604,9 +611,21 @@ func randomSubgraphWeakIndirectOracle() {
             let validBit = d.isValid(children[cIdx].sub) ? 1 : 0
             let weakVal = d.readWeak(children[cIdx].weakRule) ?? -999
             checksum = (checksum &* 31) &+ r0 &+ (r1 &* 3) &+ validBit &+ weakVal
+
+            var deltas: [String] = []
+            for k in rootCounts.indices where rootCounts[k] != prevRoot[k] {
+                deltas.append("r\(k)+\(rootCounts[k] - prevRoot[k])")
+                prevRoot[k] = rootCounts[k]
+            }
+            for j in childCounts.indices where childCounts[j] != prevChild[j] {
+                deltas.append("c\(j)+\(childCounts[j] - prevChild[j])")
+                prevChild[j] = childCounts[j]
+            }
+            stepTraces.append("\(step):[\(r0),\(r1),\(validBit),\(weakVal)]{\(deltas.joined(separator: ","))}")
         }
-        totalRunsSummary.append(runs)
+        totalRunsSummary.append(rootCounts.reduce(0, +) + childCounts.reduce(0, +))
         checksums.append(checksum)
+        print("random-subgraph-weak-indirect-oracle-trace|seed=\(seed)|\(stepTraces.joined(separator: ";"))")
         d.close()
     }
     print("random-subgraph-weak-indirect-oracle|runs=\(totalRunsSummary)|checksums=\(checksums)")
