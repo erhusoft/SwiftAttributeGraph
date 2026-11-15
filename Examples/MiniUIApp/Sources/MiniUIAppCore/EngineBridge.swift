@@ -9,13 +9,16 @@ public struct UISnapshot: Equatable, Sendable {
     public var parityText: String
     public var activeIndirectValue: Int
     public var detailText: String?
+    public var statefulText: String
     public var parityRuns: Int
     public var detailRuns: Int
+    public var statefulRuns: Int
     public var summaryRuns: Int
     public var nodeCount: Int
     public var edgeCount: Int
     public var subgraphCount: Int
     public var recalculationCount: Int
+    public var graphDump: String
 
     public init(
         counter: Int,
@@ -23,33 +26,74 @@ public struct UISnapshot: Equatable, Sendable {
         parityText: String,
         activeIndirectValue: Int,
         detailText: String?,
+        statefulText: String,
         parityRuns: Int,
         detailRuns: Int,
+        statefulRuns: Int,
         summaryRuns: Int,
         nodeCount: Int,
         edgeCount: Int,
         subgraphCount: Int,
-        recalculationCount: Int
+        recalculationCount: Int,
+        graphDump: String
     ) {
         self.counter = counter
         self.altValue = altValue
         self.parityText = parityText
         self.activeIndirectValue = activeIndirectValue
         self.detailText = detailText
+        self.statefulText = statefulText
         self.parityRuns = parityRuns
         self.detailRuns = detailRuns
+        self.statefulRuns = statefulRuns
         self.summaryRuns = summaryRuns
         self.nodeCount = nodeCount
         self.edgeCount = edgeCount
         self.subgraphCount = subgraphCount
         self.recalculationCount = recalculationCount
+        self.graphDump = graphDump
+    }
+}
+
+/// Stateful rule accumulating `counter` updates while reading `alt` inside `graph.withoutUpdate`
+/// so changes to `alt` alone do not re-trigger this rule.
+private struct AccumulatorStatefulRule: StatefulRule {
+    typealias Value = String
+    let graph: Graph
+    let counter: Attribute<Int>
+    let alt: Attribute<Int>
+    let runs: EngineBridge.RunCounter
+    private var steps = 0
+    private var maxCounter = 0
+
+    init(
+        graph: Graph,
+        counter: Attribute<Int>,
+        alt: Attribute<Int>,
+        runs: EngineBridge.RunCounter
+    ) {
+        self.graph = graph
+        self.counter = counter
+        self.alt = alt
+        self.runs = runs
+    }
+
+    mutating func updateValue(_ context: inout RuleContext<String>) {
+        runs.count += 1
+        steps += 1
+        let c = counter.value
+        if c > maxCounter {
+            maxCounter = c
+        }
+        let silentAlt = graph.withoutUpdate { alt.value }
+        context.value = "Stateful #\(steps) (maxCounter=\(maxCounter), altSinArista=\(silentAlt))"
     }
 }
 
 /// Bridges a single-threaded `Graph` to a macOS SwiftUI window via `graph.observe(_:onDirty:)`.
 @MainActor
 public final class EngineBridge: ObservableObject {
-    private final class RunCounter { var count = 0 }
+    fileprivate final class RunCounter { var count = 0 }
 
     public let graph = Graph()
     public let counterAttr: Attribute<Int>
@@ -61,8 +105,10 @@ public final class EngineBridge: ObservableObject {
     private var detailWeak = WeakAttribute<String>()
 
     private let parityLabelAttr: Attribute<String>
+    private let statefulAttr: Attribute<String>
     private let parityCounter = RunCounter()
     private let detailCounter = RunCounter()
+    private let statefulCounter = RunCounter()
     private let summaryCounter = RunCounter()
     private var rootRuleHandle: Attribute<UISnapshot>?
     private var observationToken: ObservationToken?
@@ -71,6 +117,7 @@ public final class EngineBridge: ObservableObject {
     @Published public private(set) var snapshot: UISnapshot
     @Published public private(set) var events: [String] = []
     @Published public var showDetail = false
+    @Published public var showGraphDump = true
 
     /// Number of times `snapshot` was published to SwiftUI after initialization (1 per coalesced graph update).
     public private(set) var snapshotPublishCount = 0
@@ -96,11 +143,20 @@ public final class EngineBridge: ObservableObject {
             return parity.value ? "Par (even)" : "Impar (odd)"
         }
         self.parityLabelAttr = parityLabel
+        self.statefulAttr = graph.makeStatefulRule(
+            AccumulatorStatefulRule(
+                graph: graph,
+                counter: counter,
+                alt: alt,
+                runs: statefulCounter
+            )
+        )
 
         self.snapshot = UISnapshot(
             counter: 0, altValue: 100, parityText: "", activeIndirectValue: 0,
-            detailText: nil, parityRuns: 0, detailRuns: 0, summaryRuns: 0,
-            nodeCount: 0, edgeCount: 0, subgraphCount: 0, recalculationCount: 0
+            detailText: nil, statefulText: "", parityRuns: 0, detailRuns: 0,
+            statefulRuns: 0, summaryRuns: 0, nodeCount: 0, edgeCount: 0,
+            subgraphCount: 0, recalculationCount: 0, graphDump: ""
         )
 
         let rootRule = makeRootRule()
@@ -118,6 +174,7 @@ public final class EngineBridge: ObservableObject {
         let alt = altAttr
         let parityLabel = parityLabelAttr
         let indirect = indirectAttr
+        let stateful = statefulAttr
         return graph.makeRule { [unowned self] () -> UISnapshot in
             summaryCounter.count += 1
             let c = counter.value
@@ -125,19 +182,23 @@ public final class EngineBridge: ObservableObject {
             let p = parityLabel.value
             let indVal = indirect.value
             let detail = graph.value(of: detailWeak)
+            let statefulText = stateful.value
             return UISnapshot(
                 counter: c,
                 altValue: a,
                 parityText: p,
                 activeIndirectValue: indVal,
                 detailText: detail,
+                statefulText: statefulText,
                 parityRuns: parityCounter.count,
                 detailRuns: detailCounter.count,
+                statefulRuns: statefulCounter.count,
                 summaryRuns: summaryCounter.count,
                 nodeCount: graph.nodeCount,
                 edgeCount: graph.edgeCount,
                 subgraphCount: graph.liveSubgraphCount,
-                recalculationCount: graph.recalculationCount
+                recalculationCount: graph.recalculationCount,
+                graphDump: ""
             )
         }
     }
@@ -155,11 +216,12 @@ public final class EngineBridge: ObservableObject {
 
     private func pullSnapshot(_ rule: Attribute<UISnapshot>, countAsPublish: Bool) {
         var next = graph.value(of: rule)
-        // Refresh counters after rule finishes so `nodeCount` / `recalculationCount` are exact.
+        // Refresh counters and M8 graph dump after rule finishes so counts are exact.
         next.nodeCount = graph.nodeCount
         next.edgeCount = graph.edgeCount
         next.subgraphCount = graph.liveSubgraphCount
         next.recalculationCount = graph.recalculationCount
+        next.graphDump = graph.dump()
         snapshot = next
         if countAsPublish {
             snapshotPublishCount += 1
@@ -220,6 +282,25 @@ public final class EngineBridge: ObservableObject {
         graph.withBatch(body)
     }
 
+    /// Applies both `+2` on `counter` and `+10` on `alt` inside a single `graph.withBatch`.
+    public func applyDemoBatch() {
+        performBatch {
+            let nextC = graph.value(of: counterAttr) + 2
+            let nextA = graph.value(of: altAttr) + 10
+            graph.setValue(nextC, for: counterAttr)
+            graph.setValue(nextA, for: altAttr)
+        }
+        log("withBatch(counter +2, alt +10) -> 1 notificación")
+    }
+
+    /// Reads `alt` inside `graph.withoutUpdate` without creating dependency edges or notifying UI.
+    @discardableResult
+    public func peekAltWithoutUpdate() -> Int {
+        let value = graph.withoutUpdate { graph.value(of: altAttr) }
+        log("withoutUpdate { alt } = \(value) (sin suscripción)")
+        return value
+    }
+
     /// Forces any pending main-queue refresh to flush synchronously (used by tests, `--verify`, and `--bench`).
     public func flushUI() {
         guard refreshScheduled, let rule = rootRuleHandle else { return }
@@ -270,6 +351,16 @@ public struct ContentView: View {
                                 set: { bridge.setShowDetail($0) }
                             ))
                         }
+                        HStack {
+                            Button("Lote: +2 counter y +10 alt (withBatch)") {
+                                bridge.applyDemoBatch()
+                            }
+                            Button("Leer alt sin arista (withoutUpdate)") {
+                                _ = bridge.peekAltWithoutUpdate()
+                            }
+                            Spacer()
+                            Toggle("Volcado M8", isOn: $bridge.showGraphDump)
+                        }
                     }
                     .padding(6)
                 }
@@ -279,6 +370,7 @@ public struct ContentView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Paridad (Map + corte): \(bridge.snapshot.parityText)  [runs: \(bridge.snapshot.parityRuns)]")
                     Text("IndirectAttribute.value: \(bridge.snapshot.activeIndirectValue)")
+                    Text("StatefulRule + withoutUpdate: \(bridge.snapshot.statefulText)  [runs: \(bridge.snapshot.statefulRuns)]")
                     if let detail = bridge.snapshot.detailText {
                         Text(detail)
                             .foregroundColor(.green)
@@ -292,14 +384,27 @@ public struct ContentView: View {
             }
 
             GroupBox("Métricas del motor en vivo") {
-                HStack(spacing: 20) {
+                HStack(spacing: 18) {
                     Label("nodeCount: \(bridge.snapshot.nodeCount)", systemImage: "circle.grid.3x3")
                     Label("edgeCount: \(bridge.snapshot.edgeCount)", systemImage: "arrow.triangle.branch")
                     Label("subgraphs: \(bridge.snapshot.subgraphCount)", systemImage: "square.stack.3d.up")
-                    Label("recalculations: \(bridge.snapshot.recalculationCount)", systemImage: "bolt")
+                    Label("recalcs: \(bridge.snapshot.recalculationCount)", systemImage: "bolt")
+                    Label("refreshes: \(bridge.snapshotPublishCount)", systemImage: "arrow.clockwise")
                 }
                 .monospacedDigit()
                 .padding(6)
+            }
+
+            if bridge.showGraphDump {
+                GroupBox("Volcado del grafo en vivo (M8: graph.dump())") {
+                    ScrollView {
+                        Text(bridge.snapshot.graphDump)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 120)
+                }
             }
 
             GroupBox("Últimos eventos") {
@@ -312,10 +417,10 @@ public struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: 110)
+                .frame(height: 95)
             }
         }
         .padding(16)
-        .frame(minWidth: 640, minHeight: 460)
+        .frame(minWidth: 700, minHeight: 580)
     }
 }

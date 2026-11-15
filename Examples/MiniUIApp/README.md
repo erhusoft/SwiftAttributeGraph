@@ -5,7 +5,8 @@ Mini aplicación de demostración en macOS (`AppKit` + `SwiftUI` + `SwiftAttribu
 - Evaluación perezosa y corte por versión (`makeMap` + `parityRuns`).
 - Redirección dinámica de `IndirectAttribute` (`setSource`).
 - Ciclo de vida de un `Subgraph` montado/desmontado leído con `WeakAttribute`.
-- Métricas en vivo del motor (`nodeCount`, `edgeCount`, `liveSubgraphCount`, `recalculationCount`).
+- Regla con estado (`StatefulRule`), lotes (`withBatch`), lectura sin dependencia (`withoutUpdate`) y volcado M8 en vivo (`graph.dump()`).
+- Métricas en vivo del motor (`nodeCount`, `edgeCount`, `liveSubgraphCount`, `recalculationCount`, `refreshes`).
 
 ![MiniUIApp preview](miniui-preview.png)
 
@@ -37,7 +38,7 @@ swift run --package-path Examples/MiniUIApp MiniUIApp --snapshot /tmp/miniui-pre
 ## Qué mide cada prueba (motor/puente vs SwiftUI real)
 
 ### 1. Medido en el motor y el puente (sin layout ni render de SwiftUI)
-- `--bench` (9 rondas × 1.000 interacciones mixtas en release): **mediana `0.0090 ms/op`** (mín `0.0087 ms`, máx `0.0128 ms`), con ratio `1.00 publishes/interaction` y `1.00 dirtyNotifications/interaction`. **Esta cifra mide únicamente el motor y `EngineBridge.flushUI()`, no el coste completo de un frame ni el layout de SwiftUI.**
+- `--bench` (9 rondas × 1.000 interacciones mixtas en release, incluyendo `StatefulRule` y `graph.dump()` en cada snapshot): **mediana `0.0209 ms/op`** (mín `0.0208 ms`, máx `0.0278 ms`), con ratio `1.00 publishes/interaction` y `1.00 dirtyNotifications/interaction`. **Esta cifra mide únicamente el motor y `EngineBridge.flushUI()`, no el coste completo de un frame ni el layout de SwiftUI.**
 - `--stress` (9 rondas en release):
   - `2.000` subgrafos (`peak`: `4.000` nodos, `2.000` aristas, `2.001` subgrafos; tras desmontar las `1.000` filas pares: `2.000` nodos, `1.000` aristas, `1.001` subgrafos; tras desmontar todo: `0` nodos, `0` aristas, `1` subgrafo raíz): **mediana `5.86 ms`** (mín `5.12 ms`, máx `9.02 ms`).
   - `1.000` escrituras multi-fuente en `250` lotes `withBatch`: `250` notificaciones `dirty` y `251` ejecuciones combinadas, **mediana `0.45 ms`** (mín `0.40 ms`, máx `0.67 ms`).

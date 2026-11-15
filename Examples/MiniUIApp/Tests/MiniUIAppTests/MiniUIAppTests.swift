@@ -15,42 +15,51 @@ struct MiniUIAppTests {
         #expect(bridge.snapshot.activeIndirectValue == 0)
         #expect(bridge.snapshot.detailText == nil)
         #expect(bridge.snapshot.detailRuns == 0)
-        #expect(bridge.snapshot.nodeCount == 7)
-        #expect(bridge.snapshot.edgeCount == 7)
+        #expect(bridge.snapshot.statefulText == "Stateful #1 (maxCounter=0, altSinArista=100)")
+        #expect(bridge.snapshot.statefulRuns == 1)
+        #expect(bridge.snapshot.graphDump.contains("Graph dump: 8 attributes, 1 subgraphs, 9 edges"))
+        #expect(bridge.snapshot.nodeCount == 8)
+        #expect(bridge.snapshot.edgeCount == 9)
         #expect(bridge.snapshot.subgraphCount == 1)
-        #expect(bridge.snapshot.recalculationCount == 3)
+        #expect(bridge.snapshot.recalculationCount == 4)
         #expect(bridge.snapshotPublishCount == 0)
         #expect(bridge.dirtyNotificationCount == 0)
 
-        // +2 keeps parity even -> parityRuns remains 1.
+        // +2 keeps parity even -> parityRuns remains 1; statefulRule tracks maxCounter=2.
         bridge.incrementCounter(by: 2)
         bridge.flushUI()
         #expect(bridge.snapshot.counter == 2)
         #expect(bridge.snapshot.parityText == "Par (even)")
         #expect(bridge.snapshot.parityRuns == 1)
+        #expect(bridge.snapshot.statefulRuns == 2)
+        #expect(bridge.snapshot.statefulText == "Stateful #2 (maxCounter=2, altSinArista=100)")
         #expect(bridge.snapshot.activeIndirectValue == 2)
-        #expect(bridge.snapshot.recalculationCount == 5)
+        #expect(bridge.snapshot.recalculationCount == 7)
         #expect(bridge.snapshotPublishCount == 1)
         #expect(bridge.dirtyNotificationCount == 1)
 
-        // +1 changes parity to odd -> parityRuns becomes 2.
+        // +1 changes parity to odd -> parityRuns becomes 2; statefulRuns becomes 3.
         bridge.incrementCounter(by: 1)
         bridge.flushUI()
         #expect(bridge.snapshot.counter == 3)
         #expect(bridge.snapshot.parityText == "Impar (odd)")
         #expect(bridge.snapshot.parityRuns == 2)
+        #expect(bridge.snapshot.statefulRuns == 3)
+        #expect(bridge.snapshot.statefulText == "Stateful #3 (maxCounter=3, altSinArista=100)")
         #expect(bridge.snapshot.activeIndirectValue == 3)
-        #expect(bridge.snapshot.recalculationCount == 8)
+        #expect(bridge.snapshot.recalculationCount == 11)
         #expect(bridge.snapshotPublishCount == 2)
         #expect(bridge.dirtyNotificationCount == 2)
 
-        // Updating inactive alt branch does not trigger indirect or parity recalcs.
+        // Updating alt does NOT re-run statefulRule (reads alt inside withoutUpdate) nor parity.
         bridge.incrementAlt(by: 10)
         bridge.flushUI()
         #expect(bridge.snapshot.altValue == 110)
         #expect(bridge.snapshot.activeIndirectValue == 3)
         #expect(bridge.snapshot.parityRuns == 2)
-        #expect(bridge.snapshot.recalculationCount == 9)
+        #expect(bridge.snapshot.statefulRuns == 3)
+        #expect(bridge.snapshot.statefulText == "Stateful #3 (maxCounter=3, altSinArista=100)")
+        #expect(bridge.snapshot.recalculationCount == 12)
         #expect(bridge.snapshotPublishCount == 3)
         #expect(bridge.dirtyNotificationCount == 3)
 
@@ -58,7 +67,7 @@ struct MiniUIAppTests {
         bridge.toggleIndirectSource()
         bridge.flushUI()
         #expect(bridge.snapshot.activeIndirectValue == 110)
-        #expect(bridge.snapshot.recalculationCount == 10)
+        #expect(bridge.snapshot.recalculationCount == 13)
         #expect(bridge.snapshotPublishCount == 4)
         #expect(bridge.dirtyNotificationCount == 4)
 
@@ -67,54 +76,60 @@ struct MiniUIAppTests {
         bridge.flushUI()
         #expect(bridge.snapshot.detailText == "Detalle vivo: counter=3, indirect=110")
         #expect(bridge.snapshot.detailRuns == 1)
-        #expect(bridge.snapshot.nodeCount == 8)
-        #expect(bridge.snapshot.edgeCount == 10)
+        #expect(bridge.snapshot.nodeCount == 9)
+        #expect(bridge.snapshot.edgeCount == 12)
         #expect(bridge.snapshot.subgraphCount == 2)
-        #expect(bridge.snapshot.recalculationCount == 12)
+        #expect(bridge.snapshot.graphDump.contains("Graph dump: 9 attributes, 2 subgraphs, 12 edges"))
+        #expect(bridge.snapshot.recalculationCount == 15)
         #expect(bridge.snapshotPublishCount == 5)
         #expect(bridge.dirtyNotificationCount == 5)
 
-        // Updating counter while detailSubgraph is mounted updates detailRuns to 2.
+        // Updating counter while detailSubgraph is mounted updates detailRuns to 2 and stateful observes alt=110 silently.
         bridge.incrementCounter(by: 2)
         bridge.flushUI()
         #expect(bridge.snapshot.counter == 5)
         #expect(bridge.snapshot.detailText == "Detalle vivo: counter=5, indirect=110")
         #expect(bridge.snapshot.detailRuns == 2)
-        #expect(bridge.snapshot.nodeCount == 8)
-        #expect(bridge.snapshot.edgeCount == 10)
+        #expect(bridge.snapshot.statefulRuns == 4)
+        #expect(bridge.snapshot.statefulText == "Stateful #4 (maxCounter=5, altSinArista=110)")
+        #expect(bridge.snapshot.nodeCount == 9)
+        #expect(bridge.snapshot.edgeCount == 12)
         #expect(bridge.snapshot.subgraphCount == 2)
-        #expect(bridge.snapshot.recalculationCount == 15)
+        #expect(bridge.snapshot.recalculationCount == 19)
         #expect(bridge.snapshotPublishCount == 6)
         #expect(bridge.dirtyNotificationCount == 6)
 
-        // Unmounting detailSubgraph returns nodeCount/edgeCount/subgraphCount to baseline.
+        // Unmounting detailSubgraph returns nodeCount/edgeCount/subgraphCount to baseline (8/9/1).
         bridge.setShowDetail(false)
         bridge.flushUI()
         #expect(bridge.snapshot.detailText == nil)
         #expect(bridge.snapshot.detailRuns == 2)
-        #expect(bridge.snapshot.nodeCount == 7)
-        #expect(bridge.snapshot.edgeCount == 7)
+        #expect(bridge.snapshot.nodeCount == 8)
+        #expect(bridge.snapshot.edgeCount == 9)
         #expect(bridge.snapshot.subgraphCount == 1)
-        #expect(bridge.snapshot.recalculationCount == 16)
+        #expect(bridge.snapshot.recalculationCount == 20)
         #expect(bridge.snapshotPublishCount == 7)
         #expect(bridge.dirtyNotificationCount == 7)
     }
 
     @Test
-    func batchCoalescesMultipleMutationsIntoSingleRefresh() {
+    func batchCoalescesMultipleMutationsAndWithoutUpdatePeekLeavesCountsUnchanged() {
         let bridge = EngineBridge()
         #expect(bridge.snapshotPublishCount == 0)
         #expect(bridge.dirtyNotificationCount == 0)
 
-        bridge.performBatch {
-            bridge.incrementCounter(by: 2)
-            bridge.incrementAlt(by: 5)
-        }
+        let peekedAlt = bridge.peekAltWithoutUpdate()
+        #expect(peekedAlt == 100)
+        #expect(bridge.snapshot.recalculationCount == 4)
+
+        bridge.applyDemoBatch()
         bridge.flushUI()
 
         #expect(bridge.snapshot.counter == 2)
-        #expect(bridge.snapshot.altValue == 105)
+        #expect(bridge.snapshot.altValue == 110)
         #expect(bridge.snapshot.parityRuns == 1)
+        #expect(bridge.snapshot.statefulRuns == 2)
+        #expect(bridge.snapshot.statefulText == "Stateful #2 (maxCounter=2, altSinArista=110)")
         #expect(bridge.dirtyNotificationCount == 1)
         #expect(bridge.snapshotPublishCount == 1)
     }
@@ -125,15 +140,15 @@ struct MiniUIAppTests {
         for cycle in 1...10 {
             bridge.setShowDetail(true)
             bridge.flushUI()
-            #expect(bridge.snapshot.nodeCount == 8)
-            #expect(bridge.snapshot.edgeCount == 10)
+            #expect(bridge.snapshot.nodeCount == 9)
+            #expect(bridge.snapshot.edgeCount == 12)
             #expect(bridge.snapshot.subgraphCount == 2)
             #expect(bridge.snapshot.detailRuns == cycle)
 
             bridge.setShowDetail(false)
             bridge.flushUI()
-            #expect(bridge.snapshot.nodeCount == 7)
-            #expect(bridge.snapshot.edgeCount == 7)
+            #expect(bridge.snapshot.nodeCount == 8)
+            #expect(bridge.snapshot.edgeCount == 9)
             #expect(bridge.snapshot.subgraphCount == 1)
         }
     }

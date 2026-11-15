@@ -21,6 +21,8 @@ private func assertSnapshotState(
     altValue: Int,
     parityText: String,
     parityRuns: Int,
+    statefulText: String,
+    statefulRuns: Int,
     indirect: Int,
     detail: String?,
     detailRuns: Int,
@@ -34,7 +36,7 @@ private func assertSnapshotState(
     let s = bridge.snapshot
     print(
         "[\(label)] counter=\(s.counter) alt=\(s.altValue) parity=\"\(s.parityText)\" "
-            + "parityRuns=\(s.parityRuns) indirect=\(s.activeIndirectValue) "
+            + "parityRuns=\(s.parityRuns) statefulRuns=\(s.statefulRuns) indirect=\(s.activeIndirectValue) "
             + "detail=\(s.detailText ?? "nil") detailRuns=\(s.detailRuns) "
             + "nodes=\(s.nodeCount) edges=\(s.edgeCount) subgraphs=\(s.subgraphCount) "
             + "recalcs=\(s.recalculationCount) publishes=\(bridge.snapshotPublishCount) "
@@ -50,6 +52,14 @@ private func assertSnapshotState(
     check(
         s.parityRuns == parityRuns,
         "\(label): expected parityRuns=\(parityRuns), got \(s.parityRuns)"
+    )
+    check(
+        s.statefulText == statefulText,
+        "\(label): expected statefulText=\"\(statefulText)\", got \"\(s.statefulText)\""
+    )
+    check(
+        s.statefulRuns == statefulRuns,
+        "\(label): expected statefulRuns=\(statefulRuns), got \(s.statefulRuns)"
     )
     check(
         s.activeIndirectValue == indirect,
@@ -68,6 +78,10 @@ private func assertSnapshotState(
     check(
         s.subgraphCount == subgraphs,
         "\(label): expected subgraphs=\(subgraphs), got \(s.subgraphCount)"
+    )
+    check(
+        s.graphDump.contains("Graph dump: \(nodes) attributes, \(subgraphs) subgraphs, \(edges) edges"),
+        "\(label): graphDump header mismatch"
     )
     check(
         s.recalculationCount == recalcs,
@@ -93,13 +107,15 @@ private func runVerification() {
         altValue: 100,
         parityText: "Par (even)",
         parityRuns: 1,
+        statefulText: "Stateful #1 (maxCounter=0, altSinArista=100)",
+        statefulRuns: 1,
         indirect: 0,
         detail: nil,
         detailRuns: 0,
-        nodes: 7,
-        edges: 7,
+        nodes: 8,
+        edges: 9,
         subgraphs: 1,
-        recalcs: 3,
+        recalcs: 4,
         publishes: 0,
         dirtyNotifications: 0
     )
@@ -113,13 +129,15 @@ private func runVerification() {
         altValue: 100,
         parityText: "Par (even)",
         parityRuns: 1,
+        statefulText: "Stateful #2 (maxCounter=2, altSinArista=100)",
+        statefulRuns: 2,
         indirect: 2,
         detail: nil,
         detailRuns: 0,
-        nodes: 7,
-        edges: 7,
+        nodes: 8,
+        edges: 9,
         subgraphs: 1,
-        recalcs: 5,
+        recalcs: 7,
         publishes: 1,
         dirtyNotifications: 1
     )
@@ -133,13 +151,15 @@ private func runVerification() {
         altValue: 100,
         parityText: "Impar (odd)",
         parityRuns: 2,
+        statefulText: "Stateful #3 (maxCounter=3, altSinArista=100)",
+        statefulRuns: 3,
         indirect: 3,
         detail: nil,
         detailRuns: 0,
-        nodes: 7,
-        edges: 7,
+        nodes: 8,
+        edges: 9,
         subgraphs: 1,
-        recalcs: 8,
+        recalcs: 11,
         publishes: 2,
         dirtyNotifications: 2
     )
@@ -153,13 +173,15 @@ private func runVerification() {
         altValue: 110,
         parityText: "Impar (odd)",
         parityRuns: 2,
+        statefulText: "Stateful #3 (maxCounter=3, altSinArista=100)",
+        statefulRuns: 3,
         indirect: 3,
         detail: nil,
         detailRuns: 0,
-        nodes: 7,
-        edges: 7,
+        nodes: 8,
+        edges: 9,
         subgraphs: 1,
-        recalcs: 9,
+        recalcs: 12,
         publishes: 3,
         dirtyNotifications: 3
     )
@@ -173,13 +195,15 @@ private func runVerification() {
         altValue: 110,
         parityText: "Impar (odd)",
         parityRuns: 2,
+        statefulText: "Stateful #3 (maxCounter=3, altSinArista=100)",
+        statefulRuns: 3,
         indirect: 110,
         detail: nil,
         detailRuns: 0,
-        nodes: 7,
-        edges: 7,
+        nodes: 8,
+        edges: 9,
         subgraphs: 1,
-        recalcs: 10,
+        recalcs: 13,
         publishes: 4,
         dirtyNotifications: 4
     )
@@ -193,13 +217,15 @@ private func runVerification() {
         altValue: 110,
         parityText: "Impar (odd)",
         parityRuns: 2,
+        statefulText: "Stateful #3 (maxCounter=3, altSinArista=100)",
+        statefulRuns: 3,
         indirect: 110,
         detail: "Detalle vivo: counter=3, indirect=110",
         detailRuns: 1,
-        nodes: 8,
-        edges: 10,
+        nodes: 9,
+        edges: 12,
         subgraphs: 2,
-        recalcs: 12,
+        recalcs: 15,
         publishes: 5,
         dirtyNotifications: 5
     )
@@ -213,13 +239,15 @@ private func runVerification() {
         altValue: 110,
         parityText: "Impar (odd)",
         parityRuns: 2,
+        statefulText: "Stateful #4 (maxCounter=5, altSinArista=110)",
+        statefulRuns: 4,
         indirect: 110,
         detail: "Detalle vivo: counter=5, indirect=110",
         detailRuns: 2,
-        nodes: 8,
-        edges: 10,
+        nodes: 9,
+        edges: 12,
         subgraphs: 2,
-        recalcs: 15,
+        recalcs: 19,
         publishes: 6,
         dirtyNotifications: 6
     )
@@ -233,25 +261,27 @@ private func runVerification() {
         altValue: 110,
         parityText: "Impar (odd)",
         parityRuns: 2,
+        statefulText: "Stateful #4 (maxCounter=5, altSinArista=110)",
+        statefulRuns: 4,
         indirect: 110,
         detail: nil,
         detailRuns: 2,
-        nodes: 7,
-        edges: 7,
+        nodes: 8,
+        edges: 9,
         subgraphs: 1,
-        recalcs: 16,
+        recalcs: 20,
         publishes: 7,
         dirtyNotifications: 7
     )
+
+    let peeked = bridge.peekAltWithoutUpdate()
+    check(peeked == 110, "expected peekAltWithoutUpdate == 110, got \(peeked)")
 
     // Verify batch coalescing: multiple mutations in a single batch produce 1 dirty notification
     // and 1 snapshot publish.
     let publishesBeforeBatch = bridge.snapshotPublishCount
     let dirtyBeforeBatch = bridge.dirtyNotificationCount
-    bridge.performBatch {
-        bridge.incrementCounter(by: 1)
-        bridge.incrementAlt(by: 5)
-    }
+    bridge.applyDemoBatch()
     bridge.flushUI()
     check(
         bridge.dirtyNotificationCount == dirtyBeforeBatch + 1,
@@ -260,6 +290,10 @@ private func runVerification() {
     check(
         bridge.snapshotPublishCount == publishesBeforeBatch + 1,
         "batch should produce 1 snapshot publish, got \(bridge.snapshotPublishCount - publishesBeforeBatch)"
+    )
+    check(
+        bridge.snapshot.statefulText == "Stateful #5 (maxCounter=7, altSinArista=120)",
+        "unexpected statefulText after batch: \(bridge.snapshot.statefulText)"
     )
 
     print("VERIFY OK")
@@ -449,11 +483,13 @@ private func renderSnapshot(to path: String) {
     let bridge = EngineBridge()
     bridge.incrementCounter(by: 2)
     bridge.flushUI()
-    bridge.incrementCounter(by: 1)
+    bridge.applyDemoBatch()
     bridge.flushUI()
+    _ = bridge.peekAltWithoutUpdate()
     bridge.setShowDetail(true)
+    bridge.flushUI()
 
-    let size = NSSize(width: 780, height: 680)
+    let size = NSSize(width: 800, height: 760)
     let hostingView = NSHostingView(rootView: ContentView(bridge: bridge))
     hostingView.frame = NSRect(origin: .zero, size: size)
     hostingView.appearance = NSAppearance(named: .aqua)
@@ -464,9 +500,11 @@ private func renderSnapshot(to path: String) {
         backing: .buffered,
         defer: false
     )
+    window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .aqua)
     window.contentView = hostingView
     hostingView.layoutSubtreeIfNeeded()
+    defer { window.close() }
 
     guard let rep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
         fputs("Failed to allocate bitmapImageRepForCachingDisplay\n", stderr)
@@ -497,7 +535,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let hostingController = NSHostingController(rootView: ContentView(bridge: bridge))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "SwiftAttributeGraph — MiniUIApp"
-        window.setContentSize(NSSize(width: 780, height: 680))
+        window.setContentSize(NSSize(width: 800, height: 760))
         window.center()
         window.makeKeyAndOrderFront(nil)
         self.window = window
