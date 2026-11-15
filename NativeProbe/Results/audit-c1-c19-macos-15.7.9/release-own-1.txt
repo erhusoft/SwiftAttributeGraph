@@ -1,0 +1,15 @@
+dynamic|values=[0, 1, 1, 100, 100, 101, 2, 2, 3]|runs=[1, 2, 2, 3, 3, 4, 5, 5, 6]
+cut|values=[10, 10, 10, 11, 11, 10]|middle=[1, 2, 2, 3, 4, 5]|output=[1, 1, 1, 2, 2, 3]
+lazy|beforeRead=1|afterRead=2|value=100|restoredRuns=3
+lifetime|payloadReleased=true|scopeInvalidated=true|nodesReturnedToBaseline=true
+diamond-source-forward|values=[4, 10, 10, 13, 1, 1, 1]|left=[1, 2, 2, 3, 4, 5, 5]|right=[1, 2, 2, 3, 4, 5, 5]|join=[1, 2, 2, 3, 4, 4, 4]|snapshots=[[2, 2], [4, 6], [5, 8], [1, 0]]
+diamond-source-reverse|values=[4, 10, 10, 13, 1, 1, 1]|left=[1, 2, 2, 3, 4, 5, 5]|right=[1, 2, 2, 3, 4, 5, 5]|join=[1, 2, 2, 3, 4, 4, 4]|snapshots=[[2, 2], [4, 6], [5, 8], [1, 0]]
+diamond-multiple-forward|values=[40, 80, 80, 80, 100, 100]|left=[1, 2, 3, 4, 5, 5]|right=[1, 2, 3, 4, 5, 5]|join=[1, 2, 3, 3, 4, 4]|tail=[1, 2, 2, 2, 3, 3]|snapshots=[[12, -8], [24, -16], [25, -17], [35, -25]]
+diamond-multiple-reverse|values=[40, 80, 80, 80, 100, 100]|left=[1, 2, 3, 4, 5, 5]|right=[1, 2, 3, 4, 5, 5]|join=[1, 2, 3, 3, 4, 4]|tail=[1, 2, 2, 2, 3, 3]|snapshots=[[12, -8], [24, -16], [25, -17], [35, -25]]
+stateful-no-write-cut|values=[20, 20, 50, 50]|statefulRuns=[1, 2, 3, 4]|outputRuns=[1, 1, 2, 2]
+stateful-unread-input|values=[1, 1, 200, 200]|runs=[1, 1, 2, 2]
+stateful-has-value-and-revert|runs=2|hasValue=[false, true]|prev=[50]|changed=[true, true]
+selector-input-order|ab=[2, 2, 2]|ba=[2, 2, 2]
+invalidate-in-rule|v1=42|v2=43|validDuring=false|weakDuring=Optional(42)|validAfter=false
+weak-attribute-in-rule|reader=[10, 20, 20, -1]|stateful=[110, 120, 120, -999]|runsBeforeTick=[2, 2]|runsAfterTick=[3, 3]
+indirect-rule-and-redirect|values=[11, 11, 11, 11, 26, 22, 25]|runs=[1, 1, 2, 2, 3, 4, 5]

@@ -38,14 +38,9 @@ productos, targets ni dependencias nuevos; este banco es un paquete independient
 
 ## Cobertura y límites
 
-Ocho secuencias: cuatro básicas de dependencias dinámicas con cambio de rama, corte por igualdad en una cadena de dos reglas,
-100 escrituras antes de leer y vida de un objeto en un subgrafo; más cuatro variantes de diamantes descritas
-en el [estudio de diamantes](../docs/ESTUDIO-DIAMANTES-NATIVOS.md). Se verifican también escrituras iguales y una secuencia
-que cambia un dato y lo restaura antes de leer. Se comprueba que ambos motores vuelven a cero nodos vivos.
-El nativo además comprueba que el atributo débil deja de resolver y que el subgrafo ya no es válido.
+Quince secuencias directas:
+- Cuatro básicas (`dynamic`, `cut`, `lazy`, `lifetime`) descritas en el [primer estudio directo](../docs/ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md).
+- Cuatro variantes de diamantes (`diamond-source-forward/reverse`, `diamond-multiple-forward/reverse`) descritas en el [estudio de diamantes](../docs/ESTUDIO-DIAMANTES-NATIVOS.md).
+- Siete escenarios de la auditoría C1–C19 (`stateful-no-write-cut`, `stateful-unread-input`, `stateful-has-value-and-revert`, `selector-input-order`, `invalidate-in-rule`, `weak-attribute-in-rule`, `indirect-rule-and-redirect`) descritos en la [auditoría C1–C19](../docs/ESTUDIO-AUDITORIA-C1-C19.md).
 
-Los cuatro perfiles básicos se fijaron tras la primera observación directa; los cuatro de diamantes se predijeron
-antes de ejecutarlos. Todos se verificaron en procesos independientes de debug y release. No hay tiempos ni afirmaciones de rendimiento equivalente.
-Las declaraciones privadas pueden diferir del ABI real en otra versión; compilar no demuestra compatibilidad universal.
-Los casos no cubren reglas con estado, ciclos, profundidad extrema, todos los tipos de comparación ni invalidación
-reentrante. Windows queda fuera. [Resultados e interpretación](../docs/ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md).
+Se comprueba en todos los escenarios que ambos motores producen las mismas salidas y contadores de ejecución en procesos independientes de debug y release (3 pares por configuración) y vuelven a cero nodos vivos al cerrar el ámbito.

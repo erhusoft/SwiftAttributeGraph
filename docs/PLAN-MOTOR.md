@@ -712,7 +712,7 @@ Fecha: 2026-11-14. [Predicciones, tablas y límites](ESTUDIO-DIAMANTES-NATIVOS.m
 
 ## 25. Auditoría C1–C19 y alineación con AttributeGraph nativo (Mac)
 
-Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Respuestas completas a C1–C19 en [FUNDAMENTOS.md](FUNDAMENTOS.md) §6.
+Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Estudio detallado con trazas de `AGTrace` y `NativeProbe` en [ESTUDIO-AUDITORIA-C1-C19.md](ESTUDIO-AUDITORIA-C1-C19.md); tabla resumen de respuestas a C1–C19 en [FUNDAMENTOS.md](FUNDAMENTOS.md) §6.
 
 **Hecho (cuatro piezas, un commit por pieza):**
 1. **Pieza 1 (`611b35c` — C5 y C17: orden de aristas y verificación de entradas sucias):**
