@@ -2,7 +2,7 @@ import Testing
 @testable import SwiftAttributeGraph
 
 /// The comparison is resolved once, when the attribute is created, and it ignores padding bytes.
-@Suite struct ComparisonResolutionTests {
+@Suite(.serialized) struct ComparisonResolutionTests {
     /// Counts how many times `==` runs.
     private struct Counted: Equatable {
         nonisolated(unsafe) static var calls = 0

@@ -23,6 +23,7 @@ enum TypeLayout {
     static func kind(of type: Any.Type) -> Kind {
         let word = unsafeBitCast(type, to: UnsafePointer<UInt>.self).pointee
         switch word {
+        case 0: return .reference                                       // Class metadata kind in non-ObjC runtime
         case 0x200: return .structure
         case 0x201: return .enumeration
         case 0x202: return .optional
@@ -30,7 +31,7 @@ enum TypeLayout {
         case 0x302: return .function
         case 0x303: return .existential
         case 0x203, 0x300, 0x304, 0x305, 0x306: return .other
-        default: return word < 0x1000 ? .other : .reference            // a class: its metadata starts with a pointer
+        default: return word < 0x1000 ? .other : .reference            // Class metadata with ObjC ISA pointer
         }
     }
 
