@@ -2,18 +2,77 @@
 import AttributeGraph
 
 typealias Handle<Value> = AttributeGraph.Attribute<Value>
+typealias SubgraphHandle = AttributeGraph.Subgraph
+typealias WeakHandle<Value> = AttributeGraph.WeakAttribute<Value>
+typealias IndirectHandle<Value> = AttributeGraph.IndirectAttribute<Value>
 
 private struct NativeRule<Value>: AttributeGraph.Rule {
     let body: () -> Value
     var value: Value { body() }
 }
 
+struct StatefulHandleContext<Value> {
+    let raw: AttributeGraph.RuleContext<Value>
+    var hasValue: Bool { raw.hasValue }
+    var value: Value {
+        get { raw.value }
+        nonmutating set { raw.value = newValue }
+    }
+    func changedValue<T>(of attribute: Handle<T>) -> (value: T, changed: Bool) {
+        raw.changedValue(of: attribute, options: [])
+    }
+    func changedValue<T>(of weakAttribute: WeakHandle<T>) -> (value: T, changed: Bool)? {
+        weakAttribute.changedValue(options: [])
+    }
+}
+
+private struct NativeStatefulRule<Value>: AttributeGraph.StatefulRule {
+    let initial: Value?
+    let body: (StatefulHandleContext<Value>) -> Void
+    static var initialValue: Value? { nil }
+    mutating func updateValue() {
+        let ctx = StatefulHandleContext<Value>(raw: context)
+        if !ctx.hasValue, let initial {
+            ctx.value = initial
+        }
+        body(ctx)
+    }
+}
+
 final class Driver {
     let graph = AttributeGraph.Graph()
     let scope: AttributeGraph.Subgraph
-    init() { scope = AttributeGraph.Subgraph(graph: graph); precondition(graph.counter(for: .nodes) == 0) }
-    func input<V>(_ value: V) -> Handle<V> { scope.apply { Handle(value: value) } }
-    func rule<V>(_ body: @escaping () -> V) -> Handle<V> { scope.apply { Handle(NativeRule(body: body)) } }
+    var currentSubgraph: AttributeGraph.Subgraph
+    init() {
+        scope = AttributeGraph.Subgraph(graph: graph)
+        currentSubgraph = scope
+        precondition(graph.counter(for: .nodes) == 0)
+    }
+    func input<V>(_ value: V) -> Handle<V> { currentSubgraph.apply { Handle(value: value) } }
+    func rule<V>(_ body: @escaping () -> V) -> Handle<V> { currentSubgraph.apply { Handle(NativeRule(body: body)) } }
+    func statefulRule<V>(initialValue: V? = nil, _ body: @escaping (StatefulHandleContext<V>) -> Void) -> Handle<V> {
+        currentSubgraph.apply { Handle(NativeStatefulRule(initial: initialValue, body: body)) }
+    }
+    func makeSubgraph() -> SubgraphHandle {
+        let child = AttributeGraph.Subgraph(graph: graph)
+        currentSubgraph.addChild(child)
+        return child
+    }
+    func withSubgraph<T>(_ subgraph: SubgraphHandle, _ body: () -> T) -> T {
+        let previous = currentSubgraph
+        currentSubgraph = subgraph
+        defer { currentSubgraph = previous }
+        return body()
+    }
+    func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
+    func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
+    func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
+    func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
+    func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
+    func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { currentSubgraph.apply { IndirectHandle(source: source) } }
+    func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.projectedValue }
+    func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.source }
+    func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { indirect.source = newSource }
     func read<V>(_ attribute: Handle<V>) -> V { attribute.value }
     func write<V>(_ value: V, to attribute: Handle<V>) { attribute.value = value }
     func close() {
@@ -25,18 +84,70 @@ final class Driver {
 import SwiftAttributeGraph
 
 typealias Handle<Value> = Attribute<Value>
+typealias SubgraphHandle = Subgraph
+typealias WeakHandle<Value> = WeakAttribute<Value>
+typealias IndirectHandle<Value> = Attribute<Value>
+
+final class BoxedContext<Value> {
+    var inner: RuleContext<Value>
+    init(_ inner: RuleContext<Value>) { self.inner = inner }
+}
+
+struct StatefulHandleContext<Value> {
+    let box: BoxedContext<Value>
+    var hasValue: Bool { box.inner.hasValue }
+    var value: Value {
+        get { box.inner.value }
+        nonmutating set { box.inner.value = newValue }
+    }
+    func changedValue<T>(of attribute: Handle<T>) -> (value: T, changed: Bool) {
+        box.inner.changedValue(of: attribute)
+    }
+    func changedValue<T>(of weakAttribute: WeakHandle<T>) -> (value: T, changed: Bool)? {
+        box.inner.changedValue(of: weakAttribute)
+    }
+}
 
 final class Driver {
     let graph = Graph()
     let scope: Subgraph
-    init() { scope = graph.makeSubgraph() }
-    func input<V>(_ value: V) -> Handle<V> { graph.withCurrent(scope) { graph.makeInput(value) } }
-    func rule<V>(_ body: @escaping () -> V) -> Handle<V> { graph.withCurrent(scope) { graph.makeRule(body) } }
+    var currentSubgraph: Subgraph
+    init() {
+        scope = graph.makeSubgraph()
+        currentSubgraph = scope
+    }
+    func input<V>(_ value: V) -> Handle<V> { graph.withCurrent(currentSubgraph) { graph.makeInput(value) } }
+    func rule<V>(_ body: @escaping () -> V) -> Handle<V> { graph.withCurrent(currentSubgraph) { graph.makeRule(body) } }
+    func statefulRule<V>(initialValue: V? = nil, _ body: @escaping (StatefulHandleContext<V>) -> Void) -> Handle<V> {
+        graph.withCurrent(currentSubgraph) {
+            graph.makeStatefulRule(initialValue: initialValue) { context in
+                let boxed = BoxedContext(context)
+                body(StatefulHandleContext(box: boxed))
+                context = boxed.inner
+            }
+        }
+    }
+    func makeSubgraph() -> SubgraphHandle { graph.makeSubgraph(parent: currentSubgraph) }
+    func withSubgraph<T>(_ subgraph: SubgraphHandle, _ body: () -> T) -> T {
+        let previous = currentSubgraph
+        currentSubgraph = subgraph
+        defer { currentSubgraph = previous }
+        return graph.withCurrent(subgraph, body)
+    }
+    func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
+    func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
+    func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
+    func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
+    func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
+    func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(scope) { graph.makeIndirect(source) } }
+    func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect }
+    func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { graph.source(of: indirect) }
+    func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
     func read<V>(_ attribute: Handle<V>) -> V { graph.value(of: attribute) }
     func write<V>(_ value: V, to attribute: Handle<V>) { graph.setValue(value, for: attribute) }
     func close() {
         graph.invalidate(scope)
-        precondition(graph.nodeCount == 0 && graph.edgeCount == 0 && graph.liveSubgraphCount == 1)
+        precondition(!graph.isValid(scope) && graph.nodeCount == 0 && graph.edgeCount == 0 && graph.liveSubgraphCount == 1)
     }
 }
 #endif
@@ -112,20 +223,16 @@ func coalescedWrites() {
 func ownedLifetime() {
     let d = Driver()
     var payload: Payload? = Payload(7)
-    weak var weakPayload = payload
+    weak let weakPayload = payload
     let input = d.input(payload!)
     payload = nil
     let output = d.rule { d.read(input).value }
     precondition(d.read(output) == 7 && weakPayload != nil)
-    #if NATIVE_ATTRIBUTE_GRAPH
-    let weakAttribute = AttributeGraph.WeakAttribute(input)
-    precondition(weakAttribute.attribute != nil)
-    #endif
+    let weakAttribute = d.weak(input)
+    precondition(d.attribute(of: weakAttribute) != nil)
     d.close()
     precondition(weakPayload == nil)
-    #if NATIVE_ATTRIBUTE_GRAPH
-    precondition(weakAttribute.attribute == nil)
-    #endif
+    precondition(d.attribute(of: weakAttribute) == nil)
     print("lifetime|payloadReleased=true|scopeInvalidated=true|nodesReturnedToBaseline=true")
 }
 
@@ -137,3 +244,10 @@ sharedSourceDiamond(reverse: false)
 sharedSourceDiamond(reverse: true)
 multipleInputDiamond(reverse: false)
 multipleInputDiamond(reverse: true)
+statefulNoWriteCut()
+statefulUnreadInput()
+statefulHasValueAndRevert()
+selectorInputOrder()
+invalidateInRule()
+weakAttributeInRule()
+indirectRuleAndRedirect()

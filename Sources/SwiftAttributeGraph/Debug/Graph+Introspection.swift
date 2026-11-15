@@ -90,7 +90,6 @@ extension Graph {
         bytes += slotCount * MemoryLayout<UInt32>.size        // generations
         bytes += slotCount * MemoryLayout<UInt16>.size        // state
         bytes += slotCount * MemoryLayout<UInt32>.size        // versions
-        bytes += slotCount * MemoryLayout<UInt32>.size        // lastVerified
         bytes += slotCount * MemoryLayout<UInt32>.size        // owners
         bytes += slotCount * MemoryLayout<Optional<NodeBox>>.size  // boxes (references)
         bytes += table.freeListCount * MemoryLayout<UInt32>.size

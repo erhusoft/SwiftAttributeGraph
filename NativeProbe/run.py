@@ -12,8 +12,14 @@ import urllib.request
 REVISION = "511cc728141f57dc325753f23898568ccd49c339"
 REPOSITORY = "https://github.com/OpenSwiftUIProject/DarwinPrivateFrameworks"
 PREFIX = "AG/2024/AttributeGraph.xcframework/macos-arm64e-arm64-x86_64/AttributeGraph.framework/Versions/A/"
-SCENARIOS = ["dynamic", "cut", "lazy", "lifetime", "diamond-source-forward", "diamond-source-reverse",
-             "diamond-multiple-forward", "diamond-multiple-reverse"]
+SCENARIOS = [
+    "dynamic", "cut", "lazy", "lifetime",
+    "diamond-source-forward", "diamond-source-reverse",
+    "diamond-multiple-forward", "diamond-multiple-reverse",
+    "stateful-no-write-cut", "stateful-unread-input", "stateful-has-value-and-revert",
+    "selector-input-order", "invalidate-in-rule", "weak-attribute-in-rule",
+    "indirect-rule-and-redirect",
+]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
 

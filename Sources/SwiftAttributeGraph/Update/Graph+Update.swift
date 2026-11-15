@@ -82,7 +82,6 @@ extension Graph {
         guard typedNode(attribute).store(value) else { return }
         globalVersion &+= 1
         table.versions[index] &+= 1
-        table.lastVerified[index] = globalVersion
         if table.state[index] & NodeState.observed != 0 { queueNotification(UInt32(index)) }
         propagateDirty(from: UInt32(index))
         flushNotifications()
@@ -135,7 +134,6 @@ extension Graph {
                     globalVersion &+= 1
                     table.versions[n] &+= 1
                     table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.pending)
-                    table.lastVerified[n] = globalVersion
                     frames.removeLast()
                     continue
                 }
@@ -146,7 +144,6 @@ extension Graph {
                 run(node)
             } else {
                 table.state[n] &= ~(NodeState.dirty | NodeState.evaluating)
-                table.lastVerified[n] = globalVersion
             }
             frames.removeLast()
         }
@@ -205,11 +202,9 @@ extension Graph {
                    table.inputs[dep][0].source == node,
                    table.inputs[dep][0].seenVersion == table.versions[n] {
                     table.state[dep] &= ~NodeState.dirty
-                    table.lastVerified[dep] = globalVersion
                 }
             }
         }
-        table.lastVerified[n] = globalVersion
     }
 
     /// Where what a rule creates is born: the subgraph that owns the rule, or its nearest ancestor that is not being

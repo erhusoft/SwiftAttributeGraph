@@ -6,7 +6,6 @@ struct NodeTable {
     private(set) var generations: [UInt32] = []
     var state: [UInt16] = []
     var versions: [UInt32] = []
-    var lastVerified: [UInt32] = []
     var inputs: [[InputEdge]] = []
     var outputs: [[UInt32]] = []
     private(set) var owners: [UInt32] = []
@@ -27,7 +26,6 @@ struct NodeTable {
             let i = Int(index)
             state[i] = initialState
             versions[i] = version
-            lastVerified[i] = version
             owners[i] = owner
             boxes[i] = box
             return AttributeID(index: index, generation: generations[i])
@@ -35,7 +33,6 @@ struct NodeTable {
         generations.append(1)
         state.append(initialState)
         versions.append(version)
-        lastVerified.append(version)
         inputs.append([])
         outputs.append([])
         owners.append(owner)
@@ -60,7 +57,6 @@ struct NodeTable {
         let i = Int(index)
         boxes[i] = nil
         state[i] = 0
-        lastVerified[i] = 0
         inputs[i] = []
         outputs[i] = []
         var next = generations[i] &+ 1

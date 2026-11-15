@@ -107,35 +107,34 @@ Una vez respondidas las preguntas **[dueño]**:
 
 Añadido tras M0–M9. La hipótesis de trabajo es que **el grafo construido coincide con el AttributeGraph original**.
 Como Apple no publica su código, la única vía es la ingeniería inversa por comportamiento: se formula una pregunta, se
-**fija la predicción antes de medir**, se observa en el nativo (`NativeProbe`) y en nuestro motor, y se comparan
+**fija la predicción antes de medir**, se observa en el nativo (`NativeProbe` + `AGTrace`) y en nuestro motor, y se comparan
 «ejecuta / salta» y los contadores por regla. Acertar sube la confianza sin demostrar nada general; una divergencia
 obliga a corregir el motor o la hipótesis.
 
 Una buena pregunta se responde observando, puede salir mal y es estrecha (una sola cosa por escenario).
-Estado: **abiertas**, salvo lo ya cubierto por los ocho escenarios de `ESTUDIO-ATTRIBUTEGRAPH-NATIVO.md` y
-`ESTUDIO-DIAMANTES-NATIVOS.md` (reglas `Int`, grafos pequeños).
+Estado: **auditadas y alineadas en macOS 15.7.9 (M1)** con los 15 escenarios de `NativeProbe` (3 pares debug + 3 pares release, 100 % de paridad en las 15 trazas) y sondas de `AGTrace`.
 
-| # | Tema | Pregunta |
-|---|---|---|
-| C1 | Reglas con estado | Si la regla no cambia su valor, ¿cuenta como cambio para sus dependientes? |
-| C2 | Reglas con estado | ¿Se ejecuta cuando cambia una entrada que no leyó la última vez? |
-| C3 | Reglas con estado | ¿Ve el valor anterior si se invalidó y se restauró antes de leer? |
-| C4 | Selectores | Al cambiar de rama, ¿se poda de inmediato la dependencia que ya no se lee? |
-| C5 | Selectores | ¿Importa el orden de lectura para el corte (leer A antes que B)? |
-| C6 | Selectores | Con varias entradas que cambian a la vez, ¿cuántas veces ejecuta? |
-| C7 | Diamantes | ¿Puede una regla ver una mezcla de valores viejos y nuevos? |
-| C8 | Diamantes | Si se pide primero la hoja o la raíz, ¿cambia el número de ejecuciones? |
-| C9 | Vida | Si se invalida el subgrafo durante una regla, ¿termina o falla? |
-| C10 | Vida | ¿Qué ocurre al leer un atributo ya borrado? |
-| C11 | Escrituras | ¿Escribir el mismo valor propaga algo? |
-| C12 | Escrituras | Dentro de una regla, ¿se permite escribir? |
-| C13 | Ciclos | ¿Un ciclo falla, se corta o se queda colgado? |
-| C14 | Comparación | ¿Se puede comparar solo parte de un valor para decidir si cambió? |
-| C15 | Débiles | ¿Qué lee un atributo débil cuando su destino ya no existe? |
-| C16 | Plazo | ¿Una actualización puede abandonarse al pasar un plazo y qué queda sin evaluar? |
-| C17 | Búsqueda | ¿En qué orden recorre las entradas una búsqueda por anchura? |
-| C18 | Externos | ¿Cómo se comportan los atributos externos, sin regla ni valor propio? |
-| C19 | Trazas | ¿Los eventos de ciclo de vida permiten observar el orden de ejecución sin depender solo de contadores? |
+| # | Tema | Pregunta | Resultado medido en `AttributeGraph` de Apple y estado en `SwiftAttributeGraph` |
+|---|---|---|---|
+| C1 | Reglas con estado | Si la regla no cambia su valor, ¿cuenta como cambio para sus dependientes? | **No.** Si `StatefulRule` no escribe `value` (o escribe un valor igual), la versión no sube y sus dependientes se saltan (`stateful-no-write-cut`: `sRuns=[1,2,3,4]`, `oRuns=[1,1,2,2]`). Coincide 100 %. |
+| C2 | Reglas con estado | ¿Se ejecuta cuando cambia una entrada que no leyó la última vez? | **No.** Cambiar una rama no leída o podada en la evaluación anterior no ensucia ni ejecuta la regla con estado (`stateful-unread-input`: `runs=[1,1,2,2]`). Coincide 100 %. |
+| C3 | Reglas con estado | ¿Ve el valor anterior si se invalidó y se restauró antes de leer? | **Sí.** Si una entrada directa se muta y se restaura (`5 -> 6 -> 5`) antes de leer, la regla sigue sucia, ejecuta con `hasValue == true`, lee su `value` previo (`50`) y `changedValue` reporta `changed == true` (`stateful-has-value-and-revert`). Coincide 100 %. |
+| C4 | Selectores | Al cambiar de rama, ¿se poda de inmediato la dependencia que ya no se lee? | **Sí.** Confirmado con `AGTrace` (`remove_edge` inmediato al cerrar `update_attribute` del selector) y con `dynamic`. Coincide 100 %. |
+| C5 | Selectores | ¿Importa el orden de lectura para el corte (leer A antes que B)? | **No.** El nativo guarda las aristas ordenadas por `AttributeID` creciente y actualiza **todas** las entradas sucias previas antes de decidir si la regla corre (`selector-input-order`: `[2,2,2]` tanto leyendo `A+B` como `B+A`). Alineado en `611b35c`. |
+| C6 | Selectores | Con varias entradas que cambian a la vez, ¿cuántas veces ejecuta? | **Una sola vez** al tirar de la salida, tras actualizar todas sus entradas sucias previas (`diamond-multiple-*`). Coincide 100 %. |
+| C7 | Diamantes | ¿Puede una regla ver una mezcla de valores viejos y nuevos? | **No (*glitch-free*).** La unión actualiza ambas ramas antes de evaluarse (`diamond-source-*` y `diamond-multiple-*`). Coincide 100 %. |
+| C8 | Diamantes | Si se pide primero la hoja o la raíz, ¿cambia el número de ejecuciones? | **No.** Leer una rama intermedia antes de la unión adelanta su evaluación sin duplicarla cuando se lee la unión (`diamond-source-*` paso 3). Coincide 100 %. |
+| C9 | Vida | Si se invalida el subgrafo durante una regla, ¿termina o falla? | **Termina.** `child.isValid` pasa a `false` de inmediato, mientras que los atributos del subgrafo siguen legibles hasta que termina el `update` en curso (`invalidate-in-rule`). Al invalidar un subgrafo, las aristas hacia lectores externos se desconectan (`remove_edge`) sin ensuciar a esos lectores (`weak-attribute-in-rule`). Alineado en `91cbc51`. |
+| C10 | Vida | ¿Qué ocurre al leer un atributo ya borrado? | En `AttributeGraph` nativo sobre un atributo directo destruido aborta; a través de `WeakAttribute` devuelve `nil` sin crear aristas (`weak-attribute-in-rule`). En nuestro motor, leer un `Attribute` muerto dispara `precondition` y `WeakAttribute` devuelve `nil`. Coincide 100 %. |
+| C11 | Escrituras | ¿Escribir el mismo valor propaga algo? | **No.** Escribir un valor igual según la política de comparación no sube versión ni marca sucios a los lectores (`cut` y `diamond-*`). Coincide 100 %. |
+| C12 | Escrituras | Dentro de una regla, ¿se permite escribir? | **No.** Es un error de programación (`precondition` en `setValue` y `setSource` cuando `evaluatingNode != noNode`). Coincide 100 %. |
+| C13 | Ciclos | ¿Un ciclo falla, se corta o se queda colgado? | **Falla determinísticamente** al detectar reentrada sobre un nodo en evaluación (`NodeState.evaluating` / ciclos en `setSource`). Coincide 100 %. |
+| C14 | Comparación | ¿Se puede comparar solo parte de un valor para decidir si cambió? | En el nativo existen `ComparisonMode` (`Bitwise`, `EquatableAlways`, `EquatableUnlessPOD`) y proyección por offset (`PointerOffset` / `Focus`), resueltos en nuestro motor por `ComparisonPlan` (M2). |
+| C15 | Débiles | ¿Qué lee un atributo débil cuando su destino ya no existe? | **`nil`**, tanto en `weakAttribute.value` como en `changedValue(of: weakAttribute)`, y mientras vive registra una dependencia normal (`weak-attribute-in-rule`). Implementado y verificado en `91cbc51`. |
+| C16 | Plazo | ¿Una actualización puede abandonarse al pasar un plazo y qué queda sin evaluar? | Fuera del alcance del motor (P8: tiempo y animaciones viven fuera del motor). |
+| C17 | Búsqueda | ¿En qué orden recorre las entradas una búsqueda por anchura? | **Por `AttributeID` creciente**, con independencia del orden en que la regla leyó sus entradas (verificado con `breadthFirstSearch(options: .searchInputs)` en permutación no monótona `[E2, E3, E1]`). Alineado en `611b35c`. |
+| C18 | Externos | ¿Cómo se comportan los atributos externos, sin regla ni valor propio? | `IndirectAttribute` redirige a cualquier atributo (entrada o regla), permite cambiar `source` con `setSource` (ensuciando con `pending` si cambia el ID de destino aunque el valor coincida) y mantiene una sola arista en el lector (`indirect-rule-and-redirect`). Alineado en `74fad4c`. |
+| C19 | Trazas | ¿Los eventos de ciclo de vida permiten observar el orden de ejecución sin depender solo de contadores? | **Sí.** `AGTrace` expone callbacks de ciclo de vida (`begin_update_stack`, `begin_update_attribute`, `add_edge`, `remove_edge`, `set_edge_pending`, `set_dirty`, `set_pending`, `set_source`), usados en esta auditoría para verificar C4, C5, C9, C15, C17 y C18. |
 
 **Origen de C14–C19:** sugeridas por los **nombres** de las pruebas de `CompatibilityTesting` de
 [jcmosc/Compute](https://github.com/jcmosc/Compute) (licencia MIT): `PartialComparisonTests`, `WeakAttributeTests`,

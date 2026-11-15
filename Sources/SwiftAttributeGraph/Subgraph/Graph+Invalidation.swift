@@ -39,7 +39,8 @@ extension Graph {
     ///
     /// Called outside a rule, it frees them before returning, after telling the observers (see
     /// ``observe(_:onInvalidate:)-(Subgraph,_)``). Called from inside a rule, or from a notice, it marks the subgraphs as
-    /// *falling*: nothing can be created in them, but what they own stays readable so the update in progress finishes
+    /// *falling*: nothing can be created in them, `isValid` and `WeakAttribute` report them as invalidated immediately,
+    /// direct `Attribute` handles stay readable until the outermost update ends so the update in progress finishes
     /// coherently, and the freeing happens when the outermost update ends. Invalidating a subgraph that is already
     /// falling does nothing.
     ///

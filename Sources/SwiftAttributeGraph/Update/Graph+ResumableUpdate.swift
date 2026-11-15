@@ -55,11 +55,9 @@ extension Graph {
                        table.inputs[dep][0].source == node,
                        table.inputs[dep][0].seenVersion == table.versions[n] {
                         table.state[dep] &= ~NodeState.dirty
-                        table.lastVerified[dep] = globalVersion
                     }
                 }
             }
-            table.lastVerified[n] = globalVersion
             frames.removeLast()
         }
     }
