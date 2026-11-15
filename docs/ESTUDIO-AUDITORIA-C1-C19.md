@@ -110,7 +110,7 @@ La auditoría del código fuente detectó que `NodeTable.lastVerified: [UInt32]`
 
 ---
 
-## 3. Resultados del banco `NativeProbe` (22 escenarios)
+## 3. Resultados del banco `NativeProbe` (23 escenarios)
 
 Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audit-c1-c19-macos-15.7.9/`:
 
@@ -138,6 +138,7 @@ Todos los artefactos reproducibles están guardados en `NativeProbe/Results/audi
 | 20 | `indirect-source-invalidated` | C23 | Idéntico (`values=[11, 78, 78, 100]`, `runs=[2, 2, 3]`, `resetToInitial=true`) |
 | 21 | `random-graph-oracle` | C24 | Idéntico (`runs=[95, 108, 105, 100, 95, 107]`, checksums idénticos en las 6 semillas) |
 | 22 | `random-subgraph-weak-indirect-oracle` | C9, C10, C15, C18, C20, C23, C24 | Idéntico (`runs=[115, 96, 106, 66, 96, 89]`, checksums idénticos en las 6 semillas) |
+| 23 | `map-and-property-wrappers` | M6, C11, C15 | Idéntico (`map=[0, 0, 100]`, `mapRuns=[1, 1, 2]`, `wrappers=[27, -2, 500]`) |
 
 ---
 

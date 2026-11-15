@@ -4,6 +4,7 @@ import AttributeGraph
 typealias Handle<Value> = AttributeGraph.Attribute<Value>
 typealias SubgraphHandle = AttributeGraph.Subgraph
 typealias WeakHandle<Value> = AttributeGraph.WeakAttribute<Value>
+typealias OptionalHandle<Value> = AttributeGraph.OptionalAttribute<Value>
 typealias IndirectHandle<Value> = AttributeGraph.IndirectAttribute<Value>
 
 private struct NativeRule<Value>: AttributeGraph.Rule {
@@ -76,6 +77,13 @@ final class Driver {
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
         currentSubgraph.apply { Handle(AttributeGraph.Focus(root: root, keyPath: keyPath)) }
     }
+    func map<Source, V>(_ arg: Handle<Source>, _ body: @escaping (Source) -> V) -> Handle<V> {
+        currentSubgraph.apply { Handle(AttributeGraph.Map(arg, body)) }
+    }
+    func optional<V>(_ attribute: Handle<V>? = nil) -> OptionalHandle<V> { OptionalHandle(attribute) }
+    func typedRule<R: AttributeGraph.Rule>(_ r: R) -> Handle<R.Value> {
+        currentSubgraph.apply { Handle(r) }
+    }
     func read<V>(_ attribute: Handle<V>) -> V { attribute.value }
     func write<V>(_ value: V, to attribute: Handle<V>) { attribute.value = value }
     func close() {
@@ -89,6 +97,7 @@ import SwiftAttributeGraph
 typealias Handle<Value> = Attribute<Value>
 typealias SubgraphHandle = Subgraph
 typealias WeakHandle<Value> = WeakAttribute<Value>
+typealias OptionalHandle<Value> = OptionalAttribute<Value>
 typealias IndirectHandle<Value> = Attribute<Value>
 
 final class BoxedContext<Value> {
@@ -148,6 +157,13 @@ final class Driver {
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
         graph.withCurrent(currentSubgraph) { graph.makeFocus(root, keyPath: keyPath) }
+    }
+    func map<Source, V>(_ arg: Handle<Source>, _ body: @escaping (Source) -> V) -> Handle<V> {
+        graph.withCurrent(currentSubgraph) { graph.makeMap(arg, body) }
+    }
+    func optional<V>(_ attribute: Handle<V>? = nil) -> OptionalHandle<V> { OptionalHandle(attribute) }
+    func typedRule<R: Rule>(_ r: R) -> Handle<R.Value> {
+        graph.withCurrent(currentSubgraph) { graph.makeRule(r) }
     }
     func read<V>(_ attribute: Handle<V>) -> V { graph.value(of: attribute) }
     func write<V>(_ value: V, to attribute: Handle<V>) { graph.setValue(value, for: attribute) }
@@ -264,3 +280,4 @@ doubleReadAndPrune()
 indirectSourceInvalidated()
 randomGraphOracle()
 randomSubgraphWeakIndirectOracle()
+mapAndPropertyWrappers()

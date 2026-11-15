@@ -3,6 +3,7 @@
 /// Unlike ``WeakAttribute``, reading a non-nil `OptionalAttribute` requires its target attribute to be alive (calling
 /// ``Graph/value(of:)-(OptionalAttribute<Value>)`` on a freed target triggers a `precondition`, just like reading a
 /// direct ``Attribute``). When initialized empty (`nil`), reading returns `nil` without recording any dependency.
+@propertyWrapper
 public struct OptionalAttribute<Value>: Hashable, Sendable {
     /// The underlying attribute handle, or `nil` if empty.
     public var attribute: Attribute<Value>?
@@ -27,6 +28,20 @@ public struct OptionalAttribute<Value>: Hashable, Sendable {
     public var value: Value? {
         guard let attribute else { return nil }
         return attribute.value
+    }
+
+    /// The value of the referenced attribute when used as `@OptionalAttribute` inside a rule, or `nil` if empty.
+    public var wrappedValue: Value? { value }
+
+    /// The underlying optional `Attribute<Value>?` handle (`$property` when used as `@OptionalAttribute`).
+    public var projectedValue: Attribute<Value>? {
+        get { attribute }
+        set { attribute = newValue }
+    }
+
+    /// Transforms the wrapped `Attribute<Value>` if present, or returns `nil` if empty.
+    public func map<V>(_ body: (Attribute<Value>) -> V) -> V? {
+        attribute.map(body)
     }
 }
 

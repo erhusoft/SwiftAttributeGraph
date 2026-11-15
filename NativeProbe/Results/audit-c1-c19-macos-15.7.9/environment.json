@@ -29,7 +29,8 @@
     "double-read-and-prune",
     "indirect-source-invalidated",
     "random-graph-oracle",
-    "random-subgraph-weak-indirect-oracle"
+    "random-subgraph-weak-indirect-oracle",
+    "map-and-property-wrappers"
   ],
   "probe_only": true
 }

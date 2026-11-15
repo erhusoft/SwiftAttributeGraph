@@ -1,5 +1,6 @@
 /// A weak reference to an attribute: it does not keep the attribute's subgraph alive, and resolves to `nil` once that
 /// subgraph has been invalidated and freed.
+@propertyWrapper
 public struct WeakAttribute<Value>: Hashable, Sendable {
     /// The underlying attribute ID, or `nil` if initialized empty.
     public var id: AttributeID?
@@ -28,6 +29,16 @@ public struct WeakAttribute<Value>: Hashable, Sendable {
             preconditionFailure("WeakAttribute.value can only be read inside a rule; use Graph.value(of:) elsewhere")
         }
         return graph.value(of: self)
+    }
+
+    /// The value of the referenced attribute when used as `@WeakAttribute` inside a rule, or `nil` if the target was
+    /// invalidated and freed.
+    public var wrappedValue: Value? { value }
+
+    /// The weak attribute wrapper itself (`$property` when used as `@WeakAttribute`).
+    public var projectedValue: WeakAttribute<Value> {
+        get { self }
+        set { self = newValue }
     }
 }
 

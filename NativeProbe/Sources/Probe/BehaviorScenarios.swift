@@ -219,9 +219,32 @@ func indirectRuleAndRedirect() {
     print("indirect-rule-and-redirect|values=\(values)|runs=\(runHistory)")
 }
 
+#if NATIVE_ATTRIBUTE_GRAPH
+import AttributeGraph
+#else
+import SwiftAttributeGraph
+#endif
+
 private struct ProbePair {
     var left: Int
     var right: Int
+}
+
+private struct WrapperProbeRule: Rule {
+    @Attribute var primary: Int
+    @WeakAttribute var secondary: Int?
+    @OptionalAttribute var overrideValue: Int?
+
+    init(primary: Handle<Int>, secondary: WeakHandle<Int>, overrideValue: OptionalHandle<Int>) {
+        self._primary = primary
+        self._secondary = secondary
+        self._overrideValue = overrideValue
+    }
+
+    var value: Int {
+        if let overrideValue { return overrideValue }
+        return primary + (secondary ?? -10)
+    }
 }
 
 func focusKeyPathCut() {
@@ -575,4 +598,39 @@ func randomSubgraphWeakIndirectOracle() {
         d.close()
     }
     print("random-subgraph-weak-indirect-oracle|runs=\(totalRunsSummary)|checksums=\(checksums)")
+}
+
+func mapAndPropertyWrappers() {
+    let d = Driver()
+    defer { d.close() }
+    let source = d.input(4)
+    let mapped = d.map(source) { $0 % 2 }
+    var mapReaderRuns = 0
+    let mapReader = d.rule {
+        mapReaderRuns += 1
+        return d.read(mapped) * 100
+    }
+    let m1 = d.read(mapReader)
+    let mr1 = mapReaderRuns
+    d.write(6, to: source) // 6 % 2 == 0 -> cut!
+    let m2 = d.read(mapReader)
+    let mr2 = mapReaderRuns
+    d.write(7, to: source) // 7 % 2 == 1 -> updates!
+    let m3 = d.read(mapReader)
+    let mr3 = mapReaderRuns
+
+    let child = d.makeSubgraph()
+    let sec = d.withSubgraph(child) { d.input(20) }
+    let ovr = d.input(500)
+    let r1 = d.typedRule(WrapperProbeRule(primary: source, secondary: d.weak(sec), overrideValue: d.optional(nil)))
+    let w1 = d.read(r1) // 7 + 20 = 27
+    d.invalidate(child)
+    d.write(8, to: source)
+    let w2 = d.read(r1) // 8 + (-10) = -2
+    let r2 = d.typedRule(WrapperProbeRule(primary: source, secondary: d.weak(sec), overrideValue: d.optional(ovr)))
+    let w3 = d.read(r2) // 500
+
+    precondition([m1, m2, m3] == [0, 0, 100] && [mr1, mr2, mr3] == [1, 1, 2])
+    precondition([w1, w2, w3] == [27, -2, 500])
+    print("map-and-property-wrappers|map=[\(m1), \(m2), \(m3)]|mapRuns=[\(mr1), \(mr2), \(mr3)]|wrappers=[\(w1), \(w2), \(w3)]")
 }

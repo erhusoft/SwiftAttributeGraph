@@ -112,4 +112,46 @@ import Testing
         graph.setValue(99, for: source)
         #expect(graph.value(of: reader) == 99)
     }
+
+    private struct PropertyWrapperRule: Rule {
+        @Attribute var primary: Int
+        @WeakAttribute var secondary: Int?
+        @OptionalAttribute var overrideValue: Int?
+
+        init(primary: Attribute<Int>, secondary: WeakAttribute<Int>, overrideValue: OptionalAttribute<Int>) {
+            self._primary = primary
+            self._secondary = secondary
+            self._overrideValue = overrideValue
+        }
+
+        var value: Int {
+            if let overrideValue { return overrideValue }
+            return $primary.value + (secondary ?? -10)
+        }
+    }
+
+    @Test func propertyWrappersOnAttributeWeakAttributeAndOptionalAttributeReadAndTrackInsideRule() {
+        let graph = Graph()
+        let sub = graph.makeSubgraph()
+        let p = graph.makeInput(5)
+        let s = graph.withCurrent(sub) { graph.makeInput(20) }
+        let o = graph.makeInput(100)
+
+        let ruleNoOverride = graph.makeRule(
+            PropertyWrapperRule(primary: p, secondary: WeakAttribute(s), overrideValue: OptionalAttribute())
+        )
+        #expect(graph.value(of: ruleNoOverride) == 25)
+
+        graph.setValue(7, for: p)
+        #expect(graph.value(of: ruleNoOverride) == 27)
+
+        graph.invalidate(sub)
+        graph.setValue(8, for: p)
+        #expect(graph.value(of: ruleNoOverride) == -2)
+
+        let ruleWithOverride = graph.makeRule(
+            PropertyWrapperRule(primary: p, secondary: WeakAttribute(), overrideValue: OptionalAttribute(o))
+        )
+        #expect(graph.value(of: ruleWithOverride) == 100)
+    }
 }

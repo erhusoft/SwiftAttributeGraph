@@ -307,4 +307,27 @@ import Testing
         #expect(graph.value(of: reader) == 11)
         #expect(runs == 2)
     }
+
+    @Test func mapRuleTransformsSourceAndCutsWhenMappedOutputIsUnchanged() {
+        let graph = Graph()
+        let source = graph.makeInput(4)
+        let parity = graph.makeMap(source) { $0 % 2 }
+        var runs = 0
+        let downstream = graph.makeRule {
+            runs += 1
+            return parity.value * 100
+        }
+        #expect(graph.value(of: downstream) == 0)
+        #expect(runs == 1)
+
+        // 4 -> 6 keeps `parity == 0`, cutting `downstream`.
+        graph.setValue(6, for: source)
+        #expect(graph.value(of: downstream) == 0)
+        #expect(runs == 1)
+
+        // 6 -> 7 changes `parity` to 1, running `downstream`.
+        graph.setValue(7, for: source)
+        #expect(graph.value(of: downstream) == 100)
+        #expect(runs == 2)
+    }
 }

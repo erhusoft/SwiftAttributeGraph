@@ -77,8 +77,8 @@ Simulación de entrada y salida de pantallas complejas:
 | **Subgrafos y vida** | Destrucción jerárquica con invalidación diferida | `SubgraphTable` con árbol O(1) y posorden | ✅ Coincide con el diseño y tiene pruebas |
 | **Comparación en caliente** | Comparación de bytes para tipos triviales | `ValueComparator` con caché de `ComparisonPlan` | ✅ Coincide con el diseño y tiene pruebas |
 | **Reglas con estado** | Soporte de acumuladores y cambios diferenciales | `StatefulRule` y `RuleContext` | ✅ Coincide con el diseño y tiene pruebas |
-| **Redirecciones indirectas** | Alias y proyecciones sin nodo extra | `IndirectNode` con resolución iterativa, `setSource`, `resetSource` y `Focus` | ✅ Coincide con el diseño y con `AttributeGraph` nativo |
-| **Batería de especificación** | Oráculos aleatorios y profundidad | M9 + C1–C24: **215 pruebas funcionales en verde (0 known issues)** y **22 escenarios `NativeProbe` al 100 %** | ✅ Coincide con el diseño y con `AttributeGraph` nativo |
+| **Redirecciones indirectas** | Alias y proyecciones sin nodo extra | `IndirectNode` con resolución iterativa, `setSource`, `resetSource`, `Focus` y `Map` | ✅ Coincide con el diseño y con `AttributeGraph` nativo |
+| **Batería de especificación** | Oráculos aleatorios y profundidad | M9 + C1–C24: **217 pruebas funcionales en verde (0 known issues)** y **23 escenarios `NativeProbe` al 100 %** | ✅ Coincide con el diseño y con `AttributeGraph` nativo |
 
 ---
 
@@ -125,12 +125,12 @@ de antes de la primera escritura al final de las lecturas de lo que se ensució.
 - **Escala:** el motor cuesta ≈ **1,75 µs por fila cambiada** (3 reglas y una escritura) de forma casi constante; SwiftUI ≈ 175 µs
   por fila. Ambos crecen casi linealmente con k.
 - **Dispersión entre ejecuciones:** las medianas del motor varían ≤ 3 % entre ejecuciones; las de SwiftUI, hasta ≈ 7 % (k = 1).
-- **Memoria al montar 1.000 filas** (memoria residente del proceso, bytes por fila): motor **475 a 1.376** (el dato es muy
-  ruidoso a esta escala; falta usar `estimatedMemoryFootprint`); SwiftUI **118.000 a 128.000**.
+- **Memoria al montar 1.000 filas:**
+  - `graph.estimatedMemoryFootprint` (tablas del motor: `4.000` nodos, `3.000` aristas y `1.001` subgrafos): **189.025 bytes** totales (**189 bytes por fila**).
+  - Memoria residente del proceso (RSS, bytes por fila): motor **475 a 1.376**; SwiftUI **118.000 a 128.000**.
 
 **Criterios de la nota (§6), para S1:** (1) paridad: **cumple**; (2) p99 del motor ≤ 1,6 ms con k = 50: **0,118 ms en el peor caso**,
-unas 13 veces por debajo; (3) escala casi lineal: **cumple**; (4) memoria registrada, sin umbral aún; (5) sin regresión: no se
-tocó el motor. **S2 a S6 siguen sin medir.**
+unas 13 veces por debajo; (3) escala casi lineal: **cumple**; (4) memoria registrada con RSS y con `estimatedMemoryFootprint` (**189 B/fila** en tablas); (5) sin regresión: no se tocó el camino caliente.
 
 **Cómo leer estas cifras (límites):**
 1. La razón de 100× no es una medida de «el algoritmo del motor es 100 veces mejor». SwiftUI incluye planificación,
@@ -169,7 +169,12 @@ alternando qué implementación va primero (S6: 15 repeticiones por ejecución).
 1. Paridad: **cumple** en S1 a S5.
 2. p99 del motor ≤ 1,6 ms en S1 (k = 50) y en S2 con N = 1.000: **cumple** (0,118 y 0,284 ms). En S2 con N = 5.000 el p99 es de **1,21 ms**: cumple, pero con un margen de solo ≈ 25 %.
 3. Escala casi lineal: **cumple** en S1 y S2 (N × 10 da ≈ ×9 en el motor); en S4, 50 → 200 niveles da ≈ ×7 en el motor (4× más niveles), algo por encima de lineal, dentro del ruido de esas medidas.
-4. Memoria: SwiftUI ≈ 81.000–84.000 bytes por fila al repetir el arranque (S6) frente a 118.000–128.000 en S1; el dato del motor por memoria residente **no es utilizable** (0 bytes: el asignador reutiliza lo liberado). Falta medir el motor con `estimatedMemoryFootprint`.
+4. Memoria: SwiftUI ≈ 81.000–84.000 bytes por fila al repetir el arranque (S6) frente a 118.000–128.000 en S1; en el motor, el dato por memoria residente tras repetir liberaciones es 0 bytes (el asignador reutiliza páginas liberadas), por lo que se midió con `graph.estimatedMemoryFootprint` (`Bench mem` en release):
+   - **S1 / S6 (1.000 filas, 4.000 nodos, 3.000 aristas, 1.001 subgrafos):** **189.025 bytes** (**189 B/fila**).
+   - **S2 (`N = 100 / 1.000 / 5.000`, 1 regla + 1 arista por vista):** **4.723 B / 46.123 B / 230.123 B** (**46–47 B/vista**).
+   - **S3 (1.000 filas sin estado, 1.002 nodos, 1 arista, 1.001 subgrafos):** **51.097 bytes** (**51 B/fila**).
+   - **S4 (`depth = 50 / 200`, 1 regla + 1 arista por nivel):** **2.443 B / 9.343 B** (**46 B/nivel**).
+   - **S5 (100 hijos con estado, 203 nodos, 101 aristas, 2 subgrafos):** **7.348 bytes** (**73 B/hijo**).
 5. Sin regresión: no se tocó el motor.
 
 **Salvedades:**
