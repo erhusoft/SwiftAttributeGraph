@@ -734,7 +734,7 @@ Fecha: 2026-11-14. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode). Estudio detallado 
 
 **Validación y medidas (Mac M1, Swift 6.2.4):**
 - **`NativeProbe`:** **16 escenarios directos** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %** entre `AttributeGraph.framework` nativo de macOS 15.7.9 y `SwiftAttributeGraph`.
-- **Tests funcionales:** **213 pruebas en 26 suites** pasan en depuración y **212 pruebas** en release, conservando únicamente los 2 *known issues* documentados de M2.
+- **Tests funcionales:** **213 pruebas en 26 suites** pasan en depuración y **212 pruebas** en release con **0 *known issues*** (se resolvieron también los 2 *known issues* de M2 para `enum` con carga no `Equatable`, comparando caso activo y payload con las reglas del modo).
 - **Rendimiento en release (18 pruebas en 3 suites en verde):**
   - Regla de 20.000 entradas que pierde la mitad: **4,85 ms** (frente a 76,83 ms antes de la Pieza 1: **15,8× más rápido**).
   - Presupuesto M4 (50 ciclos × 1.000 reglas reanudables frente a síncronas): **33,20 ms / 36,56 ms = 0,908** (≤ 1,30).

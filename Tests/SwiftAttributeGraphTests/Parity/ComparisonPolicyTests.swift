@@ -152,18 +152,16 @@ import Foundation
         expect(1 as any Equatable, 1 as any Equatable, view: false, environment: false, state: false, "any Equatable holding Int")
     }
 
-    // MARK: Known differences with SwiftUI (enums with a payload that are not Equatable)
+    // MARK: Enums with a payload that are not Equatable
 
-    /// SwiftUI compares an enum with a payload field by field. The engine cannot walk the cases of an enum (§4 of the
-    /// design note), so it compares the bytes: it runs where SwiftUI skips. Never the other way round.
-    @Test func enumsWithAPayloadThatAreNotEquatableAreComparedByBytes() {
-        withKnownIssue("SwiftUI skips a String payload in another buffer; the engine compares bytes") {
-            #expect(changes(.viewValue, PayloadString.b(Self.long()), PayloadString.b(Self.long())) == false)
-        }
-        withKnownIssue("SwiftUI skips a(-0.0) over a(0.0) in @State and in the environment; the engine compares bytes") {
-            #expect(changes(.stateWrite, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == false)
-        }
-        #expect(changes(.viewValue, PayloadString.b("hi"), PayloadString.b("hi")) == false)   // same bytes: skipped
+    /// SwiftUI compares an enum with a payload case-by-case and field-by-field.
+    @Test func enumsWithAPayloadThatAreNotEquatableAreComparedByCaseAndPayload() {
+        #expect(changes(.viewValue, PayloadString.b(Self.long()), PayloadString.b(Self.long())) == false)
+        #expect(changes(.stateWrite, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == false)
+        #expect(changes(.environment, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == false)
+        #expect(changes(.viewValue, PayloadString.b("hi"), PayloadString.b("hi")) == false)
+        #expect(changes(.viewValue, PayloadString.b("hi"), PayloadString.b("bye")) == true)
+        #expect(changes(.viewValue, PayloadString.a(1), PayloadString.b("1")) == true)
         #expect(changes(.viewValue, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == true)
     }
 

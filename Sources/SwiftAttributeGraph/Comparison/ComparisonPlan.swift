@@ -76,11 +76,16 @@ struct ComparisonPlan {
             case .structure, .tuple:
                 if appendFields(of: X.self, kind: kind, at: offset) { return }
                 operations.append(.bytes(offset: offset, count: size))
+            case .enumeration, .optional:
+                if mode == .view && pod {
+                    operations.append(.bytes(offset: offset, count: size))
+                } else {
+                    operations.append(.custom(offset: offset, compare: enumOperation(X.self, mode: mode)))
+                }
             case .existential:
                 operations.append(.custom(offset: offset, compare: dynamicOperation(X.self, mode: mode)))
             default:
-                // References (identity), functions (pointer and context), enums and optionals that are not
-                // `Equatable`, metatypes: the bytes. For enums with a payload this runs where SwiftUI skips (§4).
+                // References (identity), functions (pointer and context), metatypes: the bytes.
                 operations.append(.bytes(offset: offset, count: size))
             }
         }
@@ -134,6 +139,27 @@ private func dynamicOperation<X>(_: X.Type, mode: ComparisonPlan.Mode) -> (Unsaf
         let a: Any = left.assumingMemoryBound(to: X.self).pointee
         let b: Any = right.assumingMemoryBound(to: X.self).pointee
         return cache.equal(a, b)
+    }
+}
+
+/// The comparison of a non-`Equatable` enum or optional: first checks raw bytes, then compares the active case name
+/// and associated payload using the mode's comparison rules.
+private func enumOperation<X>(_: X.Type, mode: ComparisonPlan.Mode) -> (UnsafeRawPointer, UnsafeRawPointer) -> Bool {
+    let size = MemoryLayout<X>.size
+    let cache = DynamicPlans(mode: mode)
+    return { left, right in
+        if bytesEqual(left, right, size) { return true }
+        let a = left.assumingMemoryBound(to: X.self).pointee
+        let b = right.assumingMemoryBound(to: X.self).pointee
+        let mirrorA = Mirror(reflecting: a)
+        let mirrorB = Mirror(reflecting: b)
+        let childA = mirrorA.children.first
+        let childB = mirrorB.children.first
+        if let childA, let childB {
+            guard childA.label == childB.label else { return false }
+            return cache.equal(childA.value, childB.value)
+        }
+        return childA == nil && childB == nil && String(describing: a) == String(describing: b)
     }
 }
 
