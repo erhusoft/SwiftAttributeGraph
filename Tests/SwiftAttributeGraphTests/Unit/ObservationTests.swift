@@ -113,7 +113,7 @@ import Testing
         #expect(graph.value(of: frame) == 22)
     }
 
-    @Test func invalidatingASubgraphDeliversTheNotificationsOfTheDependentsItDirtied() {
+    @Test func invalidatingASubgraphDoesNotDirtyOrNotifyDependentsOutsideIt() {
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let inside = graph.withCurrent(sub) { graph.makeInput(1) }
@@ -122,6 +122,6 @@ import Testing
         let told = Counter()
         _ = graph.observe(frame.erased) { told.count += 1 }
         graph.invalidate(sub)
-        #expect(told.count == 1)
+        #expect(told.count == 0)
     }
 }

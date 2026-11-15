@@ -43,9 +43,8 @@ extension Graph {
     /// coherently, and the freeing happens when the outermost update ends. Invalidating a subgraph that is already
     /// falling does nothing.
     ///
-    /// Rules outside the set that read what it owned lose those edges and become dirty, together with everything that
-    /// reads them: they will run again on their next read and must not read the dead attributes. Observers of the
-    /// attributes that became dirty are notified.
+    /// Rules outside the set that read what it owned have those input edges detached, keeping their cached value until
+    /// another live input dirties them (matching native AttributeGraph).
     public func invalidate(_ subgraph: Subgraph) {
         assertOwnThread()
         precondition(subgraph != rootSubgraph, "invalidate: the root subgraph cannot be invalidated")
@@ -91,7 +90,6 @@ extension Graph {
         let freeing = Set(order)
         var owned: [UInt32] = []
         for index in order { owned += subgraphs.takeMembers(of: index) }
-        var affected: [UInt32] = []
         for node in owned {
             let n = Int(node)
             for edge in table.inputs[n] where !freeing.contains(table.owner(at: edge.source)) {
@@ -99,8 +97,6 @@ extension Graph {
             }
             for dependent in table.outputs[n] where !freeing.contains(table.owner(at: dependent)) {
                 table.inputs[Int(dependent)].removeAll { $0.source == node }
-                table.state[Int(dependent)] |= NodeState.pending       // it lost an input: it must run again
-                affected.append(dependent)
             }
         }
 
@@ -111,7 +107,6 @@ extension Graph {
         }
         for index in order { subgraphs.release(index: index) }
 
-        markDirty(roots: affected)
         flushNotifications()
     }
 }

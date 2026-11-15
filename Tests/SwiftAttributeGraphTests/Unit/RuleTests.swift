@@ -225,7 +225,7 @@ import Testing
 
     // MARK: Subgraph invalidation seen from outside
 
-    @Test func invalidatingASubgraphDirtiesTheDependentsOutsideIt() {
+    @Test func invalidatingASubgraphDetachesEdgesToDependentsOutsideIt() {
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let use = graph.makeInput(true)
@@ -235,8 +235,8 @@ import Testing
         #expect(graph.value(of: downstream) == 6)
 
         graph.invalidate(sub)
-        #expect(graph.isDirty(outside.id))
-        #expect(graph.isDirty(downstream.id), "descendants too, not only children")
+        #expect(!graph.isDirty(outside.id))
+        #expect(!graph.isDirty(downstream.id))
         #expect(graph.inputs(of: outside.id) == [use.id], "the edge to the dead attribute is removed")
 
         graph.setValue(false, for: use)
@@ -247,10 +247,12 @@ import Testing
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
             let sub = graph.makeSubgraph()
+            let trigger = graph.makeInput(0)
             let inside = graph.withCurrent(sub) { graph.makeInput(5) }
-            let outside = graph.makeRule { inside.value }
+            let outside = graph.makeRule { _ = trigger.value; return inside.value }
             _ = graph.value(of: outside)
             graph.invalidate(sub)
+            graph.setValue(1, for: trigger)
             _ = graph.value(of: outside)
         }
     }

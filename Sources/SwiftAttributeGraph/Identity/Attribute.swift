@@ -1,5 +1,5 @@
 /// A typed handle to an attribute. It carries only the ID, so it is cheap to copy and does not retain the graph.
-public struct Attribute<Value> {
+public struct Attribute<Value>: Hashable, Sendable {
     /// The ID of the attribute inside its graph.
     public let id: AttributeID
 

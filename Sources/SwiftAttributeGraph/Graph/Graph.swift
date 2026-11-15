@@ -98,6 +98,12 @@ public final class Graph {
     /// Whether the subgraph exists (it was not freed).
     func isLive(_ subgraph: Subgraph) -> Bool { subgraphs.isLive(subgraph.id) }
 
+    /// Whether the subgraph is valid (it is alive and has not been invalidated).
+    public func isValid(_ subgraph: Subgraph) -> Bool {
+        assertOwnThread()
+        return subgraphs.isLive(subgraph.id) && !subgraphs.isFalling(index: subgraph.id.index)
+    }
+
     /// The parent of a subgraph; `nil` for the root.
     func parent(of subgraph: Subgraph) -> Subgraph? {
         precondition(subgraphs.isLive(subgraph.id), "parent(of:): the subgraph was invalidated")

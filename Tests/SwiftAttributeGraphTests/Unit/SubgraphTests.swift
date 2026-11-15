@@ -49,7 +49,7 @@ import Testing
         #expect(graph.children(of: parent).isEmpty)
     }
 
-    @Test func readsBetweenMembersOfTheInvalidatedSetDirtyNothingAndReadersOutsideAreDirtied() {
+    @Test func readsBetweenMembersOfTheInvalidatedSetDirtyNothingAndReadersOutsideKeepTheirCachedState() {
         let graph = Graph()
         let outside = graph.makeInput(0)
         let parent = graph.makeSubgraph(), child = graph.makeSubgraph(parent: parent)
@@ -58,8 +58,8 @@ import Testing
         let reader = graph.makeRule { inParent.value + 1 }                 // outside the set
         _ = graph.value(of: reader)
         graph.invalidate(parent)
-        #expect(graph.isDirty(reader.id))
-        #expect(graph.table.state[Int(reader.id.index)] & NodeState.pending != 0)
+        #expect(!graph.isDirty(reader.id))
+        #expect(graph.inputs(of: reader.id).isEmpty)
         #expect(graph.table.outputs[Int(outside.id.index)].isEmpty)        // the dead rule left no edge behind
         #expect(graph.table.state[Int(inParent.id.index)] == 0 && graph.table.state[Int(inChild.id.index)] == 0,
                 "a freed slot is not marked dirty by the members that read each other")
@@ -115,16 +115,18 @@ import Testing
     @Test func separatelyQueuedInvalidationsDetachReadersBeforeTheirNotice() {
         let graph = Graph()
         let a = graph.makeSubgraph(), b = graph.makeSubgraph()
+        let tick = graph.makeInput(0)
         let source = graph.withCurrent(a) { graph.makeInput(7) }
         let reader = graph.withCurrent(b) {
-            graph.makeRule { graph.contains(source.id) ? source.value : 99 }
+            graph.makeRule { _ = tick.value; return graph.contains(source.id) ? source.value : 99 }
         }
         #expect(graph.value(of: reader) == 7)
         let log = Log()
         graph.observe(b) {
             #expect(!graph.contains(source.id))
-            #expect(graph.inputs(of: reader.id).isEmpty)
-            #expect(graph.isDirty(reader.id))
+            #expect(graph.inputs(of: reader.id) == [tick.id])
+            #expect(!graph.isDirty(reader.id))
+            graph.setValue(1, for: tick)
             log.events.append("value=\(graph.value(of: reader))")
         }
         let trigger = graph.makeRule { () -> Int in
@@ -134,7 +136,7 @@ import Testing
         }
         _ = graph.value(of: trigger)
         #expect(log.events == ["value=99"])
-        #expect(graph.nodeCount == 1 && graph.liveSubgraphCount == 1)
+        #expect(graph.nodeCount == 2 && graph.liveSubgraphCount == 1)
     }
 
     @Test func separatelyQueuedInvalidationsDetachSourcesBeforeTheirNotice() {
@@ -170,6 +172,7 @@ import Testing
         let rule = graph.makeRule { () -> Int in
             if switcher.value {
                 graph.invalidate(branch)
+                log.events.append("subgraph valid right after invalidate: \(graph.isValid(branch))")
                 log.events.append("alive right after invalidate: \(graph.contains(state.id))")
                 log.events.append("still readable: \(state.value)")
             }
@@ -178,8 +181,10 @@ import Testing
         _ = graph.value(of: rule)
         graph.setValue(true, for: switcher)
         _ = graph.value(of: rule)
-        #expect(log.events == ["alive right after invalidate: true", "still readable: 7"])
-        #expect(!graph.contains(state.id) && !graph.isLive(branch))        // gone once the update ended
+        #expect(log.events == ["subgraph valid right after invalidate: false",
+                               "alive right after invalidate: true",
+                               "still readable: 7"])
+        #expect(!graph.contains(state.id) && !graph.isLive(branch) && !graph.isValid(branch))
         #expect(graph.nodeCount == 2)                                      // `switcher` and `rule`
     }
 

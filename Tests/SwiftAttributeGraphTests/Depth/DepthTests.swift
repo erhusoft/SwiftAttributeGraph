@@ -85,7 +85,7 @@ import Testing
         #expect(graph.nodeCount == 0)
     }
 
-    @Test func aDeepChainOutsideASubgraphThatReadsIntoItIsDirtiedIteratively() {
+    @Test func aDeepChainOutsideASubgraphThatReadsIntoItDetachesIteratively() {
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let inside = graph.withCurrent(sub) { graph.makeInput(1) }
@@ -98,7 +98,7 @@ import Testing
             _ = graph.value(of: previous)
         }
         graph.invalidate(sub)
-        #expect(graph.isDirty(previous.id))
+        #expect(graph.inputs(of: first.id).isEmpty && !graph.isDirty(previous.id))
     }
 
     // MARK: M5: the subgraph tree

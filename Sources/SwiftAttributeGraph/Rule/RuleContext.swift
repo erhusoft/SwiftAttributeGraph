@@ -52,4 +52,13 @@ public struct RuleContext<Value> {
         let value = graph.read(attribute)
         return (value, graph.inputChanged(of: node, source: attribute.id.index) ?? true)
     }
+
+    /// Reads `weakAttribute` if its target is still alive (recording a dependency) and reports whether it changed
+    /// since the previous run, or returns `nil` if the target was freed.
+    public func changedValue<T>(of weakAttribute: WeakAttribute<T>) -> (value: T, changed: Bool)? {
+        guard let id = weakAttribute.id, graph.contains(id) else { return nil }
+        let attribute = Attribute<T>(id: id)
+        let value = graph.read(attribute)
+        return (value, graph.inputChanged(of: node, attribute: attribute))
+    }
 }

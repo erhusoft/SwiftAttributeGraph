@@ -101,7 +101,7 @@ import Testing
                     #expect(graph.isLive(handles[index]) == subgraph.alive, "seed \(seed) step \(step): subgraph \(index)")
                 }
                 for index in expectedDirty where attributes[index].alive {
-                    #expect(graph.isDirty(ids[index]), "seed \(seed) step \(step): reader \(index) must be dirty")
+                    #expect(graph.inputs(of: ids[index]).isEmpty, "seed \(seed) step \(step): reader \(index) must have its dead input edge detached")
                 }
             }
             // Everything below the root goes away; nothing is left but the root.

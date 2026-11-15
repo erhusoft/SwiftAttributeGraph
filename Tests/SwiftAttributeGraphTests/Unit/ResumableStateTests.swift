@@ -179,8 +179,17 @@ import Testing
 
     struct ReadIfAlive: ResumableRule {
         weak var graph: Graph?
+        let tick: Attribute<Int>
         let source: Attribute<Int>
+        var ticked = false
         mutating func resume(_ context: inout ResumableRuleContext<Int>) -> RuleStep {
+            if context.isFirstStep { ticked = false }
+            if !ticked {
+                switch context.poll(tick) {
+                case .pending: return .needsInput(tick.erased)
+                case .ready: ticked = true
+                }
+            }
             guard graph!.contains(source.id) else { context.value = 99; return .finished }
             switch context.poll(source) {
             case .pending: return .needsInput(source.erased)
@@ -191,14 +200,20 @@ import Testing
     @Test func separatelyQueuedInvalidationsUpdateAResumableReaderBeforeItsNotice() {
         let graph = Graph()
         let a = graph.makeSubgraph(), b = graph.makeSubgraph()
+        let tick = graph.makeInput(0)
         let source = graph.withCurrent(a) { graph.makeInput(7) }
-        let reader = graph.withCurrent(b) { graph.makeResumableRule(ReadIfAlive(graph: graph, source: source)) }
+        let reader = graph.withCurrent(b) { graph.makeResumableRule(ReadIfAlive(graph: graph, tick: tick, source: source)) }
         #expect(graph.value(of: reader) == 7)
         var seen: [Int] = []
-        graph.observe(b) { seen.append(graph.value(of: reader)) }
+        graph.observe(b) {
+            #expect(graph.inputs(of: reader.id) == [tick.id])
+            #expect(!graph.isDirty(reader.id))
+            graph.setValue(1, for: tick)
+            seen.append(graph.value(of: reader))
+        }
         let trigger = graph.makeRule { () -> Int in graph.invalidate(a); graph.invalidate(b); return 0 }
         _ = graph.value(of: trigger)
         #expect(seen == [99])
-        #expect(graph.nodeCount == 1 && graph.liveSubgraphCount == 1 && graph.frames.isEmpty)
+        #expect(graph.nodeCount == 2 && graph.liveSubgraphCount == 1 && graph.frames.isEmpty)
     }
 }

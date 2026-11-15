@@ -134,8 +134,7 @@ import Testing
 
         graph.invalidate(sub)
 
-        // `outside` lost its input (`inside`) and is now dirty/pending. We only check that
-        // invalidation itself did not crash; reading `outside` would hit the dead attribute.
-        #expect(graph.isDirty(outside.id) && graph.inputs(of: outside.id).isEmpty)
+        // `outside` lost its input (`inside`) and keeps its cached state until another input changes.
+        #expect(!graph.isDirty(outside.id) && graph.inputs(of: outside.id).isEmpty)
     }
 }
