@@ -1841,3 +1841,78 @@ func anyInputsChangedScenarios() {
 
     print("any-inputs-changed|results=\(results)")
 }
+
+func anyInputsChangedOffsetEdge() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    var results: [Bool] = []
+    var runs = 0
+
+    let reader: Handle<Int64> = graph.rule {
+        runs += 1
+        let changed = graph.anyInputsChanged()
+        results.append(changed)
+        return graph.read(field)
+    }
+
+    // Initial evaluation
+    _ = graph.read(reader)
+
+    // Write outside field range (only x changes) -> reader should not re-run (runs stays 1)
+    graph.write(Pair(x: 2, y: 10), to: source)
+    _ = graph.read(reader)
+
+    // Write inside field range (y changes), then write outside before evaluating (sticky mark)
+    graph.write(Pair(x: 2, y: 20), to: source)
+    graph.write(Pair(x: 3, y: 20), to: source)
+    _ = graph.read(reader)
+
+    print("any-inputs-changed-offset-edge|results=\(results)|runs=\(runs)")
+}
+
+func anyInputsChangedIsolatedScenarios() {
+    // (a) anyInputsChanged() before reading in first evaluation
+    do {
+        let graph = Driver()
+        let a = graph.input(Int64(1))
+        var firstBefore = false
+        let r: Handle<Int64> = graph.rule {
+            firstBefore = graph.anyInputsChanged()
+            return graph.read(a)
+        }
+        _ = graph.read(r)
+        print("any-inputs-changed-first-eval-before-read|result=\(firstBefore)")
+    }
+
+    // (b) anyInputsChanged() after reading an input in first evaluation
+    do {
+        let graph = Driver()
+        let a = graph.input(Int64(1))
+        var firstAfter = false
+        let r: Handle<Int64> = graph.rule {
+            let va = graph.read(a)
+            firstAfter = graph.anyInputsChanged()
+            return va
+        }
+        _ = graph.read(r)
+        print("any-inputs-changed-first-eval-after-read|result=\(firstAfter)")
+    }
+
+    // (c) second evaluation after a write
+    do {
+        let graph = Driver()
+        let a = graph.input(Int64(1))
+        var results: [Bool] = []
+        let r: Handle<Int64> = graph.rule {
+            let va = graph.read(a)
+            results.append(graph.anyInputsChanged())
+            return va
+        }
+        _ = graph.read(r)
+        graph.write(Int64(2), to: a)
+        _ = graph.read(r)
+        print("any-inputs-changed-second-eval-after-write|results=\(results)")
+    }
+}

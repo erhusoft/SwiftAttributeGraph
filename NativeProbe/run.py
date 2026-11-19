@@ -73,6 +73,10 @@ SCENARIOS = [
     "context-update-callback-on-write",
     "invalidate-value-and-subgraph-dirty",
     "any-inputs-changed",
+    "any-inputs-changed-offset-edge",
+    "any-inputs-changed-first-eval-before-read",
+    "any-inputs-changed-first-eval-after-read",
+    "any-inputs-changed-second-eval-after-write",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
