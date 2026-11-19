@@ -45,6 +45,10 @@ private final class RegistryLock: @unchecked Sendable {
 #endif
 
 /// The process-wide table from graph tag to graph.
+///
+/// Uses `Unmanaged<Graph>` instead of `weak` so `Graph` instances never allocate an ARC weak side table.
+/// Lookup after `Graph.deinit` returns `nil` because `deinit` clears the slot via `release(tag:)`
+/// (`[?]` without a dedicated concurrency stress test).
 enum GraphRegistry {
     /// Largest tag: the tag lives in the top 16 bits of an ID's generation. Tag `0` means "no tag".
     static let maxTag: UInt32 = 0xFFFF
