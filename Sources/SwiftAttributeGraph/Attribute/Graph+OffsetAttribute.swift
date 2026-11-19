@@ -62,8 +62,9 @@ extension Graph {
         return indirect
     }
 
-    /// Creates a typed `Attribute<Field>` projecting `keyPath` from `source`, backed by an offset-indirect edge so
-    /// consumers only read `Field` and only re-evaluate when `[offset, offset + MemoryLayout<Field>.size)` changes.
+    /// Creates a typed `Attribute<Field>` projecting `keyPath` from `source` as a true indirect attribute (no
+    /// intermediate rule), so consumers only read `Field` while the edge to it uses `(offset, size)` range comparison
+    /// and sticky `changed` semantics.
     public func makeOffsetFieldAttribute<Source: BitwiseCopyable, Field: BitwiseCopyable>(
         of source: Attribute<Source>,
         keyPath: KeyPath<Source, Field>
@@ -72,9 +73,19 @@ extension Graph {
         guard let offset = MemoryLayout<Source>.offset(of: keyPath) else {
             preconditionFailure("makeOffsetFieldAttribute: keyPath must refer to a stored property")
         }
-        let offsetInd = makeOffsetIndirect(of: source, offset: offset, size: MemoryLayout<Field>.size)
-        return makeRule {
-            offsetInd.value[keyPath: keyPath]
+        let s = Int(source.id.index)
+        precondition(table.isLive(source.id), "makeOffsetFieldAttribute: the source attribute is dead")
+        let initialState: UInt16 = NodeState.hasValue | NodeState.indirect | (table.state[s] & NodeState.dirty)
+        let seenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
+        let id = allocate(IndirectNode<Field>(source: source.id, sourceSeenVersion: seenVersion), state: initialState)
+        offsetIndirects[id.index] = (offset, MemoryLayout<Field>.size)
+        offsetFieldReaders[id.index] = {
+            let prev = self.evaluatingNode
+            self.evaluatingNode = Graph.noNode
+            defer { self.evaluatingNode = prev }
+            return self.read(source)[keyPath: keyPath]
         }
+        rebuildIndirectEdges(for: id.index)
+        return Attribute<Field>(id: id)
     }
 }

@@ -69,6 +69,9 @@ extension Graph {
                 update(index)
             }
             if evaluatingNode != Graph.noNode { recordRead(of: index) }
+            if let reader = offsetFieldReaders[index] {
+                return reader() as! Value
+            }
             let resolved = resolveIndirect(attribute)
             if table.state[Int(resolved.id.index)] & NodeState.dirty != 0 {
                 precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
