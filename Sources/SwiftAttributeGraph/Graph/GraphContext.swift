@@ -33,13 +33,13 @@ public final class GraphContext {
         updateCallback = callback
     }
 
-    /// Marks this context as needing an update and drains callbacks if the graph is not inside a batch or evaluation.
+    /// Marks this context as needing an update without invoking the callback immediately; callbacks are drained
+    /// when reading a value or starting an update outside an active update pass.
     public func setNeedsUpdate() {
         guard let graph else { return }
         graph.assertOwnThread()
         guard !isInvalidated else { return }
         needsUpdate = true
-        graph.flushUpdateCallbackIfReady()
     }
 
     /// Creates a subgraph in this context's ``subgraphContext``.

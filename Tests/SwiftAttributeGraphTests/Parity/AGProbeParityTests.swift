@@ -603,12 +603,17 @@ import SwiftAttributeGraph
         }
         #expect(coalescedCalls == 1)
 
+        // NativeProbe `context-update-callback` measured `before=0|after=1|reentrant=3`:
+        // `setNeedsUpdate` defers and coalesces until a read/update drains callbacks.
+        let dummy = g.makeInput(0)
         var samePassDrain = 0
         ctx.setUpdateCallback {
             samePassDrain += 1
             if samePassDrain == 1 { ctx.setNeedsUpdate() }
         }
         ctx.setNeedsUpdate()
+        #expect(samePassDrain == 0)
+        _ = g.value(of: dummy)
         #expect(samePassDrain == 2)
     }
 

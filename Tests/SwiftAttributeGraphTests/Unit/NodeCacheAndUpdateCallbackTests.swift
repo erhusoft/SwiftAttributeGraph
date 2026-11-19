@@ -199,7 +199,10 @@ struct NodeCacheAndUpdateCallbackTests {
         #expect(count1 == 1)
         #expect(count2 == 0)
 
+        let dummy = graph.makeInput(0)
         ctx2.setNeedsUpdate()
+        #expect(count2 == 0)
+        _ = graph.value(of: dummy)
         #expect(count1 == 1)
         #expect(count2 == 1)
     }
@@ -221,8 +224,9 @@ struct NodeCacheAndUpdateCallbackTests {
         }
 
         ctx.setNeedsUpdate()
-        #expect(runs == 2)
+        #expect(runs == 0)
         #expect(graph.value(of: rule) == 20)
+        #expect(runs == 2)
     }
 
     @Test func releasingGraphContextInvalidatesOnlyItsOwnSubgraphs() {
@@ -281,5 +285,34 @@ struct NodeCacheAndUpdateCallbackTests {
 
         ctx.setNeedsUpdate()
         #expect(calls == 0)
+    }
+
+    @Test func contextUpdateCallbackCoalescesBeforeReadAndDrainsReentrantly() {
+        let graph = Graph()
+        var calls = 0
+        var drainExtra = false
+        graph.setUpdateCallback {
+            calls += 1
+            if drainExtra {
+                drainExtra = false
+                graph.setNeedsUpdate()
+            }
+        }
+        let a = graph.makeInput(Int64(1))
+        let r = graph.makeRule { a.value + 1 }
+        _ = graph.value(of: r)
+
+        // Two setNeedsUpdate calls before any read: coalesced and deferred until read/update.
+        graph.setNeedsUpdate()
+        graph.setNeedsUpdate()
+        #expect(calls == 0)
+        _ = graph.value(of: r)
+        #expect(calls == 1)
+
+        // Requesting another update from inside the callback drains in the same pass.
+        drainExtra = true
+        graph.setNeedsUpdate()
+        _ = graph.value(of: r)
+        #expect(calls == 3)
     }
 }
