@@ -93,6 +93,7 @@ SCENARIOS = [
     "get-input-value-non-rule-reader",
     "get-value-opt4",
     "get-value-opt2",
+    "get-value-opt6",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

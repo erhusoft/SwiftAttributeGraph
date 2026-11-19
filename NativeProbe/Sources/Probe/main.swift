@@ -607,4 +607,5 @@ getInputValueExplicitReaderScenario()
 getInputValueDupPruneAndNonRuleScenarios()
 getValueOptionScenario(name: "get-value-opt4", options: 4)
 getValueOptionScenario(name: "get-value-opt2", options: 2)
+getValueOptionScenario(name: "get-value-opt6", options: 6)
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
