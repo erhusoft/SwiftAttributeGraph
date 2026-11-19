@@ -98,6 +98,7 @@ SCENARIOS = [
     "current-attribute-was-modified",
     "get-counter",
     "get-attribute-graph",
+    "get-subgraph-current",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

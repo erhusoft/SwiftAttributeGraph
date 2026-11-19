@@ -152,6 +152,9 @@ final class Driver {
         }
     }
     var nodeCount: Int { Int(graph.counter(for: .nodes)) }
+    func apply<T>(_ subgraph: SubgraphHandle, _ body: () -> T) -> T { subgraph.apply(body) }
+    var currentSubgraphHandle: SubgraphHandle? { SubgraphHandle.current }
+    func setCurrentSubgraph(_ subgraph: SubgraphHandle?) { SubgraphHandle.current = subgraph }
     func owns<V>(_ handle: Handle<V>) -> Bool { handle.graph === graph }
     func ownsErased<V>(_ handle: Handle<V>) -> Bool { handle.identifier.graph === graph }
     func owns(_ subgraph: SubgraphHandle) -> Bool { subgraph.graph === graph }
@@ -372,6 +375,9 @@ final class Driver {
         return SubgraphObserverHandle { token.cancel() }
     }
     var nodeCount: Int { graph.nodeCount }
+    func apply<T>(_ subgraph: SubgraphHandle, _ body: () -> T) -> T { subgraph.graph.withCurrent(subgraph, body) }
+    var currentSubgraphHandle: SubgraphHandle? { SubgraphHandle.current }
+    func setCurrentSubgraph(_ subgraph: SubgraphHandle?) { SubgraphHandle.current = subgraph }
     func owns<V>(_ handle: Handle<V>) -> Bool { handle.graph === graph }
     func ownsErased<V>(_ handle: Handle<V>) -> Bool { handle.erased.graph === graph }
     func owns(_ subgraph: SubgraphHandle) -> Bool { subgraph.graph === graph }
@@ -652,4 +658,5 @@ getCurrentAttributeScenario()
 currentAttributeWasModifiedScenario()
 getCounterScenario()
 getAttributeGraphScenario()
+getSubgraphCurrentScenario()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

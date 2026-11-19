@@ -2405,3 +2405,81 @@ func getAttributeGraphScenario() {
     d2.close()
     print("get-attribute-graph|attributes=\(attributes)|erased=\(erased)|subgraphs=\(subgraphs)|same=\(same)")
 }
+
+/// `AGSubgraphGetCurrent` and `AGSubgraphSetCurrent`: the current subgraph outside any, inside `apply`, nested across two
+/// graphs, after restoring, after `setCurrent`, after invalidating the current subgraph, and inside a rule. The own
+/// driver calls `Graph.withCurrent` for `apply` and `Subgraph.current` for the getter and the setter.
+func getSubgraphCurrentScenario() {
+    let d1 = Driver()
+    let d2 = Driver()
+    let s1 = d1.makeSubgraph()
+    let s1b = d1.makeSubgraph()
+    let s2 = d2.makeSubgraph()
+    let names: [(String, SubgraphHandle)] = [("s1", s1), ("s1b", s1b), ("s2", s2), ("scope1", d1.scope), ("scope2", d2.scope)]
+    func cur() -> String {
+        guard let current = d1.currentSubgraphHandle else { return "nil" }
+        return names.first { $0.1 == current }?.0 ?? "other"
+    }
+    var log: [String] = []
+    log.append("outside=\(cur())")
+    d1.apply(s1) {
+        log.append("apply=\(cur())")
+        d2.apply(s2) {
+            log.append("otherGraph=\(cur())")
+            d1.apply(s1b) { log.append("nested=\(cur())") }
+            log.append("restored2=\(cur())")
+        }
+        log.append("restored1=\(cur())")
+    }
+    log.append("after=\(cur())")
+
+    d1.setCurrentSubgraph(s1b)
+    log.append("set=\(cur())")
+    d2.apply(s2) { log.append("applyInsideSet=\(cur())") }
+    log.append("afterApplyInsideSet=\(cur())")
+    d1.setCurrentSubgraph(nil)
+    log.append("setNil=\(cur())")
+
+    d1.setCurrentSubgraph(s1b)
+    d1.invalidate(s1b)
+    log.append("invalidatedCurrent=\(cur())")
+    d1.setCurrentSubgraph(nil)
+
+    let s3 = d1.makeSubgraph()
+    d1.apply(s3) {
+        d1.invalidate(s3)
+        log.append("invalidatedInApply=\(cur())")
+    }
+    log.append("afterInvalidatedApply=\(cur())")
+
+    let s4 = d1.makeSubgraph()
+    let s5 = d1.makeSubgraph()
+    d1.apply(s4) {
+        d1.apply(s5) {
+            d1.invalidate(s5)
+            log.append("nestedInvalidated=\(cur())")
+        }
+        log.append("outerAfterInnerInvalidated=\(cur())")
+    }
+
+    var rule: Handle<Int64>?
+    var ruleLog: [String] = []
+    rule = d1.withSubgraph(s1) {
+        d1.rule {
+            ruleLog.append("inRule=\(cur())")
+            d1.apply(s4) { ruleLog.append("applyInRule=\(cur())") }
+            ruleLog.append("afterApplyInRule=\(cur())")
+            return 1
+        }
+    }
+    d2.apply(s2) {
+        _ = d1.read(rule!)
+        log.append("afterRuleRead=\(cur())")
+    }
+    log.append("rule=\(ruleLog)")
+    log.append("end=\(cur())")
+    d1.setCurrentSubgraph(nil)
+    d1.close()
+    d2.close()
+    print("get-subgraph-current|\(log)")
+}
