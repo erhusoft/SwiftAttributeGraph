@@ -2183,6 +2183,50 @@ func currentAttributeWasModifiedInvalidateScenario() {
     print("current-attribute-was-modified-invalidate|outer=\(mods)|inner=\(innerMods)")
 }
 
+func subgraphAddChildOwnerScenario() {
+    let graph = Driver()
+
+    // (a) no initial parent, added to p1 then p2 (tag 0 & tag 1)
+    var aRes: [[Bool]] = []
+    for tag: UInt8 in [0, 1] {
+        for p1First in [true, false] {
+            let p1 = graph.makeSubgraph(); let p2 = graph.makeSubgraph()
+            let child = graph.makeSubgraph()
+            graph.addChild(child, to: p1, tag: tag)
+            graph.addChild(child, to: p2, tag: tag)
+            let v0 = graph.isValid(child)
+            if p1First {
+                graph.invalidate(p1); let v1 = graph.isValid(child)
+                graph.invalidate(p2); let v2 = graph.isValid(child)
+                aRes.append([v0, v1, v2])
+            } else {
+                graph.invalidate(p2); let v1 = graph.isValid(child)
+                graph.invalidate(p1); let v2 = graph.isValid(child)
+                aRes.append([v0, v1, v2])
+            }
+        }
+    }
+
+    // (b) created under p1, added to p2 (tag 1)
+    let b1_p1 = graph.makeSubgraph(); let b1_p2 = graph.makeSubgraph()
+    let b1_child = graph.withSubgraph(b1_p1) { graph.makeSubgraph() }
+    graph.addChild(b1_child, to: b1_p2, tag: 1)
+    let b1_0 = graph.isValid(b1_child)
+    graph.invalidate(b1_p1); let b1_1 = graph.isValid(b1_child)
+    graph.invalidate(b1_p2); let b1_2 = graph.isValid(b1_child)
+
+    // (d) 3 parents (p1, p2, p3)
+    let d1 = graph.makeSubgraph(); let d2 = graph.makeSubgraph(); let d3 = graph.makeSubgraph()
+    let dChild = graph.makeSubgraph()
+    graph.addChild(dChild, to: d1, tag: 1)
+    graph.addChild(dChild, to: d2, tag: 1)
+    graph.addChild(dChild, to: d3, tag: 1)
+    let d_0 = graph.isValid(dChild)
+    graph.invalidate(d2); let d_1 = graph.isValid(dChild)
+
+    print("subgraph-add-child-owner|a=\(aRes)|b=\([b1_0, b1_1, b1_2])|d=\([d_0, d_1])")
+}
+
 func getInputValueDupPruneAndNonRuleScenarios() {
     // 1. Duplicates & pruning
     do {

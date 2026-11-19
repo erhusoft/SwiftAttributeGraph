@@ -92,6 +92,7 @@ SCENARIOS = [
     "get-input-value-dup-prune",
     "get-input-value-non-rule-reader",
     "current-attribute-was-modified-invalidate",
+    "subgraph-add-child-owner",
     "get-value-opt4",
     "get-value-opt2",
     "get-value-opt6",
