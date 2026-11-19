@@ -20,6 +20,15 @@ private let slot: DWORD = {
 private func rawGet() -> UnsafeMutableRawPointer? { TlsGetValue(slot) }
 private func rawSet(_ pointer: UnsafeMutableRawPointer?) { _ = TlsSetValue(slot, pointer) }
 
+private let subgraphSlot: DWORD = {
+    let index = TlsAlloc()
+    precondition(index != 0xFFFF_FFFF, "TlsAlloc failed: no thread-local slot available")
+    return index
+}()
+
+private func rawGetSubgraph() -> UnsafeMutableRawPointer? { TlsGetValue(subgraphSlot) }
+private func rawSetSubgraph(_ pointer: UnsafeMutableRawPointer?) { _ = TlsSetValue(subgraphSlot, pointer) }
+
 /// A number that identifies the calling thread.
 func currentThreadToken() -> UInt64 { UInt64(GetCurrentThreadId()) }
 
@@ -40,6 +49,15 @@ private let key: pthread_key_t = {
 
 private func rawGet() -> UnsafeMutableRawPointer? { pthread_getspecific(key) }
 private func rawSet(_ pointer: UnsafeMutableRawPointer?) { _ = pthread_setspecific(key, pointer) }
+
+private let subgraphKey: pthread_key_t = {
+    var created = pthread_key_t()
+    precondition(pthread_key_create(&created, nil) == 0, "pthread_key_create failed")
+    return created
+}()
+
+private func rawGetSubgraph() -> UnsafeMutableRawPointer? { pthread_getspecific(subgraphKey) }
+private func rawSetSubgraph(_ pointer: UnsafeMutableRawPointer?) { _ = pthread_setspecific(subgraphKey, pointer) }
 
 /// A number that identifies the calling thread.
 func currentThreadToken() -> UInt64 {
@@ -65,6 +83,26 @@ enum ThreadLocalGraph {
     static func install(_ graph: Graph?) -> Graph? {
         let previous = current()
         rawSet(graph.map { Unmanaged.passUnretained($0).toOpaque() })
+        return previous
+    }
+}
+
+/// The subgraph that `Graph.withCurrent(_:_:)` or `Subgraph.current` made current on this thread, if any. Rules do not
+/// touch it.
+///
+/// The slot holds the subgraph's packed ID (never `0`, because generations start at 1) in a pointer-sized value, so it
+/// needs no allocation. The ID is meaningful only while the subgraph is valid: `Subgraph.current` checks that.
+enum ThreadLocalSubgraph {
+    /// The packed ID of the current subgraph, or `0` when there is none.
+    @inline(__always)
+    static func get() -> UInt64 { UInt64(UInt(bitPattern: rawGetSubgraph())) }
+
+    /// Replaces the packed ID of the current subgraph (`0` for none) and returns the previous one.
+    @inline(__always)
+    @discardableResult
+    static func exchange(_ rawValue: UInt64) -> UInt64 {
+        let previous = get()
+        rawSetSubgraph(UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: rawValue)))
         return previous
     }
 }

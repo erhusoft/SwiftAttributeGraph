@@ -161,7 +161,11 @@ public final class Graph {
         precondition(!subgraphs.isFalling(index: subgraph.id.index), "withCurrent: the subgraph is being invalidated")
         let previous = currentSubgraph
         currentSubgraph = subgraph.id
-        defer { currentSubgraph = previous }
+        let previousVisible = ThreadLocalSubgraph.exchange(subgraph.id.rawValue)
+        defer {
+            currentSubgraph = previous
+            ThreadLocalSubgraph.exchange(previousVisible)
+        }
         return body()
     }
 
