@@ -223,4 +223,101 @@ struct EdgePartialCompareTests {
         #expect(!graph.table.isLive(indirectA.id))
         #expect(!graph.table.isLive(indirectB.id))
     }
+
+    @Test func observedConsumerBehindIndirectsIsNotDirtiedOrNotifiedWhenProjectionUnchanged() {
+        let graph = Graph()
+        let source = graph.makeInput(Payload(x: 1, y: 10))
+        let ind1 = graph.makeIndirect(source)
+        let ind2 = graph.makeIndirect(ind1)
+
+        let consumer = graph.makeRule {
+            graph.read(ind2) { $0.x } * 2
+        }
+        var notifications = 0
+        let token = graph.observe(consumer.erased) { notifications += 1 }
+        defer { token.cancel() }
+
+        #expect(graph.value(of: consumer) == 2)
+        #expect(notifications == 0)
+
+        // Write outside projection: consumer must stay clean and not notify.
+        graph.setValue(Payload(x: 1, y: 99), for: source)
+        #expect(graph.table.state[Int(consumer.id.index)] & NodeState.dirty == 0)
+        #expect(notifications == 0)
+        #expect(graph.value(of: consumer) == 2)
+    }
+
+    @Test func redirectingIntermediateIndirectToUnevaluatedSourceMarksStickyEdge() {
+        let graph = Graph()
+        let s1 = graph.makeInput(Payload(x: 1, y: 10))
+        let unevaluated = graph.makeRule { Payload(x: 5, y: 20) }
+        let indB = graph.makeIndirect(s1)
+        let indA = graph.makeIndirect(indB)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return graph.read(indA) { $0.x }
+        }
+        #expect(graph.value(of: consumer) == 1)
+        #expect(runs == 1)
+
+        graph.setSource(unevaluated, for: indB)
+        #expect(graph.stickyChangedEdges[consumer.id.index]?.contains(indA.id.index) == true)
+        #expect(graph.value(of: consumer) == 5)
+        #expect(runs == 2)
+    }
+
+    @Test func threeIndirectsChainAndTwoConsumersOneWithComparatorOneWithout() {
+        let graph = Graph()
+        let source = graph.makeInput(Payload(x: 3, y: 10))
+        let i1 = graph.makeIndirect(source)
+        let i2 = graph.makeIndirect(i1)
+        let i3 = graph.makeIndirect(i2)
+
+        var partialRuns = 0
+        let partialConsumer = graph.makeRule {
+            partialRuns += 1
+            return graph.read(i3) { $0.x }
+        }
+        var fullRuns = 0
+        let fullConsumer = graph.makeRule {
+            fullRuns += 1
+            return i3.value.y
+        }
+
+        #expect(graph.value(of: partialConsumer) == 3)
+        #expect(graph.value(of: fullConsumer) == 10)
+        #expect(partialRuns == 1 && fullRuns == 1)
+
+        // Change `y` only: `fullConsumer` re-runs, `partialConsumer` cuts off.
+        graph.setValue(Payload(x: 3, y: 42), for: source)
+        #expect(graph.value(of: fullConsumer) == 42)
+        #expect(graph.value(of: partialConsumer) == 3)
+        #expect(fullRuns == 2 && partialRuns == 1)
+    }
+
+    @Test func deepIndirectChainTwentyThousandLevelsIsIterative() {
+        let graph = Graph()
+        let source = graph.makeInput(Payload(x: 1, y: 2))
+        var tail = graph.makeIndirect(source)
+        for _ in 1..<20_000 {
+            tail = graph.makeIndirect(tail)
+        }
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return graph.read(tail) { $0.x }
+        }
+        #expect(graph.value(of: consumer) == 1)
+        #expect(runs == 1)
+
+        graph.setValue(Payload(x: 1, y: 99), for: source)
+        #expect(graph.value(of: consumer) == 1)
+        #expect(runs == 1)
+
+        graph.setValue(Payload(x: 7, y: 99), for: source)
+        #expect(graph.value(of: consumer) == 7)
+        #expect(runs == 2)
+    }
 }

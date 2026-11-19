@@ -30,7 +30,13 @@ extension Graph {
             table.state[n] |= NodeState.dirty
             didDirty = true
             if table.state[n] & NodeState.observed != 0 { queueNotification(node) }
-            dirtyStack.append(contentsOf: table.outputs[n])
+            for dependent in table.outputs[n] {
+                if edgeComparators[dependent]?[node] != nil,
+                   stickyChangedEdges[dependent]?.contains(node) != true {
+                    continue
+                }
+                dirtyStack.append(dependent)
+            }
         }
         if didDirty { markNeedsUpdateCallback() }
     }

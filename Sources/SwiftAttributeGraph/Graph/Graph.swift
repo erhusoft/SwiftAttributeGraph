@@ -365,9 +365,7 @@ public final class Graph {
         if let oldVal, let newVal {
             evaluateEdgeComparators(for: index, oldValue: oldVal, newValue: newVal)
         } else {
-            for dependent in table.outputs[n] where edgeComparators[dependent]?[index] != nil {
-                stickyChangedEdges[dependent, default: []].insert(index)
-            }
+            markStickyEdgesThroughIndirects(from: index)
         }
         for dependent in table.outputs[n] {
             if edgeComparators[dependent]?[index] != nil,

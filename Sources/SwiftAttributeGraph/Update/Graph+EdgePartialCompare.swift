@@ -34,6 +34,7 @@ extension Graph {
     func evaluateEdgeComparators(for source: UInt32, oldValue: Any, newValue: Any) {
         var queue: [UInt32] = [source]
         var visited: Set<UInt32> = [source]
+        var newlySticky: [UInt32] = []
         var head = 0
         while head < queue.count {
             let current = queue[head]
@@ -51,8 +52,38 @@ extension Graph {
                 }
                 if !comparator(oldValue, newValue) {
                     stickyChangedEdges[dependent, default: []].insert(current)
+                    newlySticky.append(dependent)
                 }
             }
+        }
+        if !newlySticky.isEmpty {
+            markDirty(roots: newlySticky)
+        }
+    }
+
+    func markStickyEdgesThroughIndirects(from source: UInt32) {
+        var queue: [UInt32] = [source]
+        var visited: Set<UInt32> = [source]
+        var newlySticky: [UInt32] = []
+        var head = 0
+        while head < queue.count {
+            let current = queue[head]
+            head += 1
+            for dependent in table.outputs[Int(current)] {
+                if table.state[Int(dependent)] & NodeState.indirect != 0 {
+                    if visited.insert(dependent).inserted {
+                        queue.append(dependent)
+                    }
+                    continue
+                }
+                if edgeComparators[dependent]?[current] != nil {
+                    stickyChangedEdges[dependent, default: []].insert(current)
+                    newlySticky.append(dependent)
+                }
+            }
+        }
+        if !newlySticky.isEmpty {
+            markDirty(roots: newlySticky)
         }
     }
 }
