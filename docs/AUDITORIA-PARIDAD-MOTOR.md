@@ -131,3 +131,128 @@
   - Nativo y propio coinciden al evaluar tras cambio de entrada (`false`), `invalidateValue` propio (`true`), segunda evaluación sin invalidar (`false`) e `invalidateValue` de otra regla (`true` en la invalidada, `false` en la lectora).
 - **`subgraph-add-child-owner` (`[O]`, `119/119` trazas coinciden en `debug` y `release`):**
   - Regla medida: un subgrafo con múltiples padres añadidos vía `addChild`/`addChild2` (`tag: 0` o `tag: 1`) muere en cuanto se invalida **cualquiera** de sus padres vivos; `Subgraph(graph:)` sin `parent:` no hereda `Subgraph.current` como padre; duplicar `addChild2` con el mismo padre aborta (`exit 134`).
+
+
+## Mapa de escenarios (`NativeProbe/run.py`, 119)
+
+| Escenario | Mecanismo | Mención en matriz |
+|---|---|---|
+| `dynamic` | Ramas dinámicas y poda | no |
+| `cut` | Propagación, diamantes y reglas | sí |
+| `lazy` | Propagación, diamantes y reglas | no |
+| `lifetime` | Invalidación y ciclo de vida | no |
+| `diamond-source-forward` | Propagación, diamantes y reglas | no |
+| `diamond-source-reverse` | Propagación, diamantes y reglas | no |
+| `diamond-multiple-forward` | Propagación, diamantes y reglas | no |
+| `diamond-multiple-reverse` | Propagación, diamantes y reglas | no |
+| `stateful-no-write-cut` | Propagación, diamantes y reglas | no |
+| `stateful-unread-input` | Propagación, diamantes y reglas | no |
+| `stateful-has-value-and-revert` | Propagación, diamantes y reglas | no |
+| `selector-input-order` | Propagación, diamantes y reglas | no |
+| `invalidate-in-rule` | Invalidación y ciclo de vida | no |
+| `weak-attribute-in-rule` | Atributos débiles | sí |
+| `indirect-rule-and-redirect` | Indirectos | sí |
+| `focus-keypath-cut` | Propagación, diamantes y reglas | sí |
+| `slot-reuse-input-order` | Invalidación y ciclo de vida | no |
+| `duplicate-writes-before-read` | Propagación, diamantes y reglas | no |
+| `double-read-and-prune` | Ramas dinámicas y poda | no |
+| `indirect-source-invalidated` | Indirectos | sí |
+| `random-graph-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-graph-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-graph-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-graph-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-graph-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-graph-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-graph-oracle` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle-trace` | Aleatorios / Oráculos | no |
+| `random-subgraph-weak-indirect-oracle` | Aleatorios / Oráculos | sí |
+| `map-and-property-wrappers` | Propagación, diamantes y reglas | no |
+| `without-update-read` | Propagación, diamantes y reglas | no |
+| `mutate-body-and-invalidate-value` | Invalidación y ciclo de vida | no |
+| `indirect-dependency-cut-and-redirect` | Indirectos | sí |
+| `subgraph-flags-forEach-and-update` | Subgrafos | sí |
+| `has-value-validate-update-value` | Propagación, diamantes y reglas | no |
+| `without-subgraph-invalidation-and-ancestor` | Subgrafos | no |
+| `breadth-first-search` | Propagación, diamantes y reglas | no |
+| `attribute-keypath-dynamic-member` | Ramas dinámicas y poda | no |
+| `branch-switch-and-invalidate-before-read` | Invalidación y ciclo de vida | no |
+| `indirect-original-dies-while-redirected` | Indirectos | sí |
+| `stateful-dependency-pruned-without-write` | Propagación, diamantes y reglas | no |
+| `initial-value-no-first-write` | Propagación, diamantes y reglas | no |
+| `nested-special-scopes` | Propagación, diamantes y reglas | no |
+| `reentrant-subgraph-invalidation` | Subgrafos | no |
+| `weak-attribute-slot-reuse` | Atributos débiles | no |
+| `indirect-reset-source-multi-redirect` | Indirectos | sí |
+| `indirect-chain-and-intermediate-death` | Indirectos | sí |
+| `changed-value-after-skipped-and-indirect` | Indirectos | no |
+| `multi-observer-tree-order-and-cancel` | Propagación, diamantes y reglas | no |
+| `cc-create-input-in-rule-scoped` | Propagación, diamantes y reglas | no |
+| `cc-create-rule-in-rule-scoped` | Propagación, diamantes y reglas | no |
+| `cc-create-rule-every-run-scoped` | Propagación, diamantes y reglas | no |
+| `cc-create-rule-during-update-flags-scoped` | Propagación, diamantes y reglas | no |
+| `cc-caller-invalidated-after-input` | Invalidación y ciclo de vida | no |
+| `cc-caller-invalidated-after-rule` | Invalidación y ciclo de vida | no |
+| `cc-caller-falling-input` | Propagación, diamantes y reglas | no |
+| `cc-create-placement-caller-scope` | Propagación, diamantes y reglas | no |
+| `cc-create-placement-explicit-owner` | Propagación, diamantes y reglas | no |
+| `cc-closure-recreated-plain` | Propagación, diamantes y reglas | no |
+| `cc-closure-stable-plain` | Propagación, diamantes y reglas | no |
+| `cc-closure-captured-state-plain` | Propagación, diamantes y reglas | no |
+| `cc-closure-thin-plain` | Propagación, diamantes y reglas | no |
+| `cc-closure-stable-equatable` | Propagación, diamantes y reglas | no |
+| `cc-closure-captured-state-equatable` | Propagación, diamantes y reglas | no |
+| `offset-range-inside-outside` | Offsets | sí |
+| `offset-sticky-inside-then-outside` | Offsets | sí |
+| `offset-mixed-chain` | Offsets | sí |
+| `indirect-set-same-value` | Indirectos | sí |
+| `direct-edge-equal-and-different-write` | Comparación | sí |
+| `offset-whole-value` | Offsets | sí |
+| `subgraph-dag-add-child` | Subgrafos | sí |
+| `context-update-callback` | Contexto, contadores y lecturas | sí |
+| `cooperative-cancel` | Cancelación | sí |
+| `cooperative-cancel-consumer` | Cancelación | sí |
+| `cooperative-cancel-nested` | Cancelación | sí |
+| `cooperative-cancel-first-eval` | Cancelación | sí |
+| `context-update-callback-on-write` | Contexto, contadores y lecturas | sí |
+| `invalidate-value-and-subgraph-dirty` | Subgrafos | sí |
+| `any-inputs-changed` | Contexto, contadores y lecturas | sí |
+| `any-inputs-changed-offset-edge` | Offsets | sí |
+| `any-inputs-changed-first-eval-before-read` | Contexto, contadores y lecturas | sí |
+| `any-inputs-changed-first-eval-after-read` | Contexto, contadores y lecturas | sí |
+| `any-inputs-changed-second-eval-after-write` | Contexto, contadores y lecturas | sí |
+| `subgraph-add-child-secondary-parent` | Subgrafos | sí |
+| `subgraph-create2` | Subgrafos | sí |
+| `weak-read-after-child-invalidate` | Atributos débiles | sí |
+| `weak-multiple-on-same-child` | Atributos débiles | sí |
+| `weak-combiner-three-children-invalidate-middle` | Atributos débiles | sí |
+| `subgraph-add-child-secondary-parent-reverse` | Subgrafos | sí |
+| `clear-set-update` | Contexto, contadores y lecturas | sí |
+| `clear-set-update-nested-reverse` | Contexto, contadores y lecturas | sí |
+| `compare-values-302-scalars` | Comparación | sí |
+| `compare-values-302-collections` | Comparación | sí |
+| `compare-values-302-edges` | Comparación | sí |
+| `get-input-value-explicit-reader` | Contexto, contadores y lecturas | sí |
+| `get-input-value-dup-prune` | Contexto, contadores y lecturas | sí |
+| `get-input-value-non-rule-reader` | Contexto, contadores y lecturas | sí |
+| `current-attribute-was-modified-invalidate` | Invalidación y ciclo de vida | sí |
+| `subgraph-add-child-owner` | Subgrafos | sí |
+| `get-value-opt4` | Contexto, contadores y lecturas | sí |
+| `get-value-opt2` | Contexto, contadores y lecturas | sí |
+| `get-value-opt6` | Contexto, contadores y lecturas | sí |
+| `get-current-attribute` | Contexto, contadores y lecturas | sí |
+| `current-attribute-was-modified` | Propagación, diamantes y reglas | sí |
+| `get-counter` | Contexto, contadores y lecturas | sí |
+| `get-counter-context` | Contexto, contadores y lecturas | sí |
+| `get-attribute-graph` | Contexto, contadores y lecturas | sí |
+| `get-subgraph-current` | Subgrafos | sí |
+| `shared-context-ids` | Contexto, contadores y lecturas | sí |
+| `shared-context-needs-update` | Contexto, contadores y lecturas | sí |
+| `shared-context-update-callback` | Contexto, contadores y lecturas | sí |
+| `shared-context-subgraphs` | Subgrafos | sí |
+| `shared-context-input-read` | Contexto, contadores y lecturas | sí |
+| `cold-chain-depth` | Profundidad | sí |
