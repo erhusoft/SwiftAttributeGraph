@@ -89,9 +89,17 @@ struct SubgraphTable {
     }
 
     /// Links `child` under `parent` in the DAG. Rejects self-links and cycles.
+    ///
+    /// The cycle check walks the ancestors of `parent` (O(depth)), so it only runs when `child` already has children:
+    /// a childless `child` cannot be an ancestor of `parent`, so linking it cannot close a cycle. That keeps building a
+    /// chain top-down (the usual host pattern) O(1) per call instead of O(depth) [measured here; see
+    /// `SubgraphChainPerformanceTests`]. Native `Subgraph::add_child` checks only the graph and a duplicate parent and
+    /// does no ancestor walk apart from flag propagation [O, PHASE12 disassembly]; native timing for 20,000 links was
+    /// 52 ms [O]. The cycle rejection itself is this engine's own addition (native behaviour on a cycle is [?]).
     mutating func addChild(_ child: UInt32, to parent: UInt32) {
         precondition(child != parent, "addChild: a subgraph cannot be its own parent")
-        precondition(!isAncestor(child, of: parent), "addChild: cycle detected in subgraph DAG")
+        precondition(children[Int(child)].isEmpty || !isAncestor(child, of: parent),
+                     "addChild: cycle detected in subgraph DAG")
         let p = Int(parent)
         let c = Int(child)
         if !children[p].contains(child) {
