@@ -95,6 +95,7 @@ SCENARIOS = [
     "get-value-opt2",
     "get-value-opt6",
     "get-current-attribute",
+    "current-attribute-was-modified",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
