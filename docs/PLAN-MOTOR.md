@@ -775,3 +775,7 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
   - `PerformanceTests` (`1,000 rules x 10 inputs x 100 writes`): `186.06 ms` (`1cfae9e`) → `194.64 ms` (`46f89c2`, +4.6%, sin regresión > 10%).
   - `PerformanceTests` (`M3 50 cycles x 1,000 plain rules` / `stateful`): `33.83 ms` / `44.2 ms` (`1cfae9e`) → `34.65 ms` / `46.19 ms` (`46f89c2`).
   - `PerformanceTests` (`100 batches of 32 writes + update 1,000 shared dependents`): `566.23 ms` (`1cfae9e`) → `593.62 ms` (`46f89c2`, +4.8%).
+- **Corrección de regresión `f7d2701` (`7991c61`, release):** sustituir `weak var graph: Graph?` por `Unmanaged<Graph>` en `GraphRegistry.Slot` (eliminando la *side table* ARC en `Graph`) restauró todos los benchmarks al rango de `633e3de`:
+  - `100 batches of 32 writes + update 1,000 shared dependents`: `710.67 ms` (`c9ee9db`) → `601.48 ms` (`7991c61`, `+2.3 %` vs `633e3de`).
+  - `M3 50 cycles x 1,000 plain rules` / `stateful`: `39.63 ms` / `55.81 ms` → `34.22 ms` / `44.5 ms`.
+  - `1,000 rules x 10 inputs x 100 writes`: `233.25 ms` → `195.96 ms` (`+1.5 %` vs `633e3de`).
