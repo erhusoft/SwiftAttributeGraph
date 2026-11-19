@@ -49,6 +49,7 @@ extension Graph {
         if let running = ThreadLocalGraph.current() {
             precondition(running === self, "a rule cannot read an attribute of another graph")
         }
+        flushUpdateCallbackIfReady()
         return read(attribute)
     }
 
@@ -515,6 +516,7 @@ extension Graph {
             updatePositionInOutputs(movedNode, from: source, to: UInt32(p))
         }
         table.outputs[s].removeLast()
+        parkCachedNodeIfUnreferenced(source)
     }
 
     /// Finds the edge of `node` that reads `source` and updates its `positionInOutputs` to `position`.

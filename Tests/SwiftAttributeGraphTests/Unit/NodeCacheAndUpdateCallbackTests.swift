@@ -105,4 +105,80 @@ struct NodeCacheAndUpdateCallbackTests {
         #expect(callbackCount == 2)
         #expect(graph.value(of: rule) == 8)
     }
+
+    @Test func removingLastConsumerParksCachedNodeAndCollectingDisconnectsInputs() {
+        let graph = Graph()
+        let sg = graph.makeSubgraph()
+        let flag = graph.makeInput(true)
+        let source = graph.makeInput(10)
+        var creations = 0
+        var cachedID: AttributeID?
+
+        let consumer = graph.withCurrent(sg) {
+            graph.makeRule {
+                if flag.value {
+                    let cached: Attribute<Int> = graph.readCachedAttribute(key: "dep") {
+                        creations += 1
+                        return graph.makeRule { source.value + 5 }
+                    }
+                    cachedID = cached.id
+                    return cached.value
+                }
+                return 0
+            }
+        }
+
+        #expect(graph.value(of: consumer) == 15)
+        #expect(creations == 1)
+        #expect(graph.table.outputs[Int(source.id.index)].contains(cachedID!.index))
+
+        // Stop reading `cached`: pruneEdges removes consumer from cached.outputs -> cached is parked.
+        graph.setValue(false, for: flag)
+        #expect(graph.value(of: consumer) == 0)
+        #expect(graph.nodeCaches[sg.id.index]?.entries.values.first?.age == 1)
+
+        // Reading again before expiration reuses the same cached node.
+        graph.setValue(true, for: flag)
+        #expect(graph.value(of: consumer) == 15)
+        #expect(creations == 1)
+
+        // Park again and collect past maxAge: cached is freed and disconnected from `source.outputs`.
+        graph.setValue(false, for: flag)
+        #expect(graph.value(of: consumer) == 0)
+        graph.collectCachedNodes(maxAge: 2)
+        #expect(!graph.table.isLive(cachedID!))
+        #expect(!graph.table.outputs[Int(source.id.index)].contains(cachedID!.index))
+
+        // Reading again after expiration creates a fresh cached node.
+        graph.setValue(true, for: flag)
+        #expect(graph.value(of: consumer) == 15)
+        #expect(creations == 2)
+    }
+
+    @Test func updateCallbackIsDrainedBeforeReadAndHandlesReentrantWriteSafely() {
+        let graph = Graph()
+        let source = graph.makeInput(1)
+        let rule = graph.makeRule { source.value * 10 }
+        #expect(graph.value(of: rule) == 10)
+
+        var calls = 0
+        graph.setUpdateCallback {
+            calls += 1
+            if calls == 1 {
+                // Re-entrant read + write inside callback: must not infinite-loop, and leaves pending work for next drain.
+                _ = graph.value(of: rule)
+                graph.setValue(3, for: source)
+            }
+        }
+
+        graph.withBatch {
+            graph.setValue(2, for: source)
+            #expect(calls == 0)
+        }
+        // Batch close drained call 1 (which wrote 3, setting needsUpdateCallback = true again).
+        #expect(calls == 1)
+        // Next top-level read drains the pending callback before evaluating `rule`.
+        #expect(graph.value(of: rule) == 30)
+        #expect(calls == 2)
+    }
 }

@@ -14,7 +14,9 @@ extension Graph {
     }
 
     func flushUpdateCallbackIfReady() {
-        guard needsUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
+        guard !isInUpdateCallback, needsUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
+        isInUpdateCallback = true
+        defer { isInUpdateCallback = false }
         needsUpdateCallback = false
         updateCallback?()
     }
@@ -72,14 +74,19 @@ extension Graph {
         nodeCaches[owner]?.park(node: node)
     }
 
-    /// Ages all parked cached attributes and frees those that reach `maxAge` (matching `AG::NodeCache::collect`).
-    public func collectCachedNodes(maxAge: UInt8 = 2) {
+    /// Ages all parked cached attributes and frees those that reach `maxAge` (default `255`, matching `0xff` passes
+    /// in native `AG::NodeCache::collect`), disconnecting their input edges from sources' output lists first.
+    public func collectCachedNodes(maxAge: UInt8 = 255) {
         assertOwnThread()
         for sgIndex in Array(nodeCaches.keys) {
             guard let expired = nodeCaches[sgIndex]?.collect(maxAge: maxAge), !expired.isEmpty else { continue }
             for node in expired {
                 let id = AttributeID(index: node, generation: table.generations[Int(node)])
                 if table.isLive(id) {
+                    for edge in table.inputs[Int(node)] {
+                        removeOutput(node, from: edge.source, at: edge.positionInOutputs)
+                    }
+                    table.inputs[Int(node)].removeAll(keepingCapacity: false)
                     observers[node] = nil
                     table.free(index: node)
                 }

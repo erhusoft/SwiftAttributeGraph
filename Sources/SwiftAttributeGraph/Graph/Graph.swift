@@ -24,6 +24,7 @@ public final class Graph {
     var nodeCaches: [UInt32: SubgraphNodeCache] = [:]
     var updateCallback: (() -> Void)?
     var needsUpdateCallback = false
+    var isInUpdateCallback = false
     var isInvalidating = false
     var deferringSubgraphInvalidationDepth = 0
 
