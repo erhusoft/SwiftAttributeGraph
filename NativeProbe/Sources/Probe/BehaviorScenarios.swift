@@ -1754,3 +1754,90 @@ func cooperativeCancelFirstEval() {
     let v2 = graph.read(r); let r2 = runs
     print("cooperative-cancel-first-eval|values=\([v1, v2])|runs=\([r1, r2])")
 }
+
+func invalidateValueAndSubgraphDirty() {
+    let graph = Driver()
+    let sg = graph.makeSubgraph()
+    var mult: Int64 = 1
+    var nodeRuns = 0
+    var consumerRuns = 0
+
+    let (node, consumer, uninit) = graph.withSubgraph(sg) {
+        let n: Handle<Int64> = graph.rule {
+            nodeRuns += 1
+            return 10 * mult
+        }
+        graph.setFlags(1, for: n)
+        let c: Handle<Int64> = graph.rule {
+            consumerRuns += 1
+            return graph.read(n) + 1
+        }
+        let u: Handle<Int64> = graph.rule { 42 }
+        return (n, c, u)
+    }
+
+    // (iii) invalidateValue on node without value yet
+    graph.invalidateValue(of: uninit)
+    let uninitVal = graph.read(uninit)
+
+    // Initial read
+    let v1 = graph.read(consumer)
+    let dirtyBefore = graph.isDirty(sg, flags: 1)
+
+    // (i) & (ii) invalidateValue with same value (mult stays 1)
+    graph.invalidateValue(of: node)
+    let dirtyAfterInv = graph.isDirty(sg, flags: 1)
+    // (iii) invalidateValue on already-invalidated node
+    graph.invalidateValue(of: node)
+    let v2 = graph.read(consumer)
+    let dirtyAfterRead = graph.isDirty(sg, flags: 1)
+
+    // Now change mult and invalidateValue -> consumer should re-evaluate
+    mult = 2
+    graph.invalidateValue(of: node)
+    let v3 = graph.read(consumer)
+
+    print("invalidate-value-and-subgraph-dirty|values=\([uninitVal, v1, v2, v3])|runs=\([nodeRuns, consumerRuns])|dirty=[\(dirtyBefore), \(dirtyAfterInv), \(dirtyAfterRead)]")
+}
+
+func anyInputsChangedScenarios() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let b = graph.input(Int64(10))
+    var results: [Bool] = []
+    var checkBeforeReads = false
+
+    let r: Handle<Int64> = graph.rule {
+        if checkBeforeReads {
+            let before1 = graph.anyInputsChanged()
+            let before2 = graph.anyInputsChanged()
+            results.append(before1)
+            results.append(before2)
+        }
+        let va = graph.read(a)
+        let vb = graph.read(b)
+        if !checkBeforeReads {
+            results.append(graph.anyInputsChanged())
+            results.append(graph.anyInputsChanged(excluding: [a]))
+        }
+        return va + vb
+    }
+
+    // Initial evaluation
+    _ = graph.read(r)
+    // (i) & (ii) Only `a` changes
+    graph.write(Int64(2), to: a)
+    _ = graph.read(r)
+
+    // (iii) Call before reading `a` and `b`, and a second call in the same evaluation
+    checkBeforeReads = true
+    graph.write(Int64(3), to: a)
+    _ = graph.read(r)
+
+    // (iv) Evaluation after invalidateValue with no input changes
+    checkBeforeReads = false
+    graph.invalidateValue(of: r)
+    _ = graph.read(r)
+
+    print("any-inputs-changed|results=\(results)")
+}

@@ -153,6 +153,10 @@ final class Driver {
     func setUpdateCallback(_ body: @escaping () -> Void) { graph.onUpdate(body) }
     func setNeedsUpdate() { graph.setNeedsUpdate() }
     func cancelUpdate() { AGGraphCancelUpdate() }
+    func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
+        let ids = excluded.map { $0.identifier }
+        return __AGGraphAnyInputsChanged(ids, ids.count)
+    }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = attribute.breadthFirstSearch(options: .searchInputs) { _ in
@@ -317,6 +321,9 @@ final class Driver {
     func setUpdateCallback(_ body: @escaping () -> Void) { graph.setUpdateCallback(body) }
     func setNeedsUpdate() { graph.setNeedsUpdate() }
     func cancelUpdate() { graph.cancelUpdate() }
+    func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
+        graph.anyInputsChanged(excluding: excluded.map { AnyAttribute(id: $0.id) })
+    }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = graph.breadthFirstSearch(from: attribute, options: .searchInputs) { _ in
@@ -501,3 +508,4 @@ cooperativeCancelConsumer()
 cooperativeCancelNested()
 cooperativeCancelFirstEval()
 contextUpdateCallbackOnWrite()
+invalidateValueAndSubgraphDirty()
