@@ -152,6 +152,11 @@ final class Driver {
         }
     }
     var nodeCount: Int { Int(graph.counter(for: .nodes)) }
+    func owns<V>(_ handle: Handle<V>) -> Bool { handle.graph === graph }
+    func ownsErased<V>(_ handle: Handle<V>) -> Bool { handle.identifier.graph === graph }
+    func owns(_ subgraph: SubgraphHandle) -> Bool { subgraph.graph === graph }
+    func sameGraph<V, W>(_ a: Handle<V>, _ b: Handle<W>) -> Bool { a.graph === b.graph }
+    func sameGraph(_ a: SubgraphHandle, _ b: SubgraphHandle) -> Bool { a.graph === b.graph }
     /// The counters that both engines reproduce: nodes, transactions, updates, changes, createdNodes, subgraphs,
     /// createdSubgraphs.
     func counters() -> String {
@@ -367,6 +372,11 @@ final class Driver {
         return SubgraphObserverHandle { token.cancel() }
     }
     var nodeCount: Int { graph.nodeCount }
+    func owns<V>(_ handle: Handle<V>) -> Bool { handle.graph === graph }
+    func ownsErased<V>(_ handle: Handle<V>) -> Bool { handle.erased.graph === graph }
+    func owns(_ subgraph: SubgraphHandle) -> Bool { subgraph.graph === graph }
+    func sameGraph<V, W>(_ a: Handle<V>, _ b: Handle<W>) -> Bool { a.graph === b.graph }
+    func sameGraph(_ a: SubgraphHandle, _ b: SubgraphHandle) -> Bool { a.graph === b.graph }
     func counters() -> String {
         [graph.counter(for: .nodes), graph.counter(for: .transactions), graph.counter(for: .updates),
          graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
@@ -641,4 +651,5 @@ getValueOptionScenario(name: "get-value-opt6", options: 6)
 getCurrentAttributeScenario()
 currentAttributeWasModifiedScenario()
 getCounterScenario()
+getAttributeGraphScenario()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

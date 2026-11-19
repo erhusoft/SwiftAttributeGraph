@@ -2381,3 +2381,27 @@ func getCounterScenario() {
     snapTUC("indirectClean")
     print("get-counter|\(log)")
 }
+
+/// `AGGraphGetAttributeGraph` and `AGSubgraphGetGraph`: the graph of an attribute and of a subgraph, compared by
+/// object identity, with two graphs alive in the process and the same slot index in both.
+func getAttributeGraphScenario() {
+    let d1 = Driver()
+    let d2 = Driver()
+    let a1 = d1.input(Int64(1))
+    let a2 = d2.input(Int64(2))
+    let child1 = d1.makeSubgraph()
+    let child1b = d1.makeSubgraph()
+    let child2 = d2.makeSubgraph()
+    let c1 = d1.withSubgraph(child1) { d1.input(Int64(3)) }
+    let r1: Handle<Int64> = d1.withSubgraph(child1b) { d1.rule { d1.read(a1) + 1 } }
+    _ = d1.read(r1)
+    let attributes = [d1.owns(a1), d2.owns(a2), d1.owns(a2), d2.owns(a1), d1.owns(c1), d1.owns(r1), d2.owns(r1)]
+    let erased = [d1.ownsErased(a1), d2.ownsErased(a2), d1.ownsErased(a2)]
+    let subgraphs = [d1.owns(d1.scope), d2.owns(d2.scope), d1.owns(child1), d1.owns(child1b), d2.owns(child2),
+                     d2.owns(child1), d1.owns(child2)]
+    let same = [d1.sameGraph(a1, c1), d1.sameGraph(a1, a2), d1.sameGraph(child1, child1b),
+                d1.sameGraph(child1, child2), d1.sameGraph(a1, r1)]
+    d1.close()
+    d2.close()
+    print("get-attribute-graph|attributes=\(attributes)|erased=\(erased)|subgraphs=\(subgraphs)|same=\(same)")
+}
