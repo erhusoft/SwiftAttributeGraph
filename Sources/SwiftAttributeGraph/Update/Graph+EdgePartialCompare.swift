@@ -32,13 +32,26 @@ extension Graph {
     }
 
     func evaluateEdgeComparators(for source: UInt32, oldValue: Any, newValue: Any) {
-        for dependent in table.outputs[Int(source)] {
-            guard let comparator = edgeComparators[dependent]?[source] else { continue }
-            if stickyChangedEdges[dependent]?.contains(source) == true {
-                continue
-            }
-            if !comparator(oldValue, newValue) {
-                stickyChangedEdges[dependent, default: []].insert(source)
+        var queue: [UInt32] = [source]
+        var visited: Set<UInt32> = [source]
+        var head = 0
+        while head < queue.count {
+            let current = queue[head]
+            head += 1
+            for dependent in table.outputs[Int(current)] {
+                if table.state[Int(dependent)] & NodeState.indirect != 0 {
+                    if visited.insert(dependent).inserted {
+                        queue.append(dependent)
+                    }
+                    continue
+                }
+                guard let comparator = edgeComparators[dependent]?[current] else { continue }
+                if stickyChangedEdges[dependent]?.contains(current) == true {
+                    continue
+                }
+                if !comparator(oldValue, newValue) {
+                    stickyChangedEdges[dependent, default: []].insert(current)
+                }
             }
         }
     }

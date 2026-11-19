@@ -168,4 +168,59 @@ struct EdgePartialCompareTests {
         #expect(graph.value(of: consumer) == 10)
         #expect(runs == 4)
     }
+
+    @Test func intermediateIndirectChainPropagatesPartialCompareAndStickyBit() {
+        let graph = Graph()
+        let sg = graph.makeSubgraph()
+        let flag = graph.makeInput(true)
+        let s1 = graph.makeInput(Payload(x: 1, y: 10))
+        let s2SameProj = graph.makeInput(Payload(x: 1, y: 99))
+        let s3DiffProj = graph.makeInput(Payload(x: 8, y: 99))
+
+        let indirectB = graph.withCurrent(sg) { graph.makeIndirect(s1) }
+        let indirectA = graph.withCurrent(sg) { graph.makeIndirect(indirectB) }
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            if flag.value {
+                return graph.read(indirectA) { $0.x } * 10
+            }
+            return 0
+        }
+
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 1)
+
+        // Redirect intermediate `indirectB` to `s2SameProj` (same `x = 1`, different `y`) -> cuts off.
+        graph.setSource(s2SameProj, for: indirectB)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 1)
+
+        // Redirect intermediate `indirectB` to `s3DiffProj` (`x = 8`) -> re-evaluates.
+        graph.setSource(s3DiffProj, for: indirectB)
+        #expect(graph.value(of: consumer) == 80)
+        #expect(runs == 2)
+
+        // Reset intermediate `indirectB` back to `s1` (`x = 1`) -> re-evaluates.
+        graph.resetSource(for: indirectB)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 3)
+
+        // A -> B -> A on intermediate `indirectB` before consumer evaluation -> sticky changed, re-evaluates.
+        graph.setSource(s3DiffProj, for: indirectB)
+        graph.resetSource(for: indirectB)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 4)
+
+        // Prune edge to `indirectA` -> cleans up comparator.
+        graph.setValue(false, for: flag)
+        #expect(graph.value(of: consumer) == 0)
+        #expect(graph.edgeComparators[consumer.id.index]?[indirectA.id.index] == nil)
+
+        // Invalidate `sg` owning the indirects -> no dangling references.
+        graph.invalidate(sg)
+        #expect(!graph.table.isLive(indirectA.id))
+        #expect(!graph.table.isLive(indirectB.id))
+    }
 }
