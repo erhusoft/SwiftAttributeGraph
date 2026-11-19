@@ -496,4 +496,114 @@ import SwiftAttributeGraph
         g.setValue(12, for: b)
         #expect((g.value(of: h), g.value(of: r), s.rExec, s.hExec, s.branch) == (112, 12, 3, 2, "B"))
     }
+
+    @Test func oracle1_indirect_set_redirect_reset() {
+        let g = Graph()
+        let a = g.makeInput(10)
+        let bSame = g.makeInput(10)
+        let cDiff = g.makeInput(20)
+        let ind = g.makeIndirect(a)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return ind.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setSource(bSame, for: ind)
+        #expect((g.value(of: consumer), runs) == (10, 2))
+        g.setSource(cDiff, for: ind)
+        #expect((g.value(of: consumer), runs) == (20, 3))
+        g.resetSource(for: ind)
+        #expect((g.value(of: consumer), runs) == (10, 4))
+    }
+
+    @Test func oracle2_indirect_a_to_b_to_a() {
+        let g = Graph()
+        let a = g.makeInput(10)
+        let b = g.makeInput(20)
+        let ind = g.makeIndirect(a)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return ind.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setSource(b, for: ind)
+        g.resetSource(for: ind)
+        #expect((g.value(of: consumer), runs) == (10, 2))
+    }
+
+    @Test func oracle3_indirect_chain_two() {
+        let g = Graph()
+        let a = g.makeInput(10)
+        let b = g.makeInput(30)
+        let i1 = g.makeIndirect(a)
+        let i2 = g.makeIndirect(i1)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return i2.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setSource(b, for: i1)
+        #expect((g.value(of: consumer), runs) == (30, 2))
+        g.resetSource(for: i1)
+        #expect((g.value(of: consumer), runs) == (10, 3))
+    }
+
+    @Test func oracle4_offset_range_inside_outside() {
+        struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+        let g = Graph()
+        let src = g.makeInput(Pair(x: 1, y: 10))
+        let yOff = MemoryLayout<Pair>.offset(of: \Pair.y)!
+        let off = g.makeOffsetIndirect(of: src, offset: yOff, size: MemoryLayout<Int64>.size)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return off.value.y }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setValue(Pair(x: 99, y: 10), for: src)
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setValue(Pair(x: 99, y: 25), for: src)
+        #expect((g.value(of: consumer), runs) == (25, 2))
+    }
+
+    @Test func oracle5_subgraph_dag_add_child() {
+        let g = Graph()
+        let p1 = g.makeSubgraph()
+        let ctx2 = g.makeSubgraphContext()
+        let p2 = g.makeSubgraph(context: ctx2)
+        let sameChild = g.makeSubgraph(parent: p1)
+        let diffChild = g.makeSubgraph(parent: p2)
+        g.addChild(diffChild, to: p1)
+
+        g.invalidate(p1)
+        #expect(!g.isValid(sameChild))
+        #expect(g.isValid(diffChild))
+    }
+
+    @Test func oracle6_cooperative_cancellation() {
+        let g = Graph()
+        let src = g.makeInput(1)
+        var cancel = false
+        let r = g.makeRule {
+            let v = src.value
+            if cancel { g.cancelUpdate() }
+            return v + 10
+        }
+        #expect(g.value(of: r) == 11)
+        cancel = true
+        g.setValue(2, for: src)
+        #expect(g.value(of: r) == 11)
+        cancel = false
+        #expect(g.value(of: r) == 12)
+    }
+
+    @Test func oracle7_context_update_callback() {
+        let g = Graph()
+        let ctx = g.makeContext()
+        var calls = 0
+        ctx.setUpdateCallback {
+            calls += 1
+            if calls == 1 { ctx.setNeedsUpdate() }
+        }
+        g.withBatch {
+            ctx.setNeedsUpdate()
+            ctx.setNeedsUpdate()
+        }
+        #expect(calls == 2)
+    }
 }
