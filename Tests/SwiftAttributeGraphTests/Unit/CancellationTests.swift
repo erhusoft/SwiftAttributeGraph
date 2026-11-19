@@ -31,4 +31,33 @@ struct CooperativeCancellationTests {
         #expect(outerSawCancelAfterInner == true)
         #expect(graph.frames.isEmpty)
     }
+
+    @Test
+    func cancelledEvaluationKeepsNodeDirtyAndRetriesOnNextRead() {
+        let graph = Graph()
+        let source = graph.makeInput(10)
+        var shouldCancel = true
+        var runs = 0
+
+        let rule = graph.makeRule {
+            runs += 1
+            let v = source.value
+            if shouldCancel {
+                graph.cancelUpdate()
+                return -1
+            }
+            return v * 3
+        }
+
+        // First read is cancelled: rule runs, node stays dirty for retry.
+        _ = graph.value(of: rule)
+        #expect(runs == 1)
+        #expect(graph.table.state[Int(rule.id.index)] & NodeState.dirty != 0)
+
+        // Next read without cancelling retries and cleans dirty.
+        shouldCancel = false
+        #expect(graph.value(of: rule) == 30)
+        #expect(runs == 2)
+        #expect(graph.table.state[Int(rule.id.index)] & NodeState.dirty == 0)
+    }
 }

@@ -354,6 +354,11 @@ extension Graph {
         _ = ThreadLocalGraph.install(previousGraph)
         evaluatingNode = previousNode
 
+        if !frames.isEmpty, frames[frames.count - 1].isCancelled {
+            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty
+            return
+        }
+
         pruneEdges(of: node)
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
             | NodeState.hasValue
