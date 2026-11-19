@@ -207,6 +207,30 @@ extension Graph {
         graph.isResumingStep = state.isResumingStep
     }
 
+    /// The attribute whose rule is running on this thread, or `nil` outside a rule (`AGGraphGetCurrentAttribute` in
+    /// native AttributeGraph).
+    ///
+    /// [O] `nil` outside any rule and while the update state is cleared (``clearUpdate()``, ``withoutUpdate(_:)-5k18s``);
+    /// inside a rule it is that rule's attribute, on every run; inside a rule nested by a read it is the inner
+    /// attribute, and back in the outer body it is the outer one again; the same for stateful rules. A resumable rule's
+    /// steps are an engine feature without a native counterpart [?].
+    public static var currentAttribute: AnyAttribute? {
+        guard let graph = ThreadLocalGraph.current(), graph.evaluatingNode != Graph.noNode else { return nil }
+        let node = graph.evaluatingNode
+        return AnyAttribute(id: AttributeID(index: node, generation: graph.table.generations[Int(node)]))
+    }
+
+    /// Whether the running rule's attribute was modified (`AGGraphCurrentAttributeWasModified` in native
+    /// AttributeGraph).
+    ///
+    /// [O] Natively this was `false` in every measured case: outside a rule, in plain rules, in stateful rules before
+    /// and after writing their value (a different or an equal value, through the context or through
+    /// `AGGraphSetOutputValue`), in stateful rules that do not write, and in an outer rule after an inner stateful rule
+    /// wrote. [?] The condition that makes it `true` was not found (writing a rule attribute from outside is refused
+    /// natively, and `AGGraphSetValue`/`AGGraphInvalidateValue` on the current attribute aborted), so this always
+    /// returns `false`.
+    public static var currentAttributeWasModified: Bool { false }
+
     /// Whether `attribute` currently holds a computed or initial value (`Attribute.hasValue` in native
     /// AttributeGraph).
     ///

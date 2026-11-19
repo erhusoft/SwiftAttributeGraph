@@ -2239,3 +2239,76 @@ func getValueOptionScenario(name: String, options: UInt32) {
     }
     print("\(name)|\(parts.joined(separator: "|"))")
 }
+
+/// `AGGraphGetCurrentAttribute`: outside a rule, inside, on a rerun, nested, and with the update state cleared.
+func getCurrentAttributeScenario() {
+    let d = Driver()
+    let outside = d.currentAttributeState(is: nil as Handle<Int64>?)
+
+    let src = d.input(Int64(1))
+    var simpleLog: [String] = []
+    var simple: Handle<Int64>?
+    simple = d.rule { simpleLog.append(d.currentAttributeState(is: simple)); return d.read(src) }
+    _ = d.read(simple!)
+    d.write(Int64(2), to: src)
+    _ = d.read(simple!)
+
+    var nestedLog: [String] = []
+    var inner: Handle<Int64>?
+    var outer: Handle<Int64>?
+    inner = d.rule { nestedLog.append("inner=" + d.currentAttributeState(is: inner)); return 7 }
+    outer = d.rule {
+        nestedLog.append("outerBefore=" + d.currentAttributeState(is: outer))
+        let v = d.read(inner!)
+        nestedLog.append("outerAfter=" + d.currentAttributeState(is: outer))
+        let token = d.clearUpdateToken()
+        nestedLog.append("cleared=" + d.currentAttributeState(is: outer))
+        d.setUpdateToken(token)
+        nestedLog.append("restored=" + d.currentAttributeState(is: outer))
+        return v
+    }
+    _ = d.read(outer!)
+
+    var stateLog: [String] = []
+    var stateful: Handle<Int64>?
+    stateful = d.statefulRule(initialValue: Int64(0)) { context in
+        stateLog.append(d.currentAttributeState(is: stateful))
+        context.value = d.read(src)
+    }
+    _ = d.read(stateful!)
+    print("get-current-attribute|outside=\(outside)|simple=\(simpleLog)|nested=\(nestedLog)|stateful=\(stateLog)|after=\(d.currentAttributeState(is: nil as Handle<Int64>?))")
+}
+
+/// `AGGraphCurrentAttributeWasModified` in stateful rules that write or not, in plain rules and in an outer rule.
+func currentAttributeWasModifiedScenario() {
+    let d = Driver()
+    let src = d.input(Int64(1))
+    var log: [String] = []
+    let outside = d.currentAttributeWasModified()
+    let writer: Handle<Int64> = d.statefulRule(initialValue: Int64(0)) { context in
+        let s = d.read(src)
+        let before = d.currentAttributeWasModified()
+        context.value = 10 + s
+        log.append("writer=\(before),\(d.currentAttributeWasModified())")
+    }
+    let silent: Handle<Int64> = d.statefulRule(initialValue: Int64(0)) { _ in
+        _ = d.read(src)
+        log.append("silent=\(d.currentAttributeWasModified())")
+    }
+    let sameValue: Handle<Int64> = d.statefulRule(initialValue: Int64(5)) { context in
+        _ = d.read(src)
+        context.value = 5
+        log.append("same=\(d.currentAttributeWasModified())")
+    }
+    let plain: Handle<Int64> = d.rule { log.append("plain=\(d.currentAttributeWasModified())"); return 1 }
+    let outer: Handle<Int64> = d.rule {
+        let before = d.currentAttributeWasModified()
+        let v = d.read(writer)
+        log.append("outer=\(before),\(d.currentAttributeWasModified())")
+        return v
+    }
+    for handle in [writer, silent, sameValue, plain, outer] { _ = d.read(handle) }
+    d.write(Int64(2), to: src)
+    for handle in [writer, silent, sameValue] { _ = d.read(handle) }
+    print("current-attribute-was-modified|outside=\(outside)|\(log)")
+}

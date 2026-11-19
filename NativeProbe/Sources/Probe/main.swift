@@ -15,6 +15,12 @@ private func c_AGGraphGetInputValue(_ attribute: AnyAttribute, _ input: AnyAttri
 @_silgen_name("AGGraphGetValue")
 private func c_AGGraphGetValue(_ attribute: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
 
+@_silgen_name("AGGraphGetCurrentAttribute")
+private func c_AGGraphGetCurrentAttribute() -> UInt32
+
+@_silgen_name("AGGraphCurrentAttributeWasModified")
+private func c_AGGraphCurrentAttributeWasModified() -> Bool
+
 @_silgen_name("AGGraphResetIndirectAttribute")
 private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 
@@ -124,6 +130,13 @@ final class Driver {
         c_AGGraphGetInputValue(reader.identifier, input.identifier, 0, Metadata(V.self))
             .value.assumingMemoryBound(to: V.self).pointee
     }
+    /// "nil" when there is no current attribute, "self" when it is `handle`, otherwise "other".
+    func currentAttributeState<V>(is handle: Handle<V>?) -> String {
+        let raw = c_AGGraphGetCurrentAttribute()
+        if raw == 2 /* AGAttributeNil, measured as 2 */ { return "nil" }
+        return raw == handle?.identifier.rawValue ? "self" : "other"
+    }
+    func currentAttributeWasModified() -> Bool { c_AGGraphCurrentAttributeWasModified() }
     func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
         c_AGGraphGetValue(attribute.identifier, options, Metadata(V.self))
             .value.assumingMemoryBound(to: V.self).pointee
@@ -330,6 +343,11 @@ final class Driver {
     func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
         graph.inputValue(of: input, for: reader.erased)
     }
+    func currentAttributeState<V>(is handle: Handle<V>?) -> String {
+        guard let current = Graph.currentAttribute else { return "nil" }
+        return current == handle?.erased ? "self" : "other"
+    }
+    func currentAttributeWasModified() -> Bool { Graph.currentAttributeWasModified }
     func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
         graph.value(of: attribute, options: Graph.ReadOptions(rawValue: options))
     }
@@ -608,4 +626,5 @@ getInputValueDupPruneAndNonRuleScenarios()
 getValueOptionScenario(name: "get-value-opt4", options: 4)
 getValueOptionScenario(name: "get-value-opt2", options: 2)
 getValueOptionScenario(name: "get-value-opt6", options: 6)
+getCurrentAttributeScenario()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

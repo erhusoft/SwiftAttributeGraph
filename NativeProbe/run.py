@@ -94,6 +94,7 @@ SCENARIOS = [
     "get-value-opt4",
     "get-value-opt2",
     "get-value-opt6",
+    "get-current-attribute",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
