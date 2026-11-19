@@ -407,7 +407,7 @@ final class Driver {
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
-    func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(scope) { graph.makeIndirect(source) } }
+    func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(currentSubgraph) { graph.makeIndirect(source) } }
     func offsetIndirect<V: BitwiseCopyable, Field: BitwiseCopyable>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
         graph.withCurrent(scope) { graph.makeOffsetFieldAttribute(of: source, keyPath: keyPath) }
     }

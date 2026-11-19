@@ -2320,9 +2320,6 @@ func getCounterScenario() {
     let d = Driver()
     var log: [String] = []
     func snap(_ label: String) { log.append("\(label)=\(d.counters())") }
-    func snapTUC(_ label: String) {
-        log.append("\(label)=\(d.counters().split(separator: ",").dropFirst().prefix(3).joined(separator: ","))")
-    }
     snap("new")
     let a = d.input(Int64(1))
     for _ in 0..<4 { _ = d.input(Int64(0)) }
@@ -2371,14 +2368,24 @@ func getCounterScenario() {
     snap("child")
     d.invalidate(child)
     snap("childInvalidated")
-    // Reads through an indirect attribute. Native AttributeGraph does not count indirect attributes in `nodes` and
-    // `createdNodes` (the engine does), so only transactions, updates and changes are printed from here on.
+    // Reads through an indirect attribute. Neither engine counts indirect attributes in `nodes` and `createdNodes`.
     let rule: Handle<Int64> = d.rule { 3 }
     let ind = d.indirect(rule)
     _ = d.read(d.attribute(of: ind))
-    snapTUC("indirectFirst")
+    snap("indirectFirst")
     _ = d.read(d.attribute(of: ind))
-    snapTUC("indirectClean")
+    snap("indirectClean")
+    // An indirect attribute over an input, over another indirect attribute, and in an invalidated child subgraph.
+    let input = d.input(Int64(1))
+    let overInput = d.indirect(input)
+    _ = d.indirect(d.attribute(of: ind))
+    snap("indirectOverInputAndIndirect")
+    _ = d.read(d.attribute(of: overInput))
+    let child2 = d.makeSubgraph()
+    _ = d.withSubgraph(child2) { d.indirect(rule) }
+    snap("indirectInChild")
+    d.invalidate(child2)
+    snap("indirectChildInvalidated")
     print("get-counter|\(log)")
 }
 
