@@ -39,6 +39,12 @@ extension Graph {
         !frames.isEmpty && frames[frames.count - 1].isCancelled
     }
 
+    /// Whether any input of the currently evaluating rule changed, excluding `excluded`.
+    public func anyInputsChanged(excluding excluded: [AnyAttribute] = []) -> Bool {
+        precondition(evaluatingNode != Graph.noNode, "anyInputsChanged: no rule is currently evaluating")
+        return anyInputChanged(of: evaluatingNode, excluding: excluded.map { $0.id.index })
+    }
+
     // MARK: Reading
 
     /// The value of an attribute, bringing it up to date first if it is dirty.
