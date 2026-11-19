@@ -34,6 +34,11 @@ extension Graph {
         return frames[frames.count - 1].isCancelled
     }
 
+    @inline(__always)
+    var isCurrentFrameCancelled: Bool {
+        !frames.isEmpty && frames[frames.count - 1].isCancelled
+    }
+
     // MARK: Reading
 
     /// The value of an attribute, bringing it up to date first if it is dirty.
@@ -255,6 +260,11 @@ extension Graph {
             let top = frames.count - 1
             let node = frames[top].node
             let n = Int(node)
+            if frames[top].isCancelled {
+                table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending
+                frames.removeLast()
+                continue
+            }
             if frames[top].next < 0 {
                 advanceResumable(top: top, firstStep: false)
                 continue
@@ -355,14 +365,15 @@ extension Graph {
         evaluatingNode = previousNode
 
         if !frames.isEmpty, frames[frames.count - 1].isCancelled {
-            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty
+            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending | NodeState.cancelled
             return
         }
 
+        let wasCancelled = (table.state[n] & NodeState.cancelled) != 0
         pruneEdges(of: node)
-        table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
+        table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending | NodeState.cancelled))
             | NodeState.hasValue
-        if changed {
+        if changed || wasCancelled {
             globalVersion &+= 1
             table.versions[n] &+= 1
         } else {

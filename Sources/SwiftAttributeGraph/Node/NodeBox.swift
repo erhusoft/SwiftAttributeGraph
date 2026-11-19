@@ -45,7 +45,11 @@ final class ClosureRuleNode<Value>: TypedNode<Value> {
         super.init(value: nil, isEqual: isEqual)
     }
 
-    override func evaluate(in graph: Graph, node: UInt32) -> Bool { store(body()) }
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        let result = body()
+        if graph.isCurrentFrameCancelled, graph.table.state[Int(node)] & NodeState.hasValue != 0 { return false }
+        return store(result)
+    }
 }
 
 /// A rule given as a type that conforms to ``Rule``.
@@ -57,7 +61,11 @@ final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
         super.init(value: nil, isEqual: isEqual)
     }
 
-    override func evaluate(in graph: Graph, node: UInt32) -> Bool { store(rule.value) }
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        let result = rule.value
+        if graph.isCurrentFrameCancelled, graph.table.state[Int(node)] & NodeState.hasValue != 0 { return false }
+        return store(result)
+    }
 
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
         guard R.self == Target.self else { return false }
@@ -82,6 +90,7 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
         var context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
         rule.updateValue(&context)
+        if graph.isCurrentFrameCancelled, graph.table.state[Int(node)] & NodeState.hasValue != 0 { return false }
         return finish(context)
     }
 
