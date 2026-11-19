@@ -1479,3 +1479,22 @@ func offsetRangeInsideAndOutside() {
     let r3 = runs
     print("offset-range-inside-outside|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
 }
+
+func offsetStickyInsideThenOutside() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    var runs = 0
+    let consumer = graph.rule {
+        runs += 1
+        return graph.read(field) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.write(Pair(x: 1, y: 20), to: source)
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    print("offset-sticky-inside-then-outside|values=\([v1, v2])|runs=\([r1, r2])")
+}

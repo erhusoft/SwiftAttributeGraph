@@ -59,6 +59,7 @@ SCENARIOS = [
     "cc-closure-stable-equatable",
     "cc-closure-captured-state-equatable",
     "offset-range-inside-outside",
+    "offset-sticky-inside-then-outside",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

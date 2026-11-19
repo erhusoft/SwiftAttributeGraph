@@ -472,3 +472,4 @@ for name in ["create-input-in-rule-scoped", "create-rule-in-rule-scoped", "creat
     ccScenarios.first { $0.0 == name }!.1()
 }
 offsetRangeInsideAndOutside()
+offsetStickyInsideThenOutside()
