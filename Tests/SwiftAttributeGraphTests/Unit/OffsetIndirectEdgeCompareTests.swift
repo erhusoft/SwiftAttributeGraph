@@ -444,4 +444,21 @@ struct OffsetIndirectEdgeCompareTests {
         #expect(graph.value(of: consumer) == 20)
         #expect(runs == 4)
     }
+
+    @Test
+    func offsetFieldAttributeWithDirtyParentDependencyUpdatesOnRead() {
+        let graph = Graph()
+        let src = graph.makeInput(Pair(a: 1, b: 10))
+        let dep = graph.makeInput(1)
+        let srcInd = graph.makeIndirect(src)
+        graph.setDependency(AnyAttribute(id: dep.id), for: srcInd)
+        let field = graph.makeOffsetFieldAttribute(of: srcInd, keyPath: \.b)
+
+        #expect(graph.value(of: field) == 10)
+
+        // Dirtying the dependency of the parent indirect marks the field dirty and refreshes on read.
+        graph.setValue(2, for: dep)
+        graph.setValue(Pair(a: 1, b: 42), for: src)
+        #expect(graph.value(of: field) == 42)
+    }
 }
