@@ -239,7 +239,10 @@ extension Graph {
     /// wrote. [?] The condition that makes it `true` was not found (writing a rule attribute from outside is refused
     /// natively, and `AGGraphSetValue`/`AGGraphInvalidateValue` on the current attribute aborted), so this always
     /// returns `false`.
-    public static var currentAttributeWasModified: Bool { false }
+    public static var currentAttributeWasModified: Bool {
+        guard let graph = ThreadLocalGraph.current(), graph.evaluatingNode != Graph.noNode else { return false }
+        return (graph.table.state[Int(graph.evaluatingNode)] & NodeState.selfModified) != 0
+    }
 
     /// Whether `attribute` currently holds a computed or initial value (`Attribute.hasValue` in native
     /// AttributeGraph).
@@ -317,7 +320,7 @@ extension Graph {
         let n = Int(index)
         precondition(table.state[n] & NodeState.isRule != 0, "invalidateValue(of:): only rule attributes can be invalidated")
         let wasDirty = table.state[n] & NodeState.dirty != 0
-        table.state[n] |= NodeState.dirty | NodeState.pending
+        table.state[n] |= NodeState.dirty | NodeState.pending | NodeState.selfModified
         if table.flags[n] != 0 { subgraphs.markDirtyFlags(table.flags[n], on: table.owner(at: index)) }
         if !wasDirty && (table.state[n] & NodeState.observed != 0) {
             queueNotification(index)
@@ -469,7 +472,7 @@ extension Graph {
                 }
                 run(node)
             } else {
-                table.state[n] &= ~(NodeState.dirty | NodeState.evaluating)
+                table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.selfModified)
             }
             frames.removeLast()
         }
@@ -524,7 +527,7 @@ extension Graph {
         }
 
         pruneEdges(of: node)
-        table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
+        table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending | NodeState.selfModified))
             | NodeState.hasValue
         if changed {
             globalVersion &+= 1

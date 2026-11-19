@@ -22,4 +22,6 @@ enum NodeState {
     static let indirect: UInt16 = 1 << 9
     /// The node is managed by a subgraph's ``SubgraphNodeCache`` and can be parked/collected when unreferenced.
     static let cached: UInt16 = 1 << 10
+    /// Set by `invalidateValue(of:)` and cleared after the rule's evaluation finishes (`AGValueState.selfModified`).
+    static let selfModified: UInt16 = 1 << 11
 }
