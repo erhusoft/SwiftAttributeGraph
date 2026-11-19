@@ -63,6 +63,7 @@ SCENARIOS = [
     "offset-mixed-chain",
     "indirect-set-same-value",
     "direct-edge-equal-and-different-write",
+    "offset-whole-value",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

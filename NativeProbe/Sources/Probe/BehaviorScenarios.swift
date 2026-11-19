@@ -1564,3 +1564,26 @@ func directEdgeEqualAndDifferentWrite() {
     let r3 = runs
     print("direct-edge-equal-and-different-write|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
 }
+
+func offsetWholeValue() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let whole = graph.offsetIndirect(source, keyPath: \Pair.self)
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(whole).y * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    // Different x, same y: since whole covers the entire struct, it must re-evaluate
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    // Same whole value: should cut
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    print("offset-whole-value|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}
