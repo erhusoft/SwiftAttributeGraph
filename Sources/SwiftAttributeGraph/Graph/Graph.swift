@@ -22,11 +22,15 @@ public final class Graph {
     /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
     var deferredInvalidations: [Subgraph] = []
     var nodeCaches: [UInt32: SubgraphNodeCache] = [:]
-    var updateContexts: [GraphContext] = []
+    struct WeakGraphContext {
+        weak var value: GraphContext?
+    }
+
+    var updateContexts: [WeakGraphContext] = []
     var nextGraphContextID: UInt32 = 1
     lazy var defaultUpdateContext: GraphContext = {
-        let ctx = GraphContext(graph: self, id: 0)
-        updateContexts.append(ctx)
+        let ctx = GraphContext(graph: self, id: 0, subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
+        updateContexts.append(WeakGraphContext(value: ctx))
         return ctx
     }()
     var isInUpdateCallback = false

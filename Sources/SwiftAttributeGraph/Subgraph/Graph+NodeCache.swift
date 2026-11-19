@@ -1,13 +1,31 @@
 extension Graph {
-    /// Creates a new ``GraphContext`` for independent per-context update callbacks.
+    /// Creates a new ``GraphContext`` for independent per-context update callbacks and subgraph lifecycle.
     public func makeContext() -> GraphContext {
         assertOwnThread()
         precondition(nextGraphContextID != UInt32.max, "makeContext: context ID space exhausted")
         let id = nextGraphContextID
         nextGraphContextID += 1
-        let ctx = GraphContext(graph: self, id: id)
-        updateContexts.append(ctx)
+        let ctx = GraphContext(graph: self, id: id, subgraphContext: makeSubgraphContext())
+        updateContexts.removeAll { $0.value == nil }
+        updateContexts.append(WeakGraphContext(value: ctx))
         return ctx
+    }
+
+    func invalidateContext(_ context: GraphContext) {
+        assertOwnThread()
+        context.updateCallback = nil
+        context.needsUpdate = false
+        let targetCtx = context.subgraphContext.rawValue
+        for index in 0..<subgraphs.slotCount {
+            let sgID = subgraphs.id(at: UInt32(index))
+            guard subgraphs.isLive(sgID),
+                  !subgraphs.isFalling(index: UInt32(index)),
+                  subgraphs.context(of: UInt32(index)) == targetCtx else { continue }
+            let sg = Subgraph(id: sgID)
+            if sg != rootSubgraph {
+                invalidate(sg)
+            }
+        }
     }
 
     /// Registers a callback on the graph's default context, invoked when the graph transitions from clean to needing an
@@ -32,7 +50,8 @@ extension Graph {
         let maxIterations = 1024
         while batchDepth == 0 && evaluatingNode == Graph.noNode && !isInvalidating {
             var firedAny = false
-            for ctx in updateContexts where ctx.needsUpdate {
+            for entry in updateContexts {
+                guard let ctx = entry.value, !ctx.isInvalidated, ctx.needsUpdate else { continue }
                 ctx.needsUpdate = false
                 firedAny = true
                 ctx.updateCallback?()
@@ -41,6 +60,7 @@ extension Graph {
             iterations += 1
             precondition(iterations < maxIterations, "update callback loop exceeded \(maxIterations) iterations")
         }
+        updateContexts.removeAll { $0.value == nil || $0.value?.isInvalidated == true }
     }
 
     /// Looks up or creates a cached attribute in `owner` (or the currently evaluating node's owner subgraph, matching

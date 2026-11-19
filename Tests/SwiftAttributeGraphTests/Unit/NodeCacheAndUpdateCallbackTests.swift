@@ -224,4 +224,62 @@ struct NodeCacheAndUpdateCallbackTests {
         #expect(runs == 2)
         #expect(graph.value(of: rule) == 20)
     }
+
+    @Test func releasingGraphContextInvalidatesOnlyItsOwnSubgraphs() {
+        let graph = Graph()
+        var ctx1: GraphContext? = graph.makeContext()
+        let ctx2 = graph.makeContext()
+
+        let sg1 = ctx1!.makeSubgraph()
+        let sg2 = ctx2.makeSubgraph()
+        let a1 = graph.withCurrent(sg1) { graph.makeInput(11) }
+        let a2 = graph.withCurrent(sg2) { graph.makeInput(22) }
+
+        #expect(graph.isValid(sg1))
+        #expect(graph.isValid(sg2))
+
+        // Releasing ctx1 triggers deinit -> invalidates sg1 only; sg2 and a2 remain alive.
+        ctx1 = nil
+        #expect(!graph.isValid(sg1))
+        #expect(!graph.table.isLive(a1.id))
+        #expect(graph.isValid(sg2))
+        #expect(graph.value(of: a2) == 22)
+    }
+
+    @Test func invalidatingGraphContextInsideRuleDefersFreeingUntilRuleExits() {
+        let graph = Graph()
+        let ctx = graph.makeContext()
+        let sg = ctx.makeSubgraph()
+        let attr = graph.withCurrent(sg) { graph.makeInput(7) }
+
+        var notices = 0
+        graph.observe(sg) { notices += 1 }
+
+        let reader = graph.makeRule {
+            ctx.invalidate()
+            #expect(!graph.isValid(sg))
+            #expect(notices == 0)
+            return attr.value * 3
+        }
+
+        #expect(graph.value(of: reader) == 21)
+        #expect(notices == 1)
+        #expect(!graph.table.isLive(attr.id))
+    }
+
+    @Test func invalidatedGraphContextDoesNotFirePendingCallback() {
+        let graph = Graph()
+        let ctx = graph.makeContext()
+        var calls = 0
+        ctx.setUpdateCallback { calls += 1 }
+
+        graph.withBatch {
+            ctx.setNeedsUpdate()
+            ctx.invalidate()
+        }
+        #expect(calls == 0)
+
+        ctx.setNeedsUpdate()
+        #expect(calls == 0)
+    }
 }
