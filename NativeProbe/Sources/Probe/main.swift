@@ -575,5 +575,5 @@ subgraphAddChildSecondaryParentReverse()
 clearAndSetUpdateScenario()
 clearSetUpdateNestedReverse()
 compareValues302Scenarios()
-// compareValues302Edges() // differs on PaddedPOD: native true, own false (bitwise padding)
+compareValues302Edges()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

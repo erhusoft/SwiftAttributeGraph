@@ -87,6 +87,7 @@ SCENARIOS = [
     "clear-set-update-nested-reverse",
     "compare-values-302-scalars",
     "compare-values-302-collections",
+    "compare-values-302-edges",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
