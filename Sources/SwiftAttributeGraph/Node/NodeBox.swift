@@ -47,7 +47,6 @@ final class ClosureRuleNode<Value>: TypedNode<Value> {
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
         let result = body()
-        if graph.isCurrentFrameCancelled, graph.table.state[Int(node)] & NodeState.hasValue != 0 { return false }
         return store(result)
     }
 }
@@ -63,7 +62,6 @@ final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
         let result = rule.value
-        if graph.isCurrentFrameCancelled, graph.table.state[Int(node)] & NodeState.hasValue != 0 { return false }
         return store(result)
     }
 
@@ -90,7 +88,6 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
         var context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
         rule.updateValue(&context)
-        if graph.isCurrentFrameCancelled, graph.table.state[Int(node)] & NodeState.hasValue != 0 { return false }
         return finish(context)
     }
 

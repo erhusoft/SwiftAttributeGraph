@@ -395,7 +395,7 @@ extension Graph {
         evaluatingNode = previousNode
 
         if !frames.isEmpty, frames[frames.count - 1].isCancelled {
-            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending
+            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending | NodeState.hasValue
             return
         }
 

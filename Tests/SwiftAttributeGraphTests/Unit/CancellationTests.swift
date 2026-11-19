@@ -192,7 +192,8 @@ struct CooperativeCancellationTests {
         // Cancelled attempt mutates `attempts` to 2, but preserves confirmed value 101 and version.
         shouldCancel = true
         graph.setValue(2, for: source)
-        #expect(graph.value(of: attr) == 101)
+        // Native AttributeGraph writes the returned value (202) on cancellation while keeping the node dirty.
+        #expect(graph.value(of: attr) == 202)
         #expect(graph.table.versions[Int(attr.id.index)] == confirmedVersion)
 
         // Retry mutates `attempts` to 3 (no rollback of internal rule state) and publishes 302.
@@ -230,5 +231,33 @@ struct CooperativeCancellationTests {
         #expect(graph.value(of: parent) == 11)
         #expect(graph.table.versions[Int(child.id.index)] == childVersion)
         #expect(parentRuns == 1)
+    }
+
+    @Test func cancelledRuleWritesReturnedValueAndRetriesOnNextRead() {
+        let graph = Graph()
+        let a = graph.makeInput(Int64(10))
+        var shouldCancel = false
+        var runs = 0
+        let r = graph.makeRule {
+            runs += 1
+            let v = a.value * 2
+            if shouldCancel {
+                graph.cancelUpdate()
+                return Int64(999)
+            }
+            return v
+        }
+
+        #expect(graph.value(of: r) == 20)
+        #expect(runs == 1)
+
+        graph.setValue(50, for: a)
+        shouldCancel = true
+        #expect(graph.value(of: r) == 999)
+        #expect(runs == 2)
+
+        shouldCancel = false
+        #expect(graph.value(of: r) == 100)
+        #expect(runs == 3)
     }
 }
