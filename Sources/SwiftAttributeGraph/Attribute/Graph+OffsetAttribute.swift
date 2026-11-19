@@ -40,4 +40,25 @@ extension Graph {
     ) -> Attribute<Projected> {
         makeProjectedAttribute(of: source, project: project, isEqual: ==)
     }
+
+    /// Creates an indirect attribute with `(offset, size)` metadata for native-style edge-level range comparison.
+    ///
+    /// - Note: `size == 0` never marks downstream consumers changed; `offset == 0 && size == MemoryLayout<Source>.size`
+    ///   always falls back to marking changed; otherwise `[offset, offset + size)` is compared on `old + offset` vs
+    ///   `new + offset`.
+    public func makeOffsetIndirect<Source: BitwiseCopyable>(
+        of source: Attribute<Source>,
+        offset: Int,
+        size: Int
+    ) -> Attribute<Source> {
+        assertOwnThread()
+        let sourceSize = MemoryLayout<Source>.size
+        precondition(offset >= 0 && offset < 0x3fff_ffff, "invalid offset: \(offset)")
+        precondition(size >= 0, "invalid negative size: \(size)")
+        let (end, overflow) = offset.addingReportingOverflow(size)
+        precondition(!overflow && end <= sourceSize, "offset range [\(offset), +\(size)) exceeds \(sourceSize)")
+        let indirect = makeIndirect(source)
+        offsetIndirects[indirect.id.index] = (offset, size)
+        return indirect
+    }
 }

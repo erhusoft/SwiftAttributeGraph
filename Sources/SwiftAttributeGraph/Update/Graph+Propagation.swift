@@ -31,7 +31,7 @@ extension Graph {
             didDirty = true
             if table.state[n] & NodeState.observed != 0 { queueNotification(node) }
             for dependent in table.outputs[n] {
-                if edgeComparators[dependent]?[node] != nil,
+                if (edgeComparators[dependent]?[node] != nil || offsetIndirects[node] != nil),
                    stickyChangedEdges[dependent]?.contains(node) != true {
                     continue
                 }

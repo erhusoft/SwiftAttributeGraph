@@ -153,6 +153,7 @@ extension Graph {
             observers[node] = nil
             edgeComparators.removeValue(forKey: node)
             stickyChangedEdges.removeValue(forKey: node)
+            offsetIndirects.removeValue(forKey: node)
             table.free(index: node)
         }
         for index in order {

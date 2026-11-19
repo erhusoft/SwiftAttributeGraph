@@ -768,3 +768,4 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
 ## Adaptaciones nativas (rama aislada `codex/native-adaptations-integration`)
 
 - **Comparación parcial en arista sobre cadenas de indirectos (release):** `PERF 20 writes over 20k indirect chain with partial comparator: 16.19 ms` (`0.016188292 s`).
+- **Indirectos con offset `(offset, size)` en arista (release):** `PERF 20 writes over 20k offset-indirect chain: 16.08 ms` (`0.016078041 s`).
