@@ -617,34 +617,34 @@ extension Graph {
         let version = table.versions[Int(source)]
         let count = table.inputs[consumer].count
 
-        if count == 0 || table.inputs[consumer][count - 1].source < source {
-            table.outputs[Int(source)].append(consumerNode)
-            let position = UInt32(table.outputs[Int(source)].count - 1)
-            table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true,
-                                                    keepForNextPrune: keepForNextPrune, changed: true,
-                                                    positionInOutputs: position))
-            return
-        }
-
-        var low = 0, high = count
-        while low < high {
-            let mid = (low + high) >> 1
-            if table.inputs[consumer][mid].source < source {
-                low = mid + 1
-            } else {
-                high = mid
+        // Fast path: appending at the end (the common case: rules usually read in ascending slot order).
+        var low = count
+        if count != 0 && table.inputs[consumer][count - 1].source >= source {
+            low = 0
+            var high = count
+            while low < high {
+                let mid = (low + high) >> 1
+                if table.inputs[consumer][mid].source < source {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            if low < count, table.inputs[consumer][low].source == source {
+                table.inputs[consumer][low].read = true
+                table.inputs[consumer][low].seenVersion = version
+                return
             }
         }
 
-        if low < count, table.inputs[consumer][low].source == source {
-            table.inputs[consumer][low].read = true
-            table.inputs[consumer][low].seenVersion = version
-            return
-        }
-
-        table.outputs[Int(source)].append(evaluatingNode)
+        // New edge, appended or inserted in the middle: the same bookkeeping for both. The reader is always
+        // `consumerNode` (outside a rule `evaluatingNode` is `noNode`), and `positionInOutputs` is where it sits in
+        // the source's output list. [O] verified against get-input-value-dup-prune; [?] mid-list insertion has no
+        // native probe of its own.
+        table.outputs[Int(source)].append(consumerNode)
         let position = UInt32(table.outputs[Int(source)].count - 1)
         table.inputs[consumer].insert(InputEdge(source: source, seenVersion: version, read: true,
+                                                keepForNextPrune: keepForNextPrune, changed: true,
                                                 positionInOutputs: position), at: low)
     }
 
