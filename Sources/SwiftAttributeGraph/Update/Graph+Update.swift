@@ -150,7 +150,8 @@ extension Graph {
     /// ``setUpdate(_:)`` (`AGGraphClearUpdate` in native AttributeGraph).
     ///
     /// [O] Returns a non-nil opaque token even when called nested or outside a rule; reads performed while cleared do
-    /// not record dependency edges.
+    /// not record dependency edges. Every `clearUpdate()` call must be balanced with ``setUpdate(_:)`` to release the
+    /// retained token.
     public static func clearUpdate() -> UnsafeRawPointer? {
         guard let graph = ThreadLocalGraph.current() else {
             let empty = UpdateToken(graph: nil, evaluatingNode: Graph.noNode, isResumingStep: false)

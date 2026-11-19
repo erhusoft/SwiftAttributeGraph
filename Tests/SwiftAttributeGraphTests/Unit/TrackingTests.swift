@@ -172,4 +172,18 @@ import Testing
         #expect(v1 == 11 && v2 == 11 && v3 == 22)
         #expect(runs == 2)
     }
+
+    @Test func creatingAttributeBetweenClearAndSetUpdateSucceedsInOwnEngine() {
+        let graph = Graph()
+        var created: Attribute<Int>?
+        let maker = graph.makeRule {
+            let token = Graph.clearUpdate()
+            created = graph.makeInput(42)
+            Graph.setUpdate(token)
+            return 1
+        }
+        _ = graph.value(of: maker)
+        #expect(created != nil)
+        #expect(graph.value(of: created!) == 42)
+    }
 }
