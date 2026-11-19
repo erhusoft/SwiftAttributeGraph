@@ -57,7 +57,9 @@ extension Graph {
         }
         // Native drains the update callbacks only when a rule is read, never an input [O]. An indirect attribute counts
         // as the rule (or input) it resolves to, as `clearNeedsUpdateFlags` does.
-        if table.isLive(attribute.id) {
+        // The resolution is only needed when a callback could fire, so the common read pays nothing for it
+        // (an extra `resolveIndirect` per read cost +15 % on the 20,000-indirect benchmark, measured since 5466663).
+        if hasPendingUpdateCallback, table.isLive(attribute.id) {
             let node = table.state[Int(attribute.id.index)] & NodeState.indirect != 0
                 ? resolveIndirect(attribute).id.index : attribute.id.index
             if table.state[Int(node)] & NodeState.isRule != 0 { flushUpdateCallbackIfReady() }

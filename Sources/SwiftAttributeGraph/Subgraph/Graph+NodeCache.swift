@@ -104,6 +104,14 @@ extension Graph {
         defaultUpdateContext.setNeedsUpdate()
     }
 
+    /// Whether any live update context is waiting to fire its callback (cheap: the list is tiny).
+    var hasPendingUpdateCallback: Bool {
+        for entry in updateContexts {
+            if let ctx = entry.value, !ctx.isInvalidated, ctx.needsUpdate { return true }
+        }
+        return false
+    }
+
     func flushUpdateCallbackIfReady() {
         guard !isInUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
         isInUpdateCallback = true
