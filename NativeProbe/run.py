@@ -43,6 +43,21 @@ SCENARIOS = [
     "indirect-chain-and-intermediate-death",
     "changed-value-after-skipped-and-indirect",
     "multi-observer-tree-order-and-cancel",
+    "cc-create-input-in-rule-scoped",
+    "cc-create-rule-in-rule-scoped",
+    "cc-create-rule-every-run-scoped",
+    "cc-create-rule-during-update-flags-scoped",
+    "cc-caller-invalidated-after-input",
+    "cc-caller-invalidated-after-rule",
+    "cc-caller-falling-input",
+    "cc-create-placement-caller-scope",
+    "cc-create-placement-explicit-owner",
+    "cc-closure-recreated-plain",
+    "cc-closure-stable-plain",
+    "cc-closure-captured-state-plain",
+    "cc-closure-thin-plain",
+    "cc-closure-stable-equatable",
+    "cc-closure-captured-state-equatable",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
