@@ -2076,3 +2076,39 @@ func clearSetUpdateOutsideRule() {
     graph.setUpdateToken(t)
     print("clear-set-update-outside-rule|tokenNonNil=\(t != nil)")
 }
+
+func compareValues302Scenarios() {
+    struct POD { var a: Int64; var b: Int64 }
+    struct CustomEq: Equatable {
+        var a: Int; var tag: Int
+        static func == (lhs: CustomEq, rhs: CustomEq) -> Bool { lhs.a == rhs.a }
+    }
+    final class PlainClass { var x: Int; init(_ x: Int) { self.x = x } }
+    final class EqClass: Equatable {
+        var x: Int; init(_ x: Int) { self.x = x }
+        static func == (lhs: EqClass, rhs: EqClass) -> Bool { lhs.x == rhs.x }
+    }
+
+    let d = Driver()
+    let intEq = d.compareValues302(Int64(1), Int64(1))
+    let intNe = d.compareValues302(Int64(1), Int64(2))
+    let podEq = d.compareValues302(POD(a: 1, b: 2), POD(a: 1, b: 2))
+    let nanEq = d.compareValues302(Double.nan, Double.nan)
+    let neg0Eq = d.compareValues302(0.0, -0.0)
+    print("compare-values-302-scalars|res=[\(intEq), \(intNe), \(podEq), \(nanEq), \(neg0Eq)]")
+
+    let strEq = d.compareValues302("\u{00E9}", "e\u{0301}")
+    let arrEq = d.compareValues302([1, 2], [1, 2])
+    let optSomeNil: Int?? = .some(nil)
+    let optNil: Int?? = nil
+    let optEq = d.compareValues302(optSomeNil, optNil)
+    print("compare-values-302-collections|res=[\(strEq), \(arrEq), \(optEq)]")
+
+    let eqC = d.compareValues302(EqClass(1), EqClass(1))
+    let plC = d.compareValues302(PlainClass(1), PlainClass(1))
+    let cl1: () -> Int = { 1 }
+    let cl2: () -> Int = { 1 }
+    let clEq = d.compareValues302(cl1, cl2)
+    let custEq = d.compareValues302(CustomEq(a: 1, tag: 1), CustomEq(a: 1, tag: 2))
+    print("compare-values-302-refs|res=[\(eqC), \(plC), \(clEq), \(custEq)]")
+}

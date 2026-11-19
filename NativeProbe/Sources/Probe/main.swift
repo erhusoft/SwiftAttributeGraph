@@ -1,6 +1,9 @@
 #if NATIVE_ATTRIBUTE_GRAPH
 import AttributeGraph
 
+@_silgen_name("AGCompareValues")
+private func c_AGCompareValues(_ lhs: UnsafeRawPointer, _ rhs: UnsafeRawPointer, _ type: Metadata, _ options: UInt32) -> Bool
+
 @_silgen_name("AGGraphResetIndirectAttribute")
 private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 
@@ -84,6 +87,22 @@ final class Driver {
     func makeSubgraph(for attribute: Handle<Int64>) -> SubgraphHandle { Subgraph(graph: graph, attribute: attribute.identifier) }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
+
+    func compareValues302<T>(_ a: T, _ b: T) -> Bool {
+        withUnsafePointer(to: a) { pa in
+            withUnsafePointer(to: b) { pb in
+                c_AGCompareValues(pa, pb, Metadata(T.self), 0x302)
+            }
+        }
+    }
+
+    func compareValues303<T>(_ a: T, _ b: T) -> Bool {
+        withUnsafePointer(to: a) { pa in
+            withUnsafePointer(to: b) { pb in
+                c_AGCompareValues(pa, pb, Metadata(T.self), 0x303)
+            }
+        }
+    }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Subgraph(graph: Graph())
     }
@@ -260,6 +279,28 @@ final class Driver {
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
+
+    func compareValues302<T>(_ a: T, _ b: T) -> Bool {
+        let g = Graph()
+        let attr = g.makeInput(a, comparison: .equatableUnlessPOD)
+        var runs = 0
+        let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
+        _ = g.value(of: r)
+        g.setValue(b, for: attr)
+        _ = g.value(of: r)
+        return runs == 1
+    }
+
+    func compareValues303<T>(_ a: T, _ b: T) -> Bool {
+        let g = Graph()
+        let attr = g.makeInput(a, comparison: .viewValue)
+        var runs = 0
+        let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
+        _ = g.value(of: r)
+        g.setValue(b, for: attr)
+        _ = g.value(of: r)
+        return runs == 1
+    }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Graph().makeSubgraph()
     }
@@ -528,4 +569,5 @@ weakCombinerThreeChildrenInvalidateMiddle()
 subgraphAddChildSecondaryParentReverse()
 clearAndSetUpdateScenario()
 clearSetUpdateNestedReverse()
+compareValues302Scenarios()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

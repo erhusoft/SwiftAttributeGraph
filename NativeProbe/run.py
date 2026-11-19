@@ -85,6 +85,9 @@ SCENARIOS = [
     "subgraph-add-child-secondary-parent-reverse",
     "clear-set-update",
     "clear-set-update-nested-reverse",
+    "compare-values-302-scalars",
+    "compare-values-302-collections",
+    "compare-values-302-refs",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
