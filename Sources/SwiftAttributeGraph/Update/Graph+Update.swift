@@ -129,10 +129,49 @@ extension Graph {
     /// Static convenience for ``withoutUpdate(_:)-5k18s`` that uses the graph whose rule is currently running on this
     /// thread (or runs `body` directly if no rule is running).
     public static func withoutUpdate<T>(_ body: () -> T) -> T {
-        guard let graph = ThreadLocalGraph.current() else {
-            return body()
+        let token = clearUpdate()
+        defer { setUpdate(token) }
+        return body()
+    }
+
+    private final class UpdateToken {
+        let graph: Graph?
+        let evaluatingNode: UInt32
+        let isResumingStep: Bool
+
+        init(graph: Graph?, evaluatingNode: UInt32, isResumingStep: Bool) {
+            self.graph = graph
+            self.evaluatingNode = evaluatingNode
+            self.isResumingStep = isResumingStep
         }
-        return graph.withoutUpdate(body)
+    }
+
+    /// Clears the current thread-local rule update state and returns an opaque token to restore it later via
+    /// ``setUpdate(_:)`` (`AGGraphClearUpdate` in native AttributeGraph).
+    ///
+    /// [O] Returns a non-nil opaque token even when called nested or outside a rule; reads performed while cleared do
+    /// not record dependency edges.
+    public static func clearUpdate() -> UnsafeRawPointer? {
+        guard let graph = ThreadLocalGraph.current() else {
+            let empty = UpdateToken(graph: nil, evaluatingNode: Graph.noNode, isResumingStep: false)
+            return UnsafeRawPointer(Unmanaged.passRetained(empty).toOpaque())
+        }
+        graph.assertOwnThread()
+        let token = UpdateToken(graph: graph, evaluatingNode: graph.evaluatingNode, isResumingStep: graph.isResumingStep)
+        graph.evaluatingNode = Graph.noNode
+        graph.isResumingStep = false
+        return UnsafeRawPointer(Unmanaged.passRetained(token).toOpaque())
+    }
+
+    /// Restores the thread-local rule update state from a token returned by ``clearUpdate()`` (`AGGraphSetUpdate` in
+    /// native AttributeGraph).
+    public static func setUpdate(_ token: UnsafeRawPointer?) {
+        guard let token else { return }
+        let state = Unmanaged<UpdateToken>.fromOpaque(token).takeRetainedValue()
+        guard let graph = state.graph else { return }
+        graph.assertOwnThread()
+        graph.evaluatingNode = state.evaluatingNode
+        graph.isResumingStep = state.isResumingStep
     }
 
     /// Whether `attribute` currently holds a computed or initial value (`Attribute.hasValue` in native

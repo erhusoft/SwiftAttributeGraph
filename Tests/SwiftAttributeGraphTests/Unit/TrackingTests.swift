@@ -139,4 +139,37 @@ import Testing
         #expect(firstBefore == false)
         #expect(firstAfter == true)
     }
+
+    @Test func clearAndSetUpdateMatchesNative() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        let b = graph.makeInput(10)
+        var token1NonNil = false
+        var token2NonNil = false
+        var runs = 0
+
+        let r = graph.makeRule {
+            runs += 1
+            let t1 = Graph.clearUpdate()
+            token1NonNil = (t1 != nil)
+            let t2 = Graph.clearUpdate()
+            token2NonNil = (t2 != nil)
+            let vb = b.value
+            Graph.setUpdate(t2)
+            Graph.setUpdate(t1)
+            let va = a.value
+            return va + vb
+        }
+
+        let v1 = graph.value(of: r)
+        graph.setValue(20, for: b)
+        let v2 = graph.value(of: r)
+        graph.setValue(2, for: a)
+        let v3 = graph.value(of: r)
+
+        #expect(token1NonNil == true)
+        #expect(token2NonNil == true)
+        #expect(v1 == 11 && v2 == 11 && v3 == 22)
+        #expect(runs == 2)
+    }
 }
