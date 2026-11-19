@@ -764,3 +764,7 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
 **Validación y límites:**
 - **`NativeProbe`:** **54 trazas directas** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %**. Para invocar `resetSource` en el `AttributeGraph.framework` nativo desde `NativeProbe/Sources/Probe/main.swift` se usa `AGGraphResetIndirectAttribute(_ attribute: AnyAttribute)` porque `IndirectAttribute.resetSource()` está en `.tbd` pero omitido de `.swiftinterface`.
 - **Tests funcionales:** **257 pruebas en 29 suites** en verde con `swift test` en depuración tras el cambio final. No se reejecutaron las mediciones de rendimiento en `release` (el cambio en `Graph+Invalidation.swift` solo sustituye la iteración `order` por `order.reversed()`, de coste O(1)).
+
+## Adaptaciones nativas (rama aislada `codex/native-adaptations-integration`)
+
+- **Comparación parcial en arista sobre cadenas de indirectos (release):** `PERF 20 writes over 20k indirect chain with partial comparator: 16.19 ms` (`0.016188292 s`).

@@ -320,4 +320,70 @@ struct EdgePartialCompareTests {
         #expect(graph.value(of: consumer) == 7)
         #expect(runs == 2)
     }
+
+    @Test func aToBToAOnIntermediateIndirectKeepsStickyBit() {
+        let graph = Graph()
+        let s1 = graph.makeInput(Payload(x: 1, y: 10))
+        let s2 = graph.makeInput(Payload(x: 9, y: 10))
+        let indB = graph.makeIndirect(s1)
+        let indA = graph.makeIndirect(indB)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return graph.read(indA) { $0.x }
+        }
+        #expect(graph.value(of: consumer) == 1)
+        #expect(runs == 1)
+
+        graph.setSource(s2, for: indB)
+        graph.resetSource(for: indB)
+        #expect(graph.value(of: consumer) == 1)
+        #expect(runs == 2)
+    }
+
+    @Test func pruningAndOwnerInvalidationThroughIndirectsLeaveNoDanglingState() {
+        let graph = Graph()
+        let baseSubgraphs = graph.liveSubgraphCount
+        let sg = graph.makeSubgraph()
+        let flag = graph.makeInput(true)
+        let source = graph.makeInput(Payload(x: 1, y: 2))
+        let indB = graph.withCurrent(sg) { graph.makeIndirect(source) }
+        let indA = graph.withCurrent(sg) { graph.makeIndirect(indB) }
+
+        let consumer = graph.withCurrent(sg) {
+            graph.makeRule {
+                flag.value ? graph.read(indA) { $0.x } : 0
+            }
+        }
+        #expect(graph.value(of: consumer) == 1)
+
+        graph.setValue(false, for: flag)
+        #expect(graph.value(of: consumer) == 0)
+        #expect(graph.edgeComparators[consumer.id.index]?[indA.id.index] == nil)
+
+        graph.invalidate(sg)
+        #expect(graph.liveSubgraphCount == baseSubgraphs)
+        #expect(graph.edgeComparators[consumer.id.index] == nil)
+    }
+
+    @Test func writePerformanceOverLongIndirectChainWithPartialComparator() {
+        let graph = Graph()
+        let source = graph.makeInput(Payload(x: 1, y: 2))
+        var tail = graph.makeIndirect(source)
+        for _ in 1..<20_000 {
+            tail = graph.makeIndirect(tail)
+        }
+        let consumer = graph.makeRule { graph.read(tail) { $0.x } }
+        #expect(graph.value(of: consumer) == 1)
+
+        let clock = ContinuousClock()
+        let elapsed = clock.measure {
+            for i in 0..<20 {
+                graph.setValue(Payload(x: 1, y: i), for: source)
+            }
+        }
+        print("PERF 20 writes over 20k indirect chain with partial comparator: \(elapsed)")
+        #expect(graph.value(of: consumer) == 1)
+    }
 }
