@@ -10,9 +10,30 @@ struct UpdateFrame {
     var inputChanged = false
     /// Fits the original frame's padding on 64-bit platforms; no source is freed while an update is active.
     var waiting: UInt32 = Graph.noNode
+    /// Cooperative cancellation flag set by `Graph.cancelUpdate()`.
+    var isCancelled = false
 }
 
 extension Graph {
+    // MARK: Cancellation
+
+    /// Cooperatively marks all active frames on the current update stack as cancelled.
+    public func cancelUpdate() {
+        assertOwnThread()
+        precondition(!frames.isEmpty, "cancelUpdate: no update is currently running")
+        for index in frames.indices {
+            if frames[index].isCancelled { continue }
+            frames[index].isCancelled = true
+        }
+    }
+
+    /// Whether the current update frame has been marked cancelled via ``cancelUpdate()``.
+    public var updateWasCancelled: Bool {
+        assertOwnThread()
+        precondition(!frames.isEmpty, "updateWasCancelled: no update is currently running")
+        return frames[frames.count - 1].isCancelled
+    }
+
     // MARK: Reading
 
     /// The value of an attribute, bringing it up to date first if it is dirty.
