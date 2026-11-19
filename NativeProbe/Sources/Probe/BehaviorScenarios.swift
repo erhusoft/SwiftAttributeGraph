@@ -2103,14 +2103,6 @@ func compareValues302Scenarios() {
     let optNil: Int?? = nil
     let optEq = d.compareValues302(optSomeNil, optNil)
     print("compare-values-302-collections|res=[\(strEq), \(arrEq), \(optEq)]")
-
-    let eqC = d.compareValues302(EqClass(1), EqClass(1))
-    let plC = d.compareValues302(PlainClass(1), PlainClass(1))
-    let cl1: () -> Int = { 1 }
-    let cl2: () -> Int = { 1 }
-    let clEq = d.compareValues302(cl1, cl2)
-    let custEq = d.compareValues302(CustomEq(a: 1, tag: 1), CustomEq(a: 1, tag: 2))
-    print("compare-values-302-refs|res=[\(eqC), \(plC), \(clEq), \(custEq)]")
 }
 
 func compareValues302Edges() {

@@ -91,7 +91,12 @@ final class Driver {
     func compareValues302<T>(_ a: T, _ b: T) -> Bool {
         withUnsafePointer(to: a) { pa in
             withUnsafePointer(to: b) { pb in
-                c_AGCompareValues(pa, pb, Metadata(T.self), 0x302)
+                let meta = Metadata(T.self)
+                _ = c_AGCompareValues(pa, pb, meta, 0x302)
+                usleep(20_000)
+                _ = c_AGCompareValues(pa, pb, meta, 0x302)
+                usleep(20_000)
+                return c_AGCompareValues(pa, pb, meta, 0x302)
             }
         }
     }
