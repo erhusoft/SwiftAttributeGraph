@@ -53,7 +53,9 @@ extension Graph {
         if subgraphs.isFalling(index: subgraph.id.index) { return }
 
         if evaluatingNode != Graph.noNode || isInvalidating || deferringSubgraphInvalidationDepth > 0 {
-            for index in subgraphs.postOrder(from: subgraph.id.index) { subgraphs.setFalling(index: index, true) }
+            let plan = subgraphs.invalidationPlan(from: subgraph.id.index)
+            for index in plan.toInvalidate { subgraphs.setFalling(index: index, true) }
+            for (p, c) in plan.detachedEdges { subgraphs.removeChild(c, from: p) }
             deferredInvalidations.append(subgraph)
             return
         }
@@ -95,8 +97,10 @@ extension Graph {
         isInvalidating = true
         defer { isInvalidating = false }
 
-        let order = subgraphs.postOrder(from: root.id.index)           // children before parents
-        for index in order { subgraphs.setFalling(index: index, true) }
+        let plan = subgraphs.invalidationPlan(from: root.id.index)
+        for index in plan.toInvalidate { subgraphs.setFalling(index: index, true) }
+        for (p, c) in plan.detachedEdges { subgraphs.removeChild(c, from: p) }
+        let order = Array(plan.toInvalidate.reversed())                 // children before parents
 
         // 1. The notices, with everything still alive and readable (parents before children, reverse child creation order).
         for index in order.reversed() {

@@ -394,11 +394,24 @@ extension Graph {
     /// that is not (kept from M5; not observed natively). With a live caller subgraph, rules create there: evaluating a
     /// rule does not change the current subgraph, as in native AttributeGraph.
     func subgraphForCreating(in owner: UInt32) -> SubgraphID {
-        var index = owner
-        while subgraphs.isFalling(index: index), let parent = subgraphs.parent(of: subgraphs.id(at: index)) {
-            index = parent.index
+        if !subgraphs.isFalling(index: owner) {
+            return subgraphs.id(at: owner)
         }
-        return subgraphs.id(at: index)
+        var queue: [UInt32] = subgraphs.parents(of: owner)
+        var visited: Set<UInt32> = [owner]
+        var head = 0
+        while head < queue.count {
+            let candidate = queue[head]
+            head += 1
+            if !visited.insert(candidate).inserted { continue }
+            if !subgraphs.isFalling(index: candidate) {
+                return subgraphs.id(at: candidate)
+            }
+            for p in subgraphs.parents(of: candidate) where !visited.contains(p) {
+                queue.append(p)
+            }
+        }
+        return rootSubgraph.id
     }
 
     // MARK: What changed (for stateful rules)

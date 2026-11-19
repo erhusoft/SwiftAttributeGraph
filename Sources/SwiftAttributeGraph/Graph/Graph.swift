@@ -72,14 +72,50 @@ public final class Graph {
 
     // MARK: Subgraphs
 
+    private var nextSubgraphContextID: UInt32 = 2
+
+    /// Creates a new invalidation context distinct from the root subgraph's default context.
+    public func makeSubgraphContext() -> SubgraphContext {
+        assertOwnThread()
+        let id = nextSubgraphContextID
+        nextSubgraphContextID &+= 1
+        if nextSubgraphContextID == 0 { nextSubgraphContextID = 2 }
+        return SubgraphContext(rawValue: id)
+    }
+
+    /// Returns the invalidation context of `subgraph`.
+    public func context(of subgraph: Subgraph) -> SubgraphContext {
+        assertOwnThread()
+        precondition(subgraphs.isLive(subgraph.id), "context(of:): the subgraph was invalidated")
+        return SubgraphContext(rawValue: subgraphs.context(of: subgraph.id.index))
+    }
+
     /// Creates a subgraph as a child of `parent` (by default the current subgraph). Attributes created while it is
-    /// current belong to it, and it dies with its parent.
-    public func makeSubgraph(parent: Subgraph? = nil) -> Subgraph {
+    /// current belong to it, and it dies with its parent when they share the same invalidation context.
+    public func makeSubgraph(parent: Subgraph? = nil, context: SubgraphContext? = nil) -> Subgraph {
         assertOwnThread()
         let owner = parent?.id ?? currentSubgraph
         precondition(subgraphs.isLive(owner), "makeSubgraph: the parent subgraph was invalidated")
         precondition(!subgraphs.isFalling(index: owner.index), "makeSubgraph: the parent subgraph is being invalidated")
-        return Subgraph(id: subgraphs.allocate(parent: owner))
+        return Subgraph(id: subgraphs.allocate(parent: owner, context: context?.rawValue))
+    }
+
+    /// Links `child` under `parent` in the subgraph DAG. Rejects self-links and cycles.
+    public func addChild(_ child: Subgraph, to parent: Subgraph) {
+        assertOwnThread()
+        precondition(subgraphs.isLive(parent.id) && !subgraphs.isFalling(index: parent.id.index),
+                     "addChild: the parent subgraph was invalidated")
+        precondition(subgraphs.isLive(child.id) && !subgraphs.isFalling(index: child.id.index),
+                     "addChild: the child subgraph was invalidated")
+        subgraphs.addChild(child.id.index, to: parent.id.index)
+    }
+
+    /// Unlinks `child` from `parent` in the subgraph DAG without invalidating `child`.
+    public func removeChild(_ child: Subgraph, from parent: Subgraph) {
+        assertOwnThread()
+        precondition(subgraphs.isLive(parent.id), "removeChild: the parent subgraph was invalidated")
+        precondition(subgraphs.isLive(child.id), "removeChild: the child subgraph was invalidated")
+        subgraphs.removeChild(child.id.index, from: parent.id.index)
     }
 
     /// Runs `body` with `subgraph` as the current one, so the attributes created inside belong to it.
@@ -105,17 +141,12 @@ public final class Graph {
         return subgraphs.isLive(subgraph.id) && !subgraphs.isFalling(index: subgraph.id.index)
     }
 
-    /// Whether `subgraph` is `other` or an ancestor of `other` in the subgraph tree (`Subgraph.isAncestor(of:)` in
-    /// native AttributeGraph). Uses an iterative walk up the parent links.
+    /// Whether `subgraph` is `other` or an ancestor of `other` in the subgraph DAG (`Subgraph.isAncestor(of:)` in
+    /// native AttributeGraph).
     public func isAncestor(_ subgraph: Subgraph, of other: Subgraph) -> Bool {
         assertOwnThread()
         guard isValid(subgraph), isValid(other) else { return false }
-        var cursor: SubgraphID? = other.id
-        while let current = cursor {
-            if current == subgraph.id { return true }
-            cursor = subgraphs.parent(of: current)
-        }
-        return false
+        return subgraphs.isAncestor(subgraph.id.index, of: other.id.index)
     }
 
     /// Returns the caller-defined ``AttributeFlags`` attached to `attribute` (default `[]`).
