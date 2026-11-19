@@ -20,6 +20,8 @@ struct SubgraphTable {
     private var currentEpoch: UInt32 = 0
     private var freeList: [UInt32] = []
     private(set) var liveCount = 0
+    /// Number of subgraphs ever allocated, the root included.
+    private(set) var createdCount = 0
 
     /// Number of slots ever created (live or free).
     var slotCount: Int { generations.count }
@@ -29,6 +31,7 @@ struct SubgraphTable {
 
     mutating func allocate(parent: SubgraphID?, context: UInt32? = nil) -> SubgraphID {
         liveCount += 1
+        createdCount += 1
         let index: UInt32
         if let reused = freeList.popLast() {
             index = reused

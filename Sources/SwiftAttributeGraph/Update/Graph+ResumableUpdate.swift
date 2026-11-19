@@ -51,6 +51,7 @@ extension Graph {
                 | NodeState.hasValue
             if outcome.changed {
                 globalVersion &+= 1
+                changeCount &+= 1
                 table.versions[n] &+= 1
             } else {
                 for dependent in table.outputs[n] {

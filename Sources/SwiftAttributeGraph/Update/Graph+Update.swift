@@ -114,6 +114,7 @@ extension Graph {
                 return result
             }
             let resolved = resolveIndirect(attribute)
+            if frames.isEmpty && table.state[Int(resolved.id.index)] & NodeState.isRule != 0 { transactionCount &+= 1 }
             if let reader = offsetFieldReaders[resolved.id.index] {
                 guard let result = reader() as? Value else {
                     preconditionFailure("offsetFieldReaders: projected field type mismatch")
@@ -130,6 +131,7 @@ extension Graph {
             return value
         }
 
+        if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1 }
         if table.state[n] & NodeState.dirty != 0 {
             precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
             update(index)
@@ -357,6 +359,7 @@ extension Graph {
         let oldValue = typedNode(attribute).value
         guard typedNode(attribute).store(value) else { return }
         globalVersion &+= 1
+        changeCount &+= 1
         table.versions[index] &+= 1
         if table.state[index] & NodeState.observed != 0 { queueNotification(UInt32(index)) }
         if let oldValue {
@@ -378,6 +381,11 @@ extension Graph {
     /// nested call still uses the native stack and is the documented limit that M4 removes.
     func update(_ root: UInt32) {
         let base = frames.count
+        // An indirect attribute is transparent: the update it starts is counted when it reaches its first rule.
+        if base == 0 {
+            if table.state[Int(root)] & NodeState.indirect != 0 { countsUpdateOnNextRule = true } else { updateCount &+= 1 }
+        }
+        defer { countsUpdateOnNextRule = false }
         push(root)
         outer: while frames.count > base {
             let top = frames.count - 1
@@ -464,6 +472,15 @@ extension Graph {
         precondition(table.state[n] & NodeState.evaluating == 0,
                      "cycle detected: an attribute depends on itself through its own rule")
         table.state[n] |= NodeState.evaluating
+        // A node without a value that is first evaluated inside another update counts as one more update.
+        if table.state[n] & NodeState.indirect == 0 {
+            if countsUpdateOnNextRule {
+                countsUpdateOnNextRule = false
+                updateCount &+= 1
+            } else if !frames.isEmpty && table.state[n] & NodeState.hasValue == 0 {
+                updateCount &+= 1
+            }
+        }
         frames.append(UpdateFrame(node: node, next: 0))
     }
 
@@ -503,6 +520,7 @@ extension Graph {
             | NodeState.hasValue
         if changed {
             globalVersion &+= 1
+            changeCount &+= 1
             table.versions[n] &+= 1
         } else {
             for dependent in table.outputs[n] {

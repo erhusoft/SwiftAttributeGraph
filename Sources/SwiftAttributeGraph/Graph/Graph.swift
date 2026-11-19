@@ -49,6 +49,13 @@ public final class Graph {
     /// Number of times a rule has been executed (recalculations) since the graph was created.
     public internal(set) var recalculationCount = 0
 
+    // Counters behind `counter(for:)` (see `Graph+Counters.swift`).
+    var transactionCount: UInt64 = 0
+    var updateCount: UInt64 = 0
+    var changeCount: UInt64 = 0
+    var createdNodeCount: UInt64 = 0
+    var countsUpdateOnNextRule = false
+
     // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
     var dirtyStack: [UInt32] = []
     var pendingNotifications: [UInt32] = []
@@ -285,6 +292,7 @@ public final class Graph {
     public func makeInput<Value>(_ value: Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
         assertOwnThread()
         let id = allocate(InputNode(value: value, isEqual: comparators.comparator(comparison, for: Value.self)), state: NodeState.hasValue)
+        changeCount &+= 1
         return Attribute(id: id)
     }
 
@@ -504,6 +512,7 @@ public final class Graph {
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
         precondition(!subgraphs.isFalling(index: currentSubgraph.index), "the current subgraph is being invalidated")
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
+        createdNodeCount &+= 1
         subgraphs.add(member: id.index, to: currentSubgraph)
         return id
     }
