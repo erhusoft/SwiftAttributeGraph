@@ -91,6 +91,7 @@ SCENARIOS = [
     "get-input-value-explicit-reader",
     "get-input-value-dup-prune",
     "get-input-value-non-rule-reader",
+    "current-attribute-was-modified-invalidate",
     "get-value-opt4",
     "get-value-opt2",
     "get-value-opt6",

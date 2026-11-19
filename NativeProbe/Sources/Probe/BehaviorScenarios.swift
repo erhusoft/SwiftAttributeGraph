@@ -2155,6 +2155,34 @@ func getInputValueExplicitReaderScenario() {
     print("get-input-value-explicit-reader|v1=\(v1)|v2=\(v2)|runs=\(runs)")
 }
 
+func currentAttributeWasModifiedInvalidateScenario() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    var mods: [Bool] = []
+    var innerMods: [Bool] = []
+
+    let inner: Handle<Int64> = graph.rule {
+        innerMods.append(graph.currentAttributeWasModified())
+        return graph.read(a) * 10
+    }
+    let outer: Handle<Int64> = graph.rule {
+        mods.append(graph.currentAttributeWasModified())
+        return graph.read(inner) + 1
+    }
+
+    _ = graph.read(outer)                 // initial
+    graph.write(Int64(2), to: a)          // input change
+    _ = graph.read(outer)
+    graph.invalidateValue(of: outer)      // self invalidateValue
+    _ = graph.read(outer)
+    graph.write(Int64(3), to: a)          // second eval without invalidate
+    _ = graph.read(outer)
+    graph.invalidateValue(of: inner)      // invalidate inner (another rule)
+    _ = graph.read(outer)
+
+    print("current-attribute-was-modified-invalidate|outer=\(mods)|inner=\(innerMods)")
+}
+
 func getInputValueDupPruneAndNonRuleScenarios() {
     // 1. Duplicates & pruning
     do {
