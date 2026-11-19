@@ -123,4 +123,20 @@ import Testing
 
         #expect(results == [true, true, true, false, true, true, false, false])
     }
+
+    @Test func anyInputsChangedBeforeReadOnFirstEvaluationIsFalse() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        var firstBefore = true
+        var firstAfter = false
+        let r = graph.makeRule {
+            firstBefore = graph.anyInputsChanged()
+            let va = a.value
+            firstAfter = graph.anyInputsChanged()
+            return va
+        }
+        _ = graph.value(of: r)
+        #expect(firstBefore == false)
+        #expect(firstAfter == true)
+    }
 }

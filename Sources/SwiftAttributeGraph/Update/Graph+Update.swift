@@ -463,10 +463,9 @@ extension Graph {
         return nil
     }
 
-    /// Whether any input edge of `node` was changed, ignoring `excluded`. Every input counts on the first run.
+    /// Whether any input edge of `node` was changed, ignoring `excluded`.
     @usableFromInline func anyInputChanged(of node: UInt32, excluding excluded: [UInt32]) -> Bool {
         let n = Int(node)
-        if table.state[n] & NodeState.hasValue == 0 { return true }
         for edge in table.inputs[n] where edge.changed && !excluded.contains(edge.source) { return true }
         return false
     }
@@ -484,7 +483,7 @@ extension Graph {
         if count == 0 || table.inputs[consumer][count - 1].source < source {
             table.outputs[Int(source)].append(evaluatingNode)
             let position = UInt32(table.outputs[Int(source)].count - 1)
-            table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true,
+            table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true, changed: true,
                                                     positionInOutputs: position))
             return
         }
