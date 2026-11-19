@@ -66,6 +66,7 @@ SCENARIOS = [
     "offset-whole-value",
     "subgraph-dag-add-child",
     "context-update-callback",
+    "cooperative-cancel",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

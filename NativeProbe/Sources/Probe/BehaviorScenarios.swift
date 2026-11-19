@@ -1631,3 +1631,31 @@ func contextUpdateCallback() {
     let callsAfterReentrant = calls
     print("context-update-callback|before=\(callsBeforeRead)|after=\(callsAfterRead)|reentrant=\(callsAfterReentrant)")
 }
+
+func cooperativeCancel() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = false
+    var runs = 0
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let v1 = graph.read(r)
+    let r1 = runs
+
+    graph.write(Int64(50), to: a)
+    shouldCancel = true
+    let v2 = graph.read(r)
+    let r2 = runs
+
+    shouldCancel = false
+    let v3 = graph.read(r)
+    let r3 = runs
+    print("cooperative-cancel|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}

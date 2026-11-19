@@ -4,6 +4,9 @@ import AttributeGraph
 @_silgen_name("AGGraphResetIndirectAttribute")
 private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 
+@_silgen_name("AGGraphCancelUpdate")
+private func AGGraphCancelUpdate()
+
 final class SubgraphObserverHandle {
     private let onCancel: () -> Void
     init(_ onCancel: @escaping () -> Void) { self.onCancel = onCancel }
@@ -149,6 +152,7 @@ final class Driver {
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
     func setUpdateCallback(_ body: @escaping () -> Void) { graph.onUpdate(body) }
     func setNeedsUpdate() { graph.setNeedsUpdate() }
+    func cancelUpdate() { AGGraphCancelUpdate() }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = attribute.breadthFirstSearch(options: .searchInputs) { _ in
@@ -312,6 +316,7 @@ final class Driver {
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
     func setUpdateCallback(_ body: @escaping () -> Void) { graph.setUpdateCallback(body) }
     func setNeedsUpdate() { graph.setNeedsUpdate() }
+    func cancelUpdate() { graph.cancelUpdate() }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = graph.breadthFirstSearch(from: attribute, options: .searchInputs) { _ in
@@ -491,3 +496,4 @@ directEdgeEqualAndDifferentWrite()
 offsetWholeValue()
 subgraphDagAddChild()
 contextUpdateCallback()
+cooperativeCancel()
