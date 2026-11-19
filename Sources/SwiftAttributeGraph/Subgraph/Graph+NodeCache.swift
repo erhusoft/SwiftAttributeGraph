@@ -42,6 +42,7 @@ extension Graph {
     /// (matching `AGGraphSetNeedsUpdate`).
     public func setNeedsUpdate() {
         assertOwnThread()
+        needsUpdateFlag = true
         defaultUpdateContext.setNeedsUpdate()
     }
 

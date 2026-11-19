@@ -57,6 +57,10 @@ public final class Graph {
     var changeCount: UInt64 = 0
     var createdNodeCount: UInt64 = 0
     var countsUpdateOnNextRule = false
+    /// `counter(for: .graphID)`; the default context is `graphCounterID + 1`.
+    let graphCounterID: UInt64
+    /// Raised by ``setNeedsUpdate()``, lowered at the start of the next top-level read of a rule.
+    var needsUpdateFlag = false
 
     // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
     var dirtyStack: [UInt32] = []
@@ -80,6 +84,7 @@ public final class Graph {
     public init() {
         let tag = GraphRegistry.reserveTag()
         graphTag = tag
+        graphCounterID = GraphRegistry.reserveCounterIDs()
         table.generationBase = tag << 16
         subgraphs.generationBase = tag << 16
         let root = subgraphs.allocate(parent: nil)

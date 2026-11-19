@@ -1,12 +1,9 @@
 extension Graph {
-    /// Selectors of ``counter(for:)``: the subset of `AGGraphCounterQueryType` that the engine reproduces.
+    /// Selectors of ``counter(for:)``: the 14 of `AGGraphCounterQueryType`, each checked against a native probe on
+    /// macOS 15.8.3 [O] except where a case says `[?]`.
     ///
-    /// Native AttributeGraph has 14 selectors. The engine implements the ones whose value follows an event the engine
-    /// also has, each checked against a native probe on macOS 15.8.3 [O]. The rest are not provided [?]:
-    /// `contextID` and `graphID` (process-wide identifiers, `2`/`1` for the first graph and `4`/`3` for the second),
-    /// `contextThreadUpdating` and `threadUpdating` (`1` inside an update on the main thread, `0` outside),
-    /// `contextNeedsUpdate` and `needsUpdate` (`1` after `setNeedsUpdate`, back to `0` at the next read of a rule) and
-    /// `mainThreadUpdates` (equal to `updates` in every probe, all of them on the main thread).
+    /// The engine has no shared graph contexts (`AGGraphCreateShared`), so every graph has exactly one context and the
+    /// "context" selectors repeat the graph's own value [?].
     public enum CounterQueryType: Sendable {
         /// Live attributes (`nodeCount`). Native AttributeGraph does not count indirect attributes here, the engine does
         /// (a rule plus an indirect attribute over it is `1` natively and `2` here) [O].
@@ -28,6 +25,31 @@ extension Graph {
         case subgraphs
         /// Subgraphs ever created, live or freed, the root excluded.
         case createdSubgraphs
+        /// Process-wide number of the graph's default context. A graph takes two consecutive numbers from one counter
+        /// that starts at `1`: the graph first, its context next (`graphID` 1 and `contextID` 2 for the first graph of
+        /// the process, 3 and 4 for the second). Releasing graphs, creating subgraphs or attributes does not consume or
+        /// give back numbers [O]. Native `AGGraphCreateShared` adds a context that takes one more number and keeps the
+        /// graph's `graphID` [O]; the engine does not model shared contexts, so its `makeContext()` takes none [?].
+        case contextID
+        /// Process-wide number of the graph, always the one just before ``contextID`` [O].
+        case graphID
+        /// `1` while a rule of this graph is running (also in a nested rule), `0` outside any update, inside
+        /// `withoutUpdate` called outside a rule, and for a graph other than the one whose rule is running [O].
+        /// Native has a per-thread and a per-context variant; with one context and one thread per graph they coincide
+        /// [?].
+        case contextThreadUpdating
+        /// `1` while a rule of this graph is running, `0` otherwise; see ``contextThreadUpdating`` [O].
+        case threadUpdating
+        /// `1` after ``Graph/setNeedsUpdate()``; a second call does not add up, reading an input or writing does not
+        /// clear it, and the next top-level read of a rule (clean or not, direct or through an indirect attribute)
+        /// sets it back to `0`. Raised inside a rule it stays up when that update ends [O]. Native tracks it per
+        /// context as well as per graph; with one context they coincide [?].
+        case contextNeedsUpdate
+        /// Same as ``contextNeedsUpdate`` for the graph as a whole [O].
+        case needsUpdate
+        /// Updates started on the main thread. Equal to ``updates`` in every probe, including graphs driven from a
+        /// background `Thread`, so the engine returns ``updates`` and does not look at the thread [?].
+        case mainThreadUpdates
     }
 
     /// The value of a counter of the graph (`AGGraphGetCounter` in native AttributeGraph).
@@ -46,6 +68,11 @@ extension Graph {
         case .createdNodes: return createdNodeCount
         case .subgraphs: return UInt64(subgraphs.liveCount - 1)
         case .createdSubgraphs: return UInt64(subgraphs.createdCount - 1)
+        case .contextID: return graphCounterID + 1
+        case .graphID: return graphCounterID
+        case .contextThreadUpdating, .threadUpdating: return frames.isEmpty ? 0 : 1
+        case .contextNeedsUpdate, .needsUpdate: return needsUpdateFlag ? 1 : 0
+        case .mainThreadUpdates: return updateCount
         }
     }
 }

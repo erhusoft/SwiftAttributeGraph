@@ -59,6 +59,8 @@ enum GraphRegistry {
         var released: [UInt32] = []
         var releasedHead = 0
         var next: UInt32 = 1
+        /// Next value of the process-wide identifier counter behind `graphID` and `contextID`.
+        var nextCounterID: UInt64 = 1
     }
 
     private static let lock = RegistryLock()
@@ -85,6 +87,18 @@ enum GraphRegistry {
                 return tag
             }
             return 0
+        }
+    }
+
+    /// Reserves the two consecutive numbers a new graph shows through `counter(for: .graphID)` and
+    /// `counter(for: .contextID)`: the first is the graph, the second its default context. Native AttributeGraph draws
+    /// both from one process-wide counter that starts at `1` and never reuses a number, so the first graph is `1`/`2`,
+    /// the second `3`/`4` and so on, also after graphs were released and whatever was created inside them [O].
+    static func reserveCounterIDs() -> UInt64 {
+        lock.withLock {
+            let id = state.nextCounterID
+            state.nextCounterID += 2
+            return id
         }
     }
 
