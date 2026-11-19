@@ -342,7 +342,7 @@ public final class Graph {
         while table.isLive(cursor), table.state[Int(cursor.index)] & NodeState.indirect != 0 {
             precondition(cursor.index != index,
                          "setSource(_:for:): cycle detected (an indirect attribute cannot redirect to itself)")
-            let nextBox = table.box(at: cursor.index) as! IndirectNode<Value>
+            guard let nextBox = table.box(at: cursor.index) as? AnyIndirectNode else { break }
             cursor = nextBox.source
         }
         precondition(cursor.index != index,
@@ -350,10 +350,8 @@ public final class Graph {
 
         let oldResolved = resolveIndirect(Attribute<Value>(id: box.source))
         let newResolved = resolveIndirect(newSource)
-        let oldVal = (table.isLive(oldResolved.id) && table.state[Int(oldResolved.id.index)] & NodeState.hasValue != 0)
-            ? typedNode(oldResolved).value : nil
-        let newVal = (table.isLive(newResolved.id) && table.state[Int(newResolved.id.index)] & NodeState.hasValue != 0)
-            ? typedNode(newResolved).value : nil
+        let oldVal = resolvedValueIfAvailable(of: oldResolved)
+        let newVal = resolvedValueIfAvailable(of: newResolved)
 
         let s = Int(newSource.id.index)
         box.source = newSource.id
@@ -510,6 +508,15 @@ public final class Graph {
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
         subgraphs.add(member: id.index, to: currentSubgraph)
         return id
+    }
+
+    private func resolvedValueIfAvailable<Value>(of resolved: Attribute<Value>) -> Value? {
+        guard table.isLive(resolved.id),
+              table.state[Int(resolved.id.index)] & NodeState.hasValue != 0 else { return nil }
+        if let reader = offsetFieldReaders[resolved.id.index] {
+            return reader() as? Value
+        }
+        return typedNode(resolved).value
     }
 
     @usableFromInline func typedNode<Value>(_ attribute: Attribute<Value>) -> TypedNode<Value> {

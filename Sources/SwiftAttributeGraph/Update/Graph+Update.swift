@@ -76,6 +76,13 @@ extension Graph {
                 return result
             }
             let resolved = resolveIndirect(attribute)
+            if let reader = offsetFieldReaders[resolved.id.index] {
+                guard let result = reader() as? Value else {
+                    preconditionFailure("offsetFieldReaders: projected field type mismatch")
+                }
+                if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+                return result
+            }
             if table.state[Int(resolved.id.index)] & NodeState.dirty != 0 {
                 precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
                 update(resolved.id.index)

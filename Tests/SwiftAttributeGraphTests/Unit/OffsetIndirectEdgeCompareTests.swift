@@ -410,4 +410,38 @@ struct OffsetIndirectEdgeCompareTests {
         #expect(graph.offsetIndirects[field.id.index] == nil)
         #expect(graph.offsetFieldReaders[field.id.index] == nil)
     }
+
+    @Test
+    func indirectOverOffsetFieldAttributeComposesAndRedirects() {
+        let graph = Graph()
+        let src = graph.makeInput(Pair(a: 1, b: 10))
+        let srcInd = graph.makeIndirect(src)
+        let field = graph.makeOffsetFieldAttribute(of: srcInd, keyPath: \.b)
+        let fieldInd = graph.makeIndirect(field)
+        let other = graph.makeInput(Int64(99))
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return fieldInd.value
+        }
+
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 1)
+
+        graph.setValue(Pair(a: 2, b: 10), for: src)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 1)
+
+        graph.setValue(Pair(a: 2, b: 20), for: src)
+        #expect(graph.value(of: consumer) == 20)
+        #expect(runs == 2)
+
+        graph.setSource(other, for: fieldInd)
+        #expect(graph.value(of: consumer) == 99)
+        #expect(runs == 3)
+
+        graph.resetSource(for: fieldInd)
+        #expect(graph.value(of: consumer) == 20)
+        #expect(runs == 4)
+    }
 }
