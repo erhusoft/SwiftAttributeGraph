@@ -152,6 +152,13 @@ final class Driver {
         }
     }
     var nodeCount: Int { Int(graph.counter(for: .nodes)) }
+    /// The counters that both engines reproduce: nodes, transactions, updates, changes, createdNodes, subgraphs,
+    /// createdSubgraphs.
+    func counters() -> String {
+        [graph.counter(for: .nodes), graph.counter(for: .transactions), graph.counter(for: .updates),
+         graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
+         graph.counter(for: .createdSubgraphs)].map(String.init).joined(separator: ",")
+    }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
@@ -360,6 +367,11 @@ final class Driver {
         return SubgraphObserverHandle { token.cancel() }
     }
     var nodeCount: Int { graph.nodeCount }
+    func counters() -> String {
+        [graph.counter(for: .nodes), graph.counter(for: .transactions), graph.counter(for: .updates),
+         graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
+         graph.counter(for: .createdSubgraphs)].map(String.init).joined(separator: ",")
+    }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
@@ -628,4 +640,5 @@ getValueOptionScenario(name: "get-value-opt2", options: 2)
 getValueOptionScenario(name: "get-value-opt6", options: 6)
 getCurrentAttributeScenario()
 currentAttributeWasModifiedScenario()
+getCounterScenario()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

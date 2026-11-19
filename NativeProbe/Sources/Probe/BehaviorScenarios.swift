@@ -2312,3 +2312,72 @@ func currentAttributeWasModifiedScenario() {
     for handle in [writer, silent, sameValue] { _ = d.read(handle) }
     print("current-attribute-was-modified|outside=\(outside)|\(log)")
 }
+
+/// `AGGraphGetCounter`: the selectors both engines reproduce (nodes, transactions, updates, changes, createdNodes,
+/// subgraphs, createdSubgraphs) as `N,T,U,C,CN,S,CS` at each step. `contextID`, `graphID`, `threadUpdating`,
+/// `needsUpdate` and `mainThreadUpdates` are not printed: the engine does not reproduce them.
+func getCounterScenario() {
+    let d = Driver()
+    var log: [String] = []
+    func snap(_ label: String) { log.append("\(label)=\(d.counters())") }
+    func snapTUC(_ label: String) {
+        log.append("\(label)=\(d.counters().split(separator: ",").dropFirst().prefix(3).joined(separator: ","))")
+    }
+    snap("new")
+    let a = d.input(Int64(1))
+    for _ in 0..<4 { _ = d.input(Int64(0)) }
+    snap("5inputs")
+    let b: Handle<Int64> = d.rule { d.read(a) + 1 }
+    let c: Handle<Int64> = d.rule { d.read(b) + 1 }
+    snap("2rules")
+    _ = d.read(a); _ = d.read(a); d.write(Int64(1), to: a)
+    snap("readsAndSameWrite")
+    d.write(Int64(5), to: a); d.write(Int64(6), to: a)
+    snap("writes")
+    _ = d.read(c)
+    snap("firstReadChain")
+    _ = d.read(c); _ = d.read(c)
+    snap("cleanReads")
+    d.write(Int64(7), to: a); d.write(Int64(8), to: a)
+    _ = d.read(c)
+    snap("reevaluate")
+    // A rule that gives the same value again: the write is a change, the rule's result is not.
+    let x = d.input(Int64(1))
+    let y: Handle<Int64> = d.rule { _ = d.read(x); return 0 }
+    _ = d.read(y)
+    d.write(Int64(2), to: x)
+    _ = d.read(y)
+    snap("cut")
+    // Diamond, first evaluation.
+    let d1: Handle<Int64> = d.rule { d.read(a) }
+    let d2: Handle<Int64> = d.rule { d.read(a) }
+    let top: Handle<Int64> = d.rule { d.read(d1) + d.read(d2) }
+    _ = d.read(top)
+    snap("diamond")
+    d.write(Int64(9), to: a)
+    _ = d.read(top)
+    snap("diamondReevaluate")
+    // A rule whose result is skipped: mid gives the same value and tail does not run.
+    let mid: Handle<Int64> = d.rule { _ = d.read(a); return 0 }
+    let tail: Handle<Int64> = d.rule { d.read(mid) }
+    _ = d.read(tail)
+    d.write(Int64(10), to: a)
+    let before = d.counters()
+    _ = d.read(tail)
+    log.append("skipped=\(before)->\(d.counters())")
+    // A child subgraph: counters of subgraphs and nodes.
+    let child = d.makeSubgraph()
+    _ = d.withSubgraph(child) { d.input(Int64(1)) }
+    snap("child")
+    d.invalidate(child)
+    snap("childInvalidated")
+    // Reads through an indirect attribute. Native AttributeGraph does not count indirect attributes in `nodes` and
+    // `createdNodes` (the engine does), so only transactions, updates and changes are printed from here on.
+    let rule: Handle<Int64> = d.rule { 3 }
+    let ind = d.indirect(rule)
+    _ = d.read(d.attribute(of: ind))
+    snapTUC("indirectFirst")
+    _ = d.read(d.attribute(of: ind))
+    snapTUC("indirectClean")
+    print("get-counter|\(log)")
+}
