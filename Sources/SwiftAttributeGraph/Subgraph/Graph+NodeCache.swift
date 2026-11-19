@@ -45,11 +45,6 @@ extension Graph {
         defaultUpdateContext.setNeedsUpdate()
     }
 
-    func markNeedsUpdateCallback() {
-        defaultUpdateContext.needsUpdate = true
-        flushUpdateCallbackIfReady()
-    }
-
     func flushUpdateCallbackIfReady() {
         guard !isInUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
         isInUpdateCallback = true
