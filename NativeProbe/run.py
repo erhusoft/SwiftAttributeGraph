@@ -72,6 +72,7 @@ SCENARIOS = [
     "cooperative-cancel-first-eval",
     "context-update-callback-on-write",
     "invalidate-value-and-subgraph-dirty",
+    "any-inputs-changed",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
