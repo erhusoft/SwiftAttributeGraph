@@ -78,12 +78,12 @@ SCENARIOS = [
     "any-inputs-changed-first-eval-after-read",
     "any-inputs-changed-second-eval-after-write",
     "subgraph-add-child-secondary-parent",
-    "subgraph-add-child-secondary-parent-reverse",
-    "clear-set-update",
     "subgraph-create2",
     "weak-read-after-child-invalidate",
     "weak-multiple-on-same-child",
     "weak-combiner-three-children-invalidate-middle",
+    "subgraph-add-child-secondary-parent-reverse",
+    "clear-set-update",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
