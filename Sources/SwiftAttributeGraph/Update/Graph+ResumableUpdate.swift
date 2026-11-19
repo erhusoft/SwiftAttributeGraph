@@ -17,7 +17,7 @@ extension Graph {
         let previousGraph = ThreadLocalGraph.install(self)
         evaluatingNode = node
         let owner = table.owner(at: node)
-        if currentSubgraph.index != owner || subgraphs.isFalling(index: owner) {
+        if !subgraphs.isLive(currentSubgraph) || subgraphs.isFalling(index: currentSubgraph.index) {
             currentSubgraph = subgraphForCreating(in: owner)
         }
         if frames[top].waiting != Graph.noNode { recordRead(of: frames[top].waiting) }

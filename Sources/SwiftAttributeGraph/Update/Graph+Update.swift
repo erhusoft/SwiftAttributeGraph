@@ -322,7 +322,7 @@ extension Graph {
         let previousGraph = ThreadLocalGraph.install(self)
         let previousSubgraph = currentSubgraph
         let owner = table.owner(at: node)
-        if currentSubgraph.index != owner || subgraphs.isFalling(index: owner) {
+        if !subgraphs.isLive(currentSubgraph) || subgraphs.isFalling(index: currentSubgraph.index) {
             currentSubgraph = subgraphForCreating(in: owner)
         }
 
@@ -353,8 +353,10 @@ extension Graph {
         }
     }
 
-    /// Where what a rule creates is born: the subgraph that owns the rule, or its nearest ancestor that is not being
-    /// invalidated (a rule of a falling subgraph may still run in the same update).
+    /// Where a running rule creates attributes when the caller's current subgraph is being invalidated: the subgraph
+    /// that owns the rule (observed in native AttributeGraph), or, when that one is falling too, its nearest ancestor
+    /// that is not (kept from M5; not observed natively). With a live caller subgraph, rules create there: evaluating a
+    /// rule does not change the current subgraph, as in native AttributeGraph.
     func subgraphForCreating(in owner: UInt32) -> SubgraphID {
         var index = owner
         while subgraphs.isFalling(index: index), let parent = subgraphs.parent(of: subgraphs.id(at: index)) {

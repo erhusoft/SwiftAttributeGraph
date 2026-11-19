@@ -411,6 +411,7 @@ func ownedLifetime() {
     print("lifetime|payloadReleased=true|scopeInvalidated=true|nodesReturnedToBaseline=true")
 }
 
+runCreateAndClosureScenariosIfRequested()
 dynamicDependencies()
 equalityCut()
 coalescedWrites()
@@ -453,3 +454,14 @@ indirectResetSourceAfterMultipleRedirects()
 indirectChainAndIntermediateDeath()
 changedValueAfterSkippedReadsAndIndirect()
 multiObserverTreeOrderAndCancel()
+// Creation and closure scenarios whose native trace matches; the others run only in isolation (`Probe cc <name>`).
+// `double-cut` is excluded: natively, writing `NaN` over `NaN` to an input is cut in a fresh process but not after
+// earlier scenarios used `Double` (the comparison's cold and warm states), so its line depends on process history.
+for name in ["create-input-in-rule-scoped", "create-rule-in-rule-scoped", "create-rule-every-run-scoped",
+             "create-rule-during-update-flags-scoped", "caller-invalidated-after-input", "caller-invalidated-after-rule",
+             "caller-falling-input", "create-placement-caller-scope", "create-placement-explicit-owner",
+             "closure-recreated-plain", "closure-stable-plain", "closure-captured-state-plain", "closure-thin-plain",
+             "closure-stable-equatable", "closure-captured-state-equatable"] {
+    ccScopedReads = false
+    ccScenarios.first { $0.0 == name }!.1()
+}
