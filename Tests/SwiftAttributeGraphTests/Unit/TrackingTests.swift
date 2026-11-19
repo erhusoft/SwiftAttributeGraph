@@ -203,4 +203,33 @@ import Testing
         #expect(v2 == 1)
         #expect(runs == 2)
     }
+
+    @Test func explicitInputValueSurvivesOneEvaluationBeforePruning() {
+        let graph = Graph()
+        let src = graph.makeInput(5)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return 1
+        }
+        _ = graph.value(of: reader)
+        let v1 = graph.inputValue(of: src, for: reader.erased)
+        let v2 = graph.inputValue(of: src, for: reader.erased)
+        graph.setValue(6, for: src)
+        _ = graph.value(of: reader)
+        graph.setValue(7, for: src)
+        _ = graph.value(of: reader)
+        #expect(v1 == 5 && v2 == 5)
+        #expect(runs == 3)
+    }
+
+    @Test func explicitInputValueWithNonRuleReaderDoesNotTrap() {
+        let graph = Graph()
+        let src = graph.makeInput(10)
+        let nonRuleReader = graph.makeInput(99)
+        let v = graph.inputValue(of: src, for: nonRuleReader.erased)
+        graph.setValue(11, for: src)
+        #expect(v == 10)
+        #expect(graph.value(of: nonRuleReader) == 99)
+    }
 }

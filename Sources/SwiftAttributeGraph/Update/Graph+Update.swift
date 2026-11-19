@@ -416,7 +416,8 @@ extension Graph {
         let n = Int(node)
         for i in table.inputs[n].indices {
             let edge = table.inputs[n][i]
-            table.inputs[n][i].read = false
+            table.inputs[n][i].read = edge.keepForNextPrune
+            table.inputs[n][i].keepForNextPrune = false
             table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion
         }
 
@@ -517,7 +518,10 @@ extension Graph {
     public func inputValue<Value>(of input: Attribute<Value>, for reader: AnyAttribute) -> Value {
         assertOwnThread()
         let result = withoutUpdate { value(of: input) }
-        recordRead(of: input.id.index, by: reader.id.index)
+        let readerIndex = reader.id.index
+        if table.state[Int(readerIndex)] & NodeState.isRule != 0 {
+            recordRead(of: input.id.index, by: readerIndex, keepForNextPrune: true)
+        }
         return result
     }
 
@@ -527,7 +531,7 @@ extension Graph {
         recordRead(of: source, by: evaluatingNode)
     }
 
-    @usableFromInline func recordRead(of source: UInt32, by consumerNode: UInt32) {
+    @usableFromInline func recordRead(of source: UInt32, by consumerNode: UInt32, keepForNextPrune: Bool = false) {
         let consumer = Int(consumerNode)
         precondition(source != consumerNode, "a rule cannot read itself")
         let version = table.versions[Int(source)]
@@ -536,7 +540,8 @@ extension Graph {
         if count == 0 || table.inputs[consumer][count - 1].source < source {
             table.outputs[Int(source)].append(consumerNode)
             let position = UInt32(table.outputs[Int(source)].count - 1)
-            table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true, changed: true,
+            table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true,
+                                                    keepForNextPrune: keepForNextPrune, changed: true,
                                                     positionInOutputs: position))
             return
         }
