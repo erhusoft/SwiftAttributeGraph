@@ -1940,3 +1940,57 @@ func subgraphCreate2() {
     let validAfter = graph.isValid(sg)
     print("subgraph-create2|valid=[\(validBefore), \(validAfter)]")
 }
+
+func weakReadAfterChildInvalidate() {
+    let graph = Driver()
+    let childSg = graph.makeSubgraph()
+    let child = graph.withSubgraph(childSg) { graph.input(Int64(42)) }
+    let w = graph.weak(child)
+    var consumerRuns = 0
+    let consumer: Handle<Int64> = graph.rule {
+        consumerRuns += 1
+        return graph.readWeak(w) ?? -1
+    }
+    let v1 = graph.read(consumer)
+    let w1 = graph.readWeak(w)
+    graph.invalidate(childSg)
+    let w2 = graph.readWeak(w)
+    let v2 = graph.read(consumer)
+    print("weak-read-after-child-invalidate|weak=[\(String(describing: w1)), \(String(describing: w2))]|consumer=[\(v1), \(v2)]|runs=\(consumerRuns)")
+}
+
+func weakMultipleOnSameChild() {
+    let graph = Driver()
+    let childSg = graph.makeSubgraph()
+    let child = graph.withSubgraph(childSg) { graph.input(Int64(7)) }
+    let w1 = graph.weak(child)
+    let w2 = graph.weak(child)
+    let before = [graph.readWeak(w1), graph.readWeak(w2)]
+    graph.invalidate(childSg)
+    let after = [graph.readWeak(w1), graph.readWeak(w2)]
+    print("weak-multiple-on-same-child|before=\(before)|after=\(after)")
+}
+
+func weakCombinerThreeChildrenInvalidateMiddle() {
+    let graph = Driver()
+    let sg1 = graph.makeSubgraph()
+    let sg2 = graph.makeSubgraph()
+    let sg3 = graph.makeSubgraph()
+    var order: [String] = []
+    let c1: Handle<Int64> = graph.withSubgraph(sg1) { graph.rule { order.append("c1"); return 1 } }
+    let c2: Handle<Int64> = graph.withSubgraph(sg2) { graph.rule { order.append("c2"); return 2 } }
+    let c3: Handle<Int64> = graph.withSubgraph(sg3) { graph.rule { order.append("c3"); return 3 } }
+    let w1 = graph.weak(c1)
+    let w2 = graph.weak(c2)
+    let w3 = graph.weak(c3)
+    var combinerRuns = 0
+    let combiner: Handle<Int64> = graph.rule {
+        combinerRuns += 1
+        order.append("comb")
+        return (graph.readWeak(w1) ?? 0) + (graph.readWeak(w2) ?? 0) + (graph.readWeak(w3) ?? 0)
+    }
+    let v1 = graph.read(combiner)
+    graph.invalidate(sg2)
+    let v2 = graph.read(combiner)
+    print("weak-combiner-three-children-invalidate-middle|values=[\(v1), \(v2)]|runs=\(combinerRuns)|order=\(order)")
+}
