@@ -1527,3 +1527,21 @@ func offsetMixedChain() {
     let r4 = runs
     print("offset-mixed-chain|values=\([v1, v2, v3, v4])|runs=\([r1, r2, r3, r4])")
 }
+
+func indirectSetSameValue() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    let b = graph.input(Int64(10))
+    let ind = graph.indirect(a)
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(ind.projectedValue) + 1
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.setSource(b, for: ind)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    print("indirect-set-same-value|values=\([v1, v2])|runs=\([r1, r2])")
+}

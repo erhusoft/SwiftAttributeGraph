@@ -61,6 +61,7 @@ SCENARIOS = [
     "offset-range-inside-outside",
     "offset-sticky-inside-then-outside",
     "offset-mixed-chain",
+    "indirect-set-same-value",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
