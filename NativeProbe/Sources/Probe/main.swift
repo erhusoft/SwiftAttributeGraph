@@ -585,7 +585,6 @@ func ownedLifetime() {
 }
 
 runCreateAndClosureScenariosIfRequested()
-runSharedContextIsolatedIfRequested()
 dynamicDependencies()
 equalityCut()
 coalescedWrites()
@@ -681,4 +680,5 @@ sharedContextIds()
 sharedContextNeedsUpdate()
 sharedContextUpdateCallback()
 sharedContextSubgraphs()
+sharedContextUpdateCallbackInputRead()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

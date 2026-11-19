@@ -122,8 +122,8 @@ func sharedContextUpdateCallback() {
     print("shared-context-update-callback|\(log)")
 }
 
-/// Same as ``sharedContextUpdateCallback`` but reading an input while both flags are up. Left out of the oracle list:
-/// native does not run a callback on an input read (it waits for the next rule read) [O].
+/// Same as ``sharedContextUpdateCallback`` but reading an input while both flags are up: native runs no callback on an
+/// input read and waits for the next rule read [O].
 func sharedContextUpdateCallbackInputRead() {
     let d = Driver()
     let c1 = d.defaultContext
@@ -138,7 +138,7 @@ func sharedContextUpdateCallbackInputRead() {
     _ = d.read(a)
     let afterInput = "\(calls1),\(calls2)"
     _ = d.read(r1)
-    print("shared-context-update-callback-input-read|afterInput=\(afterInput)|afterRule=\(calls1),\(calls2)")
+    print("shared-context-input-read|afterInput=\(afterInput)|afterRule=\(calls1),\(calls2)")
 }
 
 /// Ownership of subgraphs and attributes, `contextThreadUpdating` per context, and invalidation of one context's
@@ -166,15 +166,4 @@ func sharedContextSubgraphs() {
     d.invalidate(sg1)
     let afterFirst = "\(d.isValid(sg1)),\(c1.counter(nodes: ())),\(c1.counter(subgraphs: ()))"
     print("shared-context-subgraphs|owners=\(owners)|updating=\(seen)|before=\(before)|afterSecond=\(afterSecond)|afterFirst=\(afterFirst)")
-}
-
-/// When launched as `Probe shared input-read`, runs the scenarios that differ between native and the engine and exits.
-func runSharedContextIsolatedIfRequested() {
-    let arguments = CommandLine.arguments
-    guard arguments.count > 2, arguments[1] == "shared" else { return }
-    switch arguments[2] {
-    case "input-read": sharedContextUpdateCallbackInputRead()
-    default: print("unknown-shared-scenario|\(arguments[2])"); exit(2)
-    }
-    exit(0)
 }

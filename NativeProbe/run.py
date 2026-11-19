@@ -104,6 +104,7 @@ SCENARIOS = [
     "shared-context-needs-update",
     "shared-context-update-callback",
     "shared-context-subgraphs",
+    "shared-context-input-read",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
