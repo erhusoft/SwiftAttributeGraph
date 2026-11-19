@@ -587,7 +587,8 @@ import SwiftAttributeGraph
         #expect(g.value(of: r) == 11)
         cancel = true
         g.setValue(2, for: src)
-        #expect(g.value(of: r) == 11)
+        // NativeProbe `cooperative-cancel` measured that a cancelled rule writes its returned value (12) while staying dirty.
+        #expect(g.value(of: r) == 12)
         cancel = false
         #expect(g.value(of: r) == 12)
     }
