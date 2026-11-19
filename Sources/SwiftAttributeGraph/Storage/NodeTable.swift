@@ -15,6 +15,10 @@ struct NodeTable {
     private(set) var boxes: [NodeBox?] = []
     private var freeList: [UInt32] = []
     private(set) var liveCount = 0
+    /// Live and ever-created nodes that carry `NodeState.indirect`, which native `AGGraphGetCounter` leaves out of
+    /// `nodes` and `createdNodes`.
+    private(set) var liveIndirectCount = 0
+    private(set) var createdIndirectCount = 0
 
     /// Number of slots ever created (live or free).
     var slotCount: Int { generations.count }
@@ -25,6 +29,10 @@ struct NodeTable {
     /// Reserves a slot (reusing a freed one if any) and stores the node in it.
     mutating func allocate(owner: UInt32, box: NodeBox, state initialState: UInt16, version: UInt32) -> AttributeID {
         liveCount += 1
+        if initialState & NodeState.indirect != 0 {
+            liveIndirectCount += 1
+            createdIndirectCount += 1
+        }
         if let index = freeList.popLast() {
             let i = Int(index)
             state[i] = initialState
@@ -60,6 +68,7 @@ struct NodeTable {
     /// Frees a slot: drops the node, bumps the generation (so old IDs stop resolving) and queues the slot for reuse.
     mutating func free(index: UInt32) {
         let i = Int(index)
+        if state[i] & NodeState.indirect != 0 { liveIndirectCount -= 1 }
         boxes[i] = nil
         state[i] = 0
         flags[i] = 0

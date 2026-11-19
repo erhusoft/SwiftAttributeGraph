@@ -139,4 +139,47 @@ import Testing
         _ = graph.value(of: outer)
         #expect(graph.counter(for: .needsUpdate) == 0)
     }
+
+    // MARK: Indirect attributes
+
+    @Test func indirectAttributesAreNotCountedInNodesOrCreatedNodesButAreInNodeCount() {
+        let graph = Graph()
+        let sg = graph.makeSubgraph()
+        let rule = graph.withCurrent(sg) { graph.makeRule { Int64(3) } }
+        func counts() -> [UInt64] { [graph.counter(for: .nodes), graph.counter(for: .createdNodes)] }
+        #expect(counts() == [1, 1])
+        let indirect = graph.withCurrent(sg) { graph.makeIndirect(rule) }
+        #expect(counts() == [1, 1], "a rule plus an indirect attribute over it is 1, native [O]")
+        #expect(graph.nodeCount == 2, "nodeCount keeps counting every slot")
+        let input = graph.withCurrent(sg) { graph.makeInput(Int64(1)) }
+        _ = graph.withCurrent(sg) { graph.makeIndirect(input) }
+        _ = graph.withCurrent(sg) { graph.makeIndirect(indirect) }
+        #expect(counts() == [2, 2], "an input is counted, indirect attributes over an input or an indirect are not [O]")
+        #expect(graph.nodeCount == 5)
+    }
+
+    @Test func indirectAttributesLeaveNodesAtZeroWhenTheirSubgraphIsInvalidated() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph()
+        let child = graph.makeSubgraph(parent: parent)
+        let rule = graph.withCurrent(parent) { graph.makeRule { Int64(3) } }
+        _ = graph.withCurrent(child) { graph.makeIndirect(rule) }
+        graph.invalidate(child)
+        #expect(graph.counter(for: .nodes) == 1)
+        #expect(graph.nodeCount == 1)
+        graph.invalidate(parent)
+        #expect(graph.counter(for: .nodes) == 0, "native: 0 after the parent is invalidated [O]")
+        #expect(graph.counter(for: .createdNodes) == 1, "freed nodes stay in createdNodes, indirect ones never enter")
+        #expect(graph.nodeCount == 0)
+    }
+
+    @Test func offsetFieldAttributesAreNotCountedEither() {
+        struct Pair { var x: Int64; var y: Int64 }
+        let graph = Graph()
+        let sg = graph.makeSubgraph()
+        let pair = graph.withCurrent(sg) { graph.makeInput(Pair(x: 1, y: 2)) }
+        _ = graph.withCurrent(sg) { graph.makeOffsetFieldAttribute(of: pair, keyPath: \Pair.y) }
+        #expect(graph.counter(for: .nodes) == 1, "native: attribute[keyPath:] adds no node [O]")
+        #expect(graph.counter(for: .createdNodes) == 1)
+    }
 }

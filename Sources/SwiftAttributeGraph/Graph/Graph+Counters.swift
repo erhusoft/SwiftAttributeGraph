@@ -5,8 +5,10 @@ extension Graph {
     /// The engine has no shared graph contexts (`AGGraphCreateShared`), so every graph has exactly one context and the
     /// "context" selectors repeat the graph's own value [?].
     public enum CounterQueryType: Sendable {
-        /// Live attributes (`nodeCount`). Native AttributeGraph does not count indirect attributes here, the engine does
-        /// (a rule plus an indirect attribute over it is `1` natively and `2` here) [O].
+        /// Live attributes that are not indirect: ``Graph/nodeCount`` minus the indirect attributes (and the offset
+        /// field attributes, which are indirect). Native AttributeGraph does not count them: a rule plus an indirect
+        /// attribute over it is `1` [O], also over an input, over another indirect attribute and after the subgraph is
+        /// invalidated [O].
         case nodes
         /// Top-level reads of a rule attribute: a read outside any update that asks for the value of a rule, clean or
         /// not, directly or through an indirect attribute. Reading an input, or reading from inside a rule, is not a
@@ -19,7 +21,7 @@ extension Graph {
         /// Value changes: every input created (with its initial value), every input write that differs, and every
         /// rule result that differs from the previous one (the first result counts) [O].
         case changes
-        /// Attributes ever created, live or freed. Indirect attributes are counted here and not natively [O].
+        /// Attributes ever created, live or freed, without the indirect ones, as natively [O].
         case createdNodes
         /// Live subgraphs. The graph's root subgraph does not exist in native AttributeGraph and is not counted.
         case subgraphs
@@ -61,11 +63,11 @@ extension Graph {
     public func counter(for query: CounterQueryType) -> UInt64 {
         assertOwnThread()
         switch query {
-        case .nodes: return UInt64(table.liveCount)
+        case .nodes: return UInt64(table.liveCount - table.liveIndirectCount)
         case .transactions: return transactionCount
         case .updates: return updateCount
         case .changes: return changeCount
-        case .createdNodes: return createdNodeCount
+        case .createdNodes: return createdNodeCount - UInt64(table.createdIndirectCount)
         case .subgraphs: return UInt64(subgraphs.liveCount - 1)
         case .createdSubgraphs: return UInt64(subgraphs.createdCount - 1)
         case .contextID: return graphCounterID + 1
