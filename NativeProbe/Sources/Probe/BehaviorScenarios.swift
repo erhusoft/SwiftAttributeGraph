@@ -1659,3 +1659,22 @@ func cooperativeCancel() {
     let r3 = runs
     print("cooperative-cancel|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
 }
+
+func contextUpdateCallbackOnWrite() {
+    let graph = Driver()
+    var calls = 0
+    graph.setUpdateCallback {
+        calls += 1
+    }
+    let a = graph.input(Int64(10))
+    let r: Handle<Int64> = graph.rule { graph.read(a) * 2 }
+    _ = graph.read(r)
+    let callsInitial = calls
+
+    graph.write(Int64(20), to: a)
+    let callsAfterWrite = calls
+
+    let v = graph.read(r)
+    let callsAfterRead = calls
+    print("context-update-callback-on-write|value=\(v)|calls=[\(callsInitial), \(callsAfterWrite), \(callsAfterRead)]")
+}

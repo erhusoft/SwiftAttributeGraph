@@ -37,7 +37,8 @@ extension Graph {
         defaultUpdateContext.setUpdateCallback(callback)
     }
 
-    /// Marks the graph's default context as needing an update and flushes the registered update callback if ready
+    /// Marks the graph's default context as needing an update without invoking the callback immediately;
+    /// callbacks are drained when reading a value or starting an update outside an active update pass
     /// (matching `AGGraphSetNeedsUpdate`).
     public func setNeedsUpdate() {
         assertOwnThread()
