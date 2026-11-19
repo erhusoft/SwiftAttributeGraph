@@ -329,4 +329,37 @@ struct OffsetIndirectEdgeCompareTests {
         graph.setValue(Pair(a: 2, b: 10), for: source)
         #expect(graph.value(of: consumer) == 12)
     }
+
+    @Test func redirectingUpstreamIndirectPreservesDownstreamOffsetIndirectFlag() {
+        let graph = Graph()
+        let s1 = graph.makeInput(Pair(a: 1, b: 10))
+        let s2 = graph.makeInput(Pair(a: 2, b: 10))
+        let indA = graph.makeIndirect(s1)
+        let bOffset = MemoryLayout<Pair>.offset(of: \Pair.b)!
+        let offsetO = graph.makeOffsetIndirect(of: indA, offset: bOffset, size: MemoryLayout<Int64>.size)
+        let indP = graph.makeIndirect(offsetO)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return indP.value.b * 2
+        }
+        #expect(graph.value(of: consumer) == 20)
+        #expect(runs == 1)
+
+        // Redirect `indA` to `s2` (same `b = 10`, `a = 2`): `indP` must still be in `indirectsWithOffsetInChain`
+        // because it is under `offsetO`.
+        graph.setSource(s2, for: indA)
+        #expect(graph.indirectsWithOffsetInChain.contains(indP.id.index))
+
+        // Writing `a` only on `s2` must still cut off `consumer`.
+        graph.setValue(Pair(a: 99, b: 10), for: s2)
+        #expect(graph.value(of: consumer) == 20)
+        #expect(runs == 1)
+
+        // Writing `b` on `s2` re-evaluates `consumer`.
+        graph.setValue(Pair(a: 99, b: 30), for: s2)
+        #expect(graph.value(of: consumer) == 60)
+        #expect(runs == 2)
+    }
 }

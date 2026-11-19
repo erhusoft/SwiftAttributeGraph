@@ -358,20 +358,21 @@ public final class Graph {
         box.sourceRedirected = true
         rebuildIndirectEdges(for: index)
 
-        let newHasOffset = offsetIndirects[newSource.id.index] != nil || indirectsWithOffsetInChain.contains(newSource.id.index)
-        var indQueue: [UInt32] = [index]
+        let rootParentHasOffset = offsetIndirects[newSource.id.index] != nil || indirectsWithOffsetInChain.contains(newSource.id.index)
+        var indQueue: [(node: UInt32, parentHasOffset: Bool)] = [(index, rootParentHasOffset)]
         var indVisited: Set<UInt32> = [index]
         var indHead = 0
         while indHead < indQueue.count {
-            let cur = indQueue[indHead]
+            let (cur, parentHasOffset) = indQueue[indHead]
             indHead += 1
-            if newHasOffset {
+            let curHasOffset = offsetIndirects[cur] != nil || parentHasOffset
+            if curHasOffset {
                 indirectsWithOffsetInChain.insert(cur)
             } else {
                 indirectsWithOffsetInChain.remove(cur)
             }
             for dep in table.outputs[Int(cur)] where table.state[Int(dep)] & NodeState.indirect != 0 {
-                if indVisited.insert(dep).inserted { indQueue.append(dep) }
+                if indVisited.insert(dep).inserted { indQueue.append((dep, curHasOffset)) }
             }
         }
 
