@@ -1931,6 +1931,20 @@ func subgraphAddChildSecondaryParent() {
     print("subgraph-add-child-secondary-parent|valid=[\(validBefore), \(validAfterP1), \(validAfterP2)]")
 }
 
+func subgraphAddChildSecondaryParentReverse() {
+    let graph = Driver()
+    let p1 = graph.makeSubgraph()
+    let p2 = graph.makeSubgraph()
+    let child = graph.withSubgraph(p1) { graph.makeSubgraph() }
+    graph.addChild(child, to: p2, tag: 1)
+    let validBefore = graph.isValid(child)
+    graph.invalidate(p2)
+    let validAfterP2 = graph.isValid(child)
+    graph.invalidate(p1)
+    let validAfterP1 = graph.isValid(child)
+    print("subgraph-add-child-secondary-parent-reverse|valid=[\(validBefore), \(validAfterP2), \(validAfterP1)]")
+}
+
 func subgraphCreate2() {
     let graph = Driver()
     let a = graph.input(Int64(1))
@@ -1993,4 +2007,36 @@ func weakCombinerThreeChildrenInvalidateMiddle() {
     graph.invalidate(sg2)
     let v2 = graph.read(combiner)
     print("weak-combiner-three-children-invalidate-middle|values=[\(v1), \(v2)]|runs=\(combinerRuns)|order=\(order)")
+}
+
+func clearAndSetUpdateScenario() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let b = graph.input(Int64(10))
+    var token1NonNil = false
+    var token2Nil = false
+    var runs = 0
+
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let t1 = graph.clearUpdateToken()
+        token1NonNil = (t1 != nil)
+        let t2 = graph.clearUpdateToken()
+        token2Nil = (t2 == nil)
+        let vb = graph.read(b) // read while update is cleared
+        graph.setUpdateToken(t2) // restore nil (nested)
+        graph.setUpdateToken(t1) // restore original token
+        let va = graph.read(a) // read after restore
+        return va + vb
+    }
+
+    let v1 = graph.read(r)
+    // Writing to b should NOT re-run r (no edge created while cleared)
+    graph.write(Int64(20), to: b)
+    let v2 = graph.read(r)
+    // Writing to a SHOULD re-run r (edge created after setUpdate)
+    graph.write(Int64(2), to: a)
+    let v3 = graph.read(r)
+
+    print("clear-set-update|token1NonNil=\(token1NonNil)|token2Nil=\(token2Nil)|values=[\(v1), \(v2), \(v3)]|runs=\(runs)")
 }
