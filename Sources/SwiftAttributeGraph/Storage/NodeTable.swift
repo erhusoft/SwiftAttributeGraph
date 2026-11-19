@@ -4,6 +4,8 @@
 /// is what made propagation 3.8× faster in the SwiftGraph storage study (G1–G3). Only `boxes` holds a reference.
 struct NodeTable {
     private(set) var generations: [UInt32] = []
+    /// The graph tag in the top 16 bits of every generation of this table (see `GraphRegistry`).
+    var generationBase: UInt32 = 0
     var state: [UInt16] = []
     var flags: [UInt8] = []
     var versions: [UInt32] = []
@@ -32,7 +34,7 @@ struct NodeTable {
             boxes[i] = box
             return AttributeID(index: index, generation: generations[i])
         }
-        generations.append(1)
+        generations.append(generationBase | 1)
         state.append(initialState)
         flags.append(0)
         versions.append(version)
@@ -40,7 +42,7 @@ struct NodeTable {
         outputs.append([])
         owners.append(owner)
         boxes.append(box)
-        return AttributeID(index: UInt32(generations.count - 1), generation: 1)
+        return AttributeID(index: UInt32(generations.count - 1), generation: generations[generations.count - 1])
     }
 
     /// Whether the ID names a live node.
@@ -63,10 +65,15 @@ struct NodeTable {
         flags[i] = 0
         inputs[i] = []
         outputs[i] = []
-        var next = generations[i] &+ 1
-        if next == 0 { next = 1 }
-        generations[i] = next
-        freeList.append(index)
+        // The low 16 bits count the reuses of the slot. When they are used up the slot is retired instead of wrapping, so
+        // the tag in the top bits is never disturbed and an old ID never matches a later node.
+        let generation = generations[i]
+        if generation & 0xFFFF != 0xFFFF {
+            generations[i] = generation + 1
+            freeList.append(index)
+        } else {
+            generations[i] = generation & 0xFFFF_0000       // counter 0 is never handed out: no ID matches the slot again
+        }
         liveCount -= 1
     }
 }

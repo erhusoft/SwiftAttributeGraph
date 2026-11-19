@@ -9,6 +9,8 @@ public final class Graph {
     static let noNode = UInt32.max
 
     var table = NodeTable()
+    /// The tag that the IDs of this graph carry (see `GraphRegistry`).
+    let graphTag: UInt32
     /// Comparators resolved so far, one per value type and policy (see `ValueComparator.Cache`).
     var comparators = ValueComparator.Cache()
     var subgraphs = SubgraphTable()
@@ -76,9 +78,18 @@ public final class Graph {
 
     /// Creates an empty graph with a root subgraph.
     public init() {
+        let tag = GraphRegistry.reserveTag()
+        graphTag = tag
+        table.generationBase = tag << 16
+        subgraphs.generationBase = tag << 16
         let root = subgraphs.allocate(parent: nil)
         rootSubgraph = Subgraph(id: root)
         currentSubgraph = root
+        GraphRegistry.bind(tag: tag, to: self)
+    }
+
+    deinit {
+        GraphRegistry.release(tag: graphTag)
     }
 
     /// Stops the program in debug builds if the graph is used from another thread than the one that created it.

@@ -9,4 +9,7 @@ public struct SubgraphID: Hashable, Sendable {
 
     var index: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
     var generation: UInt32 { UInt32(truncatingIfNeeded: rawValue >> 32) }
+
+    /// The tag of the graph that created the subgraph, `0` if the graph had none (see `GraphRegistry`).
+    var graphTag: UInt32 { generation >> 16 }
 }

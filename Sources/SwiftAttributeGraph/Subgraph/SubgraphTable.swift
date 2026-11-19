@@ -7,6 +7,8 @@ struct SubgraphTable {
     static let defaultContext: UInt32 = 1
 
     private(set) var generations: [UInt32] = []
+    /// The graph tag in the top 16 bits of every generation of this table (see `GraphRegistry`).
+    var generationBase: UInt32 = 0
     private(set) var members: [[UInt32]] = []
     private(set) var parents: [[UInt32]] = []
     private(set) var children: [[UInt32]] = []
@@ -36,7 +38,7 @@ struct SubgraphTable {
         if let reused = freeList.popLast() {
             index = reused
         } else {
-            generations.append(1)
+            generations.append(generationBase | 1)
             members.append([])
             parents.append([])
             children.append([])
@@ -208,12 +210,16 @@ struct SubgraphTable {
         falling[i] = false
         members[i] = []
         contexts[i] = SubgraphTable.defaultContext
-        var nextGeneration = generations[i] &+ 1
-        if nextGeneration == 0 { nextGeneration = 1 }
-        generations[i] = nextGeneration
+        // Same rule as `NodeTable.free(index:)`: a slot whose 16 reuse bits are used up is retired.
+        let generation = generations[i]
         dirtyOwnFlags[i] = 0
         dirtyDescendantFlags[i] = 0
-        freeList.append(index)
+        if generation & 0xFFFF != 0xFFFF {
+            generations[i] = generation + 1
+            freeList.append(index)
+        } else {
+            generations[i] = generation & 0xFFFF_0000       // counter 0 is never handed out: no ID matches the slot again
+        }
         liveCount -= 1
     }
 
