@@ -2112,3 +2112,38 @@ func compareValues302Scenarios() {
     let custEq = d.compareValues302(CustomEq(a: 1, tag: 1), CustomEq(a: 1, tag: 2))
     print("compare-values-302-refs|res=[\(eqC), \(plC), \(clEq), \(custEq)]")
 }
+
+func compareValues302Edges() {
+    struct MixedStr { var a: Int; var s: String }
+    final class Box { var x: Int; init(_ x: Int) { self.x = x } }
+    struct MixedCls { var a: Int; var b: Box }
+    struct PaddedPOD { var a: Int8; var b: Int64 }
+    enum PayloadEnum { case a(Int); case b(String) }
+
+    let d = Driver()
+    // (a) non-POD without Equatable
+    let ms1 = MixedStr(a: 1, s: "hello" + " world")
+    let ms2 = MixedStr(a: 1, s: String("hello world"))
+    let mixedStrEq = d.compareValues302(ms1, ms2)
+    let mixedClsEq = d.compareValues302(MixedCls(a: 1, b: Box(2)), MixedCls(a: 1, b: Box(2)))
+
+    // (b) POD with padding (same fields)
+    let p1 = PaddedPOD(a: 1, b: 2)
+    let p2 = PaddedPOD(a: 1, b: 2)
+    let paddedEq = d.compareValues302(p1, p2)
+
+    // (c) same class instance & same closure
+    let box = Box(5)
+    let sameClsEq = d.compareValues302(box, box)
+    let cl: () -> Int = { 42 }
+    let sameClEq = d.compareValues302(cl, cl)
+
+    // (d) tuple, enum with payload, nested Optional
+    let tupleEq = d.compareValues302((1, 2), (1, 2))
+    let enumEq = d.compareValues302(PayloadEnum.a(7), PayloadEnum.a(7))
+    let optNested1: Int?? = .some(.some(3))
+    let optNested2: Int?? = .some(.some(3))
+    let optNestedEq = d.compareValues302(optNested1, optNested2)
+
+    print("compare-values-302-edges|res=[\(mixedStrEq), \(mixedClsEq), \(paddedEq), \(sameClsEq), \(sameClEq), \(tupleEq), \(enumEq), \(optNestedEq)]")
+}
