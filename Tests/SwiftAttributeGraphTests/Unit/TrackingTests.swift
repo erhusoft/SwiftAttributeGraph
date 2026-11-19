@@ -87,4 +87,40 @@ import Testing
         #expect(handoff.fromOtherThread == false)
     }
     #endif
+
+    @Test func anyInputsChangedMatchesNativeExcludingAndInvalidateValue() {
+        let graph = Graph()
+        let a = graph.makeInput(Int64(1))
+        let b = graph.makeInput(Int64(10))
+        var results: [Bool] = []
+        var checkBeforeReads = false
+
+        let r = graph.makeRule {
+            if checkBeforeReads {
+                results.append(graph.anyInputsChanged())
+                results.append(graph.anyInputsChanged())
+            }
+            let va = a.value
+            let vb = b.value
+            if !checkBeforeReads {
+                results.append(graph.anyInputsChanged())
+                results.append(graph.anyInputsChanged(excluding: [AnyAttribute(id: a.id)]))
+            }
+            return va + vb
+        }
+
+        _ = graph.value(of: r)
+        graph.setValue(2, for: a)
+        _ = graph.value(of: r)
+
+        checkBeforeReads = true
+        graph.setValue(3, for: a)
+        _ = graph.value(of: r)
+
+        checkBeforeReads = false
+        graph.invalidateValue(of: r)
+        _ = graph.value(of: r)
+
+        #expect(results == [true, true, true, false, true, true, false, false])
+    }
 }

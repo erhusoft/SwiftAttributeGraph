@@ -374,15 +374,10 @@ extension Graph {
     /// Runs the rule of a node, rebuilds its input edges from what it read and bumps its version if the value changed.
     private func run(_ node: UInt32) {
         let n = Int(node)
-        let stateful = table.state[n] & NodeState.stateful != 0
-        if stateful {
-            for i in table.inputs[n].indices {
-                let edge = table.inputs[n][i]
-                table.inputs[n][i].read = false
-                table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion
-            }
-        } else {
-            for i in table.inputs[n].indices { table.inputs[n][i].read = false }
+        for i in table.inputs[n].indices {
+            let edge = table.inputs[n][i]
+            table.inputs[n][i].read = false
+            table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion
         }
 
         let previousNode = evaluatingNode
@@ -524,9 +519,9 @@ extension Graph {
         for readIndex in 0..<count {
             let edge = table.inputs[n][readIndex]
             if edge.read {
-                if writeIndex != readIndex {
-                    table.inputs[n][writeIndex] = edge
-                }
+                var kept = edge
+                kept.changed = false
+                table.inputs[n][writeIndex] = kept
                 writeIndex += 1
             } else {
                 edgeComparators[node]?.removeValue(forKey: edge.source)
