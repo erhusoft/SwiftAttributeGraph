@@ -682,3 +682,4 @@ sharedContextUpdateCallback()
 sharedContextSubgraphs()
 sharedContextUpdateCallbackInputRead()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
+coldChainDepth()
