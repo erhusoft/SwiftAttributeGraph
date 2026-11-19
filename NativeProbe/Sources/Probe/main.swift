@@ -80,6 +80,7 @@ final class Driver {
     func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
     func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child, tag: tag) }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Subgraph(graph: Graph())
     }
@@ -252,6 +253,7 @@ final class Driver {
     func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
     func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { graph.addChild(child, to: parent) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { graph.addChild(child, to: parent) }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Graph().makeSubgraph()
     }
@@ -512,3 +514,4 @@ invalidateValueAndSubgraphDirty()
 anyInputsChangedScenarios()
 anyInputsChangedOffsetEdge()
 anyInputsChangedIsolatedScenarios()
+subgraphAddChildSecondaryParent()

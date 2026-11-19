@@ -1916,3 +1916,17 @@ func anyInputsChangedIsolatedScenarios() {
         print("any-inputs-changed-second-eval-after-write|results=\(results)")
     }
 }
+
+func subgraphAddChildSecondaryParent() {
+    let graph = Driver()
+    let p1 = graph.makeSubgraph()
+    let p2 = graph.makeSubgraph()
+    let child = graph.withSubgraph(p1) { graph.makeSubgraph() }
+    graph.addChild(child, to: p2, tag: 1)
+    let validBefore = graph.isValid(child)
+    graph.invalidate(p1)
+    let validAfterP1 = graph.isValid(child)
+    graph.invalidate(p2)
+    let validAfterP2 = graph.isValid(child)
+    print("subgraph-add-child-secondary-parent|valid=[\(validBefore), \(validAfterP1), \(validAfterP2)]")
+}
