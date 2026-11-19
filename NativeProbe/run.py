@@ -65,6 +65,7 @@ SCENARIOS = [
     "direct-edge-equal-and-different-write",
     "offset-whole-value",
     "subgraph-dag-add-child",
+    "context-update-callback",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

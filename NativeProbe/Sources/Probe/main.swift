@@ -147,6 +147,8 @@ final class Driver {
     func validate<V>(_ attribute: Handle<V>) { attribute.validate() }
     func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { subgraph.isAncestor(of: other) }
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
+    func setUpdateCallback(_ body: @escaping () -> Void) { graph.onUpdate(body) }
+    func setNeedsUpdate() { graph.setNeedsUpdate() }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = attribute.breadthFirstSearch(options: .searchInputs) { _ in
@@ -308,6 +310,8 @@ final class Driver {
     func validate<V>(_ attribute: Handle<V>) { graph.validate(attribute) }
     func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { graph.isAncestor(subgraph, of: other) }
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
+    func setUpdateCallback(_ body: @escaping () -> Void) { graph.setUpdateCallback(body) }
+    func setNeedsUpdate() { graph.setNeedsUpdate() }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = graph.breadthFirstSearch(from: attribute, options: .searchInputs) { _ in
@@ -486,3 +490,4 @@ indirectSetSameValue()
 directEdgeEqualAndDifferentWrite()
 offsetWholeValue()
 subgraphDagAddChild()
+contextUpdateCallback()

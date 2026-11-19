@@ -1602,3 +1602,32 @@ func subgraphDagAddChild() {
 
     print("subgraph-dag-add-child|same=[\(sameValidAfterP1), \(sameValidAfterP2)]")
 }
+
+func contextUpdateCallback() {
+    let graph = Driver()
+    var calls = 0
+    var drainExtra = false
+    graph.setUpdateCallback {
+        calls += 1
+        if drainExtra {
+            drainExtra = false
+            graph.setNeedsUpdate()
+        }
+    }
+    let a = graph.input(Int64(1))
+    let r: Handle<Int64> = graph.rule { graph.read(a) + 1 }
+    _ = graph.read(r)
+    // Two setNeedsUpdate calls before any read: coalesced
+    graph.setNeedsUpdate()
+    graph.setNeedsUpdate()
+    let callsBeforeRead = calls
+    _ = graph.read(r)
+    let callsAfterRead = calls
+
+    // Request another update from inside the callback (same-pass drain)
+    drainExtra = true
+    graph.setNeedsUpdate()
+    _ = graph.read(r)
+    let callsAfterReentrant = calls
+    print("context-update-callback|before=\(callsBeforeRead)|after=\(callsAfterRead)|reentrant=\(callsAfterReentrant)")
+}
