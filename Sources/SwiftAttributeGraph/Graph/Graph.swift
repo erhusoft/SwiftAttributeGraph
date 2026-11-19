@@ -21,6 +21,9 @@ public final class Graph {
     var subgraphObservers: [UInt32: [Observer]] = [:]
     /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
     var deferredInvalidations: [Subgraph] = []
+    var nodeCaches: [UInt32: SubgraphNodeCache] = [:]
+    var updateCallback: (() -> Void)?
+    var needsUpdateCallback = false
     var isInvalidating = false
     var deferringSubgraphInvalidationDepth = 0
 

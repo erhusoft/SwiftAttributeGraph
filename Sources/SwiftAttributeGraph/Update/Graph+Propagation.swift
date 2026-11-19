@@ -17,12 +17,15 @@ extension Graph {
     }
 
     private func drainDirtyStack() {
+        var didDirty = false
         while let node = dirtyStack.popLast() {
             let n = Int(node)
             if table.state[n] & NodeState.dirty != 0 { continue }
             table.state[n] |= NodeState.dirty
+            didDirty = true
             if table.state[n] & NodeState.observed != 0 { queueNotification(node) }
             dirtyStack.append(contentsOf: table.outputs[n])
         }
+        if didDirty { markNeedsUpdateCallback() }
     }
 }

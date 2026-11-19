@@ -153,7 +153,10 @@ extension Graph {
             observers[node] = nil
             table.free(index: node)
         }
-        for index in order { subgraphs.release(index: index) }
+        for index in order {
+            nodeCaches.removeValue(forKey: index)
+            subgraphs.release(index: index)
+        }
 
         flushNotifications()
     }

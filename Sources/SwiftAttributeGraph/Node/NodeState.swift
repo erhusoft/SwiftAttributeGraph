@@ -20,4 +20,6 @@ enum NodeState {
     static let resumable: UInt16 = 1 << 8
     /// The node is an indirect attribute: it redirects to another attribute and has no value of its own.
     static let indirect: UInt16 = 1 << 9
+    /// The node is managed by a subgraph's ``SubgraphNodeCache`` and can be parked/collected when unreferenced.
+    static let cached: UInt16 = 1 << 10
 }
