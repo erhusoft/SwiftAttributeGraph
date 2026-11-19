@@ -288,7 +288,7 @@ extension Graph {
                     continue outer
                 }
                 if table.versions[source] != edge.seenVersion {
-                    if edgeComparators[node]?[edge.source] != nil {
+                    if edgeComparators[node]?[edge.source] != nil || hasOffsetInChain(edge.source) {
                         if stickyChangedEdges[node]?.contains(edge.source) == true {
                             mustRun = true
                         } else {

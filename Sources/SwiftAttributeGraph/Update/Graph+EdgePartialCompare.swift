@@ -34,22 +34,36 @@ extension Graph {
         read(attribute, project: project, isEqual: ==)
     }
 
+    func hasOffsetInChain(_ node: UInt32) -> Bool {
+        var current = node
+        var steps = 0
+        while table.state[Int(current)] & NodeState.indirect != 0 {
+            if offsetIndirects[current] != nil { return true }
+            guard let box = table.box(at: current) as? AnyIndirectNode else { break }
+            current = box.source.index
+            steps += 1
+            if steps > table.generations.count { break }
+        }
+        return false
+    }
+
     func evaluateEdgeComparators(for source: UInt32, oldValue: Any, newValue: Any) {
-        var queue: [UInt32] = [source]
+        var queue: [(node: UInt32, range: (offset: Int, size: Int)?)] = [(source, offsetIndirects[source])]
         var visited: Set<UInt32> = [source]
         var newlySticky: [UInt32] = []
         var head = 0
         while head < queue.count {
-            let current = queue[head]
+            let (current, activeRange) = queue[head]
             head += 1
             for dependent in table.outputs[Int(current)] {
                 if table.state[Int(dependent)] & NodeState.indirect != 0 {
                     if visited.insert(dependent).inserted {
-                        queue.append(dependent)
+                        let nextRange = activeRange ?? offsetIndirects[dependent]
+                        queue.append((dependent, nextRange))
                     }
                     continue
                 }
-                if let range = offsetIndirects[current] {
+                if let range = activeRange {
                     if stickyChangedEdges[dependent]?.contains(current) == true {
                         continue
                     }

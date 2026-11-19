@@ -150,4 +150,84 @@ struct OffsetIndirectEdgeCompareTests {
         print("PERF 20 writes over 20k offset-indirect chain: \(elapsed)")
         #expect(graph.value(of: consumer) == 10)
     }
+
+    @Test func consumerDirtiedByOtherInputDoesNotReevaluateOffsetEdgeWhenRangeUnchanged() {
+        let graph = Graph()
+        let source = graph.makeInput(Pair(a: 1, b: 10))
+        let other = graph.makeInput(100)
+        let bOffset = MemoryLayout<Pair>.offset(of: \Pair.b)!
+        let offsetInd = graph.makeOffsetIndirect(of: source, offset: bOffset, size: MemoryLayout<Int64>.size)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return offsetInd.value.b + Int64(other.value)
+        }
+        #expect(graph.value(of: consumer) == 110)
+        #expect(runs == 1)
+
+        // Change `a` (outside range) and `other` (triggers consumer): `offsetInd` edge is not sticky-changed.
+        graph.setValue(Pair(a: 99, b: 10), for: source)
+        graph.setValue(200, for: other)
+        #expect(graph.value(of: consumer) == 210)
+        #expect(runs == 2)
+
+        // Change `b` (inside range): consumer re-evaluates.
+        graph.setValue(Pair(a: 99, b: 30), for: source)
+        #expect(graph.value(of: consumer) == 230)
+        #expect(runs == 3)
+    }
+
+    @Test func typedOffsetFieldAttributeProjectsFieldAndCutsOutsideChanges() {
+        let graph = Graph()
+        let source = graph.makeInput(Pair(a: 1, b: 10))
+        let fieldAttr: Attribute<Int64> = graph.makeOffsetFieldAttribute(of: source, keyPath: \.b)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return fieldAttr.value * 3
+        }
+        #expect(graph.value(of: consumer) == 30)
+        #expect(runs == 1)
+
+        graph.setValue(Pair(a: 99, b: 10), for: source)
+        #expect(graph.value(of: consumer) == 30)
+        #expect(runs == 1)
+
+        graph.setValue(Pair(a: 99, b: 20), for: source)
+        #expect(graph.value(of: consumer) == 60)
+        #expect(runs == 2)
+    }
+
+    @Test func floatNaNAndNegativeZeroFollowRawByteComparison() {
+        struct FloatPair: BitwiseCopyable, Equatable {
+            var x: Float
+            var y: Float
+        }
+        let graph = Graph()
+        let source = graph.makeInput(FloatPair(x: 1.0, y: 0.0))
+        let yOffset = MemoryLayout<FloatPair>.offset(of: \FloatPair.y)!
+        let offsetInd = graph.makeOffsetIndirect(of: source, offset: yOffset, size: MemoryLayout<Float>.size)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return offsetInd.value.y.bitPattern
+        }
+        #expect(graph.value(of: consumer) == Float(0.0).bitPattern)
+        #expect(runs == 1)
+
+        // +0.0 -> -0.0: raw bytes differ (sign bit), so consumer re-runs.
+        graph.setValue(FloatPair(x: 1.0, y: -0.0), for: source)
+        #expect(graph.value(of: consumer) == Float(-0.0).bitPattern)
+        #expect(runs == 2)
+
+        // NaN -> NaN (same bit pattern): raw bytes match, so consumer cuts off.
+        graph.setValue(FloatPair(x: 1.0, y: .nan), for: source)
+        #expect(graph.value(of: consumer) == Float.nan.bitPattern)
+        #expect(runs == 3)
+        graph.setValue(FloatPair(x: 2.0, y: .nan), for: source)
+        #expect(runs == 3)
+    }
 }

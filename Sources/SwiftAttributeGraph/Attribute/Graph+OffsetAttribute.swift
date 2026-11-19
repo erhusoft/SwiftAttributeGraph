@@ -43,9 +43,9 @@ extension Graph {
 
     /// Creates an indirect attribute with `(offset, size)` metadata for native-style edge-level range comparison.
     ///
-    /// - Note: `size == 0` never marks downstream consumers changed; `offset == 0 && size == MemoryLayout<Source>.size`
-    ///   always falls back to marking changed; otherwise `[offset, offset + size)` is compared on `old + offset` vs
-    ///   `new + offset`.
+    /// - Note: Returns `Attribute<Source>` (the full value), while downstream consumers are only dirtied when bytes
+    ///   in `[offset, offset + size)` change (`size == 0` never marks changed; `offset == 0 && size == MemoryLayout<Source>.size`
+    ///   always marks changed).
     public func makeOffsetIndirect<Source: BitwiseCopyable>(
         of source: Attribute<Source>,
         offset: Int,
@@ -60,5 +60,21 @@ extension Graph {
         let indirect = makeIndirect(source)
         offsetIndirects[indirect.id.index] = (offset, size)
         return indirect
+    }
+
+    /// Creates a typed `Attribute<Field>` projecting `keyPath` from `source`, backed by an offset-indirect edge so
+    /// consumers only read `Field` and only re-evaluate when `[offset, offset + MemoryLayout<Field>.size)` changes.
+    public func makeOffsetFieldAttribute<Source: BitwiseCopyable, Field: BitwiseCopyable>(
+        of source: Attribute<Source>,
+        keyPath: KeyPath<Source, Field>
+    ) -> Attribute<Field> {
+        assertOwnThread()
+        guard let offset = MemoryLayout<Source>.offset(of: keyPath) else {
+            preconditionFailure("makeOffsetFieldAttribute: keyPath must refer to a stored property")
+        }
+        let offsetInd = makeOffsetIndirect(of: source, offset: offset, size: MemoryLayout<Field>.size)
+        return makeRule {
+            offsetInd.value[keyPath: keyPath]
+        }
     }
 }
