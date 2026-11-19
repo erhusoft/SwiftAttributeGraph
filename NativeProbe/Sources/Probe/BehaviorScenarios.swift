@@ -2185,3 +2185,57 @@ func getInputValueDupPruneAndNonRuleScenarios() {
         print("get-input-value-non-rule-reader|v=\(v)|readerVal=\(graph.read(nonRuleReader))")
     }
 }
+
+/// `AGGraphGetValue` with an option mask: outside a rule, inside a rule, with an edge from an earlier run, and with a
+/// normal read earlier in the same run.
+func getValueOptionScenario(name: String, options: UInt32) {
+    var parts: [String] = []
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        let outside = d.read(src, options: options)
+        d.write(Int64(11), to: src)
+        parts.append("outside=[\(outside), \(d.read(src, options: options))]")
+    }
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        var runs = 0
+        let rule: Handle<Int64> = d.rule { runs += 1; return d.read(src, options: options) }
+        let v1 = d.read(rule)
+        d.write(Int64(20), to: src)
+        parts.append("inside=[\(v1), \(d.read(rule))]|runs=\(runs)")
+    }
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        let trigger = d.input(Int64(0))
+        var runs = 0
+        let rule: Handle<Int64> = d.rule {
+            runs += 1
+            let t = d.read(trigger)
+            return t == 0 ? d.read(src) : d.read(src, options: options) + t
+        }
+        let v1 = d.read(rule)
+        d.write(Int64(100), to: trigger)
+        let v2 = d.read(rule)
+        let afterTrigger = runs
+        d.write(Int64(20), to: src)
+        let v3 = d.read(rule)
+        parts.append("priorEdge=[\(v1), \(v2), \(v3)]|runs=[\(afterTrigger), \(runs)]")
+    }
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        var runs = 0
+        let rule: Handle<Int64> = d.rule {
+            runs += 1
+            let a = d.read(src)
+            return a + d.read(src, options: options)
+        }
+        let v1 = d.read(rule)
+        d.write(Int64(20), to: src)
+        parts.append("sameRun=[\(v1), \(d.read(rule))]|runs=\(runs)")
+    }
+    print("\(name)|\(parts.joined(separator: "|"))")
+}

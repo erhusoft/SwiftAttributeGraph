@@ -91,6 +91,7 @@ SCENARIOS = [
     "get-input-value-explicit-reader",
     "get-input-value-dup-prune",
     "get-input-value-non-rule-reader",
+    "get-value-opt4",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

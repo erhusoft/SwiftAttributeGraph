@@ -12,6 +12,9 @@ struct ProbeAGValuePair {
 @_silgen_name("AGGraphGetInputValue")
 private func c_AGGraphGetInputValue(_ attribute: AnyAttribute, _ input: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
 
+@_silgen_name("AGGraphGetValue")
+private func c_AGGraphGetValue(_ attribute: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
+
 @_silgen_name("AGGraphResetIndirectAttribute")
 private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 
@@ -119,6 +122,10 @@ final class Driver {
 
     func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
         c_AGGraphGetInputValue(reader.identifier, input.identifier, 0, Metadata(V.self))
+            .value.assumingMemoryBound(to: V.self).pointee
+    }
+    func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
+        c_AGGraphGetValue(attribute.identifier, options, Metadata(V.self))
             .value.assumingMemoryBound(to: V.self).pointee
     }
     func makeSubgraphInNewContext() -> SubgraphHandle {
@@ -322,6 +329,9 @@ final class Driver {
 
     func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
         graph.inputValue(of: input, for: reader.erased)
+    }
+    func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
+        graph.value(of: attribute, options: Graph.ReadOptions(rawValue: options))
     }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Graph().makeSubgraph()
@@ -595,4 +605,5 @@ compareValues302Scenarios()
 compareValues302Edges()
 getInputValueExplicitReaderScenario()
 getInputValueDupPruneAndNonRuleScenarios()
+getValueOptionScenario(name: "get-value-opt4", options: 4)
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

@@ -59,6 +59,38 @@ extension Graph {
         return read(attribute)
     }
 
+    /// Options for ``value(of:options:)`` (the `options` argument of `AGGraphGetValue` in native AttributeGraph).
+    ///
+    /// Values measured on macOS 15.8.3: options `0` and `2` behave the same in every probe [O]; `4` and `6` (`2 | 4`)
+    /// also behave the same [O]. What bit `2` means beyond that is not known [?].
+    public struct ReadOptions: OptionSet, Sendable {
+        public let rawValue: UInt32
+        public init(rawValue: UInt32) { self.rawValue = rawValue }
+
+        /// Native option bit 2: the read records a dependency edge. This is also the default, so it changes nothing
+        /// by itself [O] (a rule with no earlier edge reading with `2` is re-evaluated when the source changes).
+        public static let dependency = ReadOptions(rawValue: 2)
+
+        /// Native option bit 4: the read does not record a dependency edge, inside or outside a rule [O]. It wins over
+        /// ``dependency`` when both are set [O].
+        public static let noDependency = ReadOptions(rawValue: 4)
+    }
+
+    /// The value of an attribute, bringing it up to date first if it is dirty, with the read behavior chosen by
+    /// `options` (`AGGraphGetValue` with options in native AttributeGraph).
+    ///
+    /// With ``ReadOptions/noDependency`` the read adds no edge to the running rule [O] (a rule that reads only this way
+    /// is not re-evaluated when the source changes: values `[10, 10]`, 1 run). The up-to-date value is still computed.
+    /// An edge that a normal read of the same attribute recorded earlier in the same run is kept [O]. An edge from an
+    /// earlier run is pruned if the later run reads only with `noDependency` [O]. Outside a rule every option returns
+    /// the current value and creates no edge [O].
+    public func value<Value>(of attribute: Attribute<Value>, options: ReadOptions) -> Value {
+        if options.contains(.noDependency) {
+            return withoutUpdate { value(of: attribute) }
+        }
+        return value(of: attribute)
+    }
+
     /// The read itself, for callers that already know the running graph is this one (`Attribute.value` found it in
     /// the thread-local slot, so it skips the second lookup).
     @inline(__always)
