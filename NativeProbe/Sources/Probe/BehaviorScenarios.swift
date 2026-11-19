@@ -1545,3 +1545,22 @@ func indirectSetSameValue() {
     let r2 = runs
     print("indirect-set-same-value|values=\([v1, v2])|runs=\([r1, r2])")
 }
+
+func directEdgeEqualAndDifferentWrite() {
+    let graph = Driver()
+    let source = graph.input(Int64(10))
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(source) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.write(Int64(10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    graph.write(Int64(25), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    print("direct-edge-equal-and-different-write|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}
