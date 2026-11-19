@@ -770,3 +770,8 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
 - **Comparación parcial en arista sobre cadenas de indirectos (release):** `PERF 20 writes over 20k indirect chain with partial comparator: 16.19 ms` (`0.016188292 s`).
 - **Indirectos con offset `(offset, size)` en arista (release):** `PERF 20 writes over 20k offset-indirect chain: 16.08 ms` (`0.016078041 s`).
 - **Optimización `hasOffsetInChain` $O(1)$ (`indirectsWithOffsetInChain`):** `IndirectPerformanceTests` (`20,000 indirects, write + read`) bajó de **67,326.73 ms** (`0eacd92`) a **4.37 ms** en `release`; `20 writes over 20k offset-indirect chain` en **19.51 ms**.
+- **Medición de `db116b7` (`InputEdge.changed` en todas las reglas y limpieza en `pruneEdges`, release):**
+  - `IndirectPerformanceTests` (`20,000 indirects, write + read`): `4.81775 ms` (`1cfae9e`) → `4.840334 ms` (`46f89c2`).
+  - `PerformanceTests` (`1,000 rules x 10 inputs x 100 writes`): `186.06 ms` (`1cfae9e`) → `194.64 ms` (`46f89c2`, +4.6%, sin regresión > 10%).
+  - `PerformanceTests` (`M3 50 cycles x 1,000 plain rules` / `stateful`): `33.83 ms` / `44.2 ms` (`1cfae9e`) → `34.65 ms` / `46.19 ms` (`46f89c2`).
+  - `PerformanceTests` (`100 batches of 32 writes + update 1,000 shared dependents`): `566.23 ms` (`1cfae9e`) → `593.62 ms` (`46f89c2`, +4.8%).
