@@ -340,6 +340,13 @@ public final class Graph {
         precondition(cursor.index != index,
                      "setSource(_:for:): cycle detected (an indirect attribute cannot redirect to itself)")
 
+        let oldResolved = resolveIndirect(Attribute<Value>(id: box.source))
+        let newResolved = resolveIndirect(newSource)
+        let oldVal = (table.isLive(oldResolved.id) && table.state[Int(oldResolved.id.index)] & NodeState.hasValue != 0)
+            ? typedNode(oldResolved).value : nil
+        let newVal = (table.isLive(newResolved.id) && table.state[Int(newResolved.id.index)] & NodeState.hasValue != 0)
+            ? typedNode(newResolved).value : nil
+
         let s = Int(newSource.id.index)
         box.source = newSource.id
         box.sourceSeenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
@@ -355,7 +362,18 @@ public final class Graph {
             table.state[n] &= ~NodeState.dirty
         }
         if table.state[n] & NodeState.observed != 0 { queueNotification(index) }
+        if let oldVal, let newVal {
+            evaluateEdgeComparators(for: index, oldValue: oldVal, newValue: newVal)
+        } else {
+            for dependent in table.outputs[n] where edgeComparators[dependent]?[index] != nil {
+                stickyChangedEdges[dependent, default: []].insert(index)
+            }
+        }
         for dependent in table.outputs[n] {
+            if edgeComparators[dependent]?[index] != nil,
+               stickyChangedEdges[dependent]?.contains(index) != true {
+                continue
+            }
             table.state[Int(dependent)] |= NodeState.pending
         }
         propagateDirty(from: index)

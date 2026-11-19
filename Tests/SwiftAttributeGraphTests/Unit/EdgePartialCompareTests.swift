@@ -128,4 +128,44 @@ struct EdgePartialCompareTests {
         graph.invalidate(sg)
         #expect(graph.edgeComparators[consumer.id.index] == nil)
     }
+
+    @Test func indirectRedirectResetAndAToBToAWithEdgePartialCompare() {
+        let graph = Graph()
+        let sg1 = graph.makeSubgraph()
+        let sg2 = graph.makeSubgraph()
+        let a = graph.withCurrent(sg1) { graph.makeInput(Payload(x: 1, y: 10)) }
+        let bSameProj = graph.withCurrent(sg2) { graph.makeInput(Payload(x: 1, y: 99)) }
+        let cDiffProj = graph.withCurrent(sg2) { graph.makeInput(Payload(x: 7, y: 99)) }
+
+        let indirect = graph.makeIndirect(a)
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return graph.read(indirect) { $0.x } * 10
+        }
+
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 1)
+
+        // Redirect across subgraphs to `bSameProj` (`x == 1`, `y` changed) -> cuts off.
+        graph.setSource(bSameProj, for: indirect)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 1)
+
+        // Redirect to `cDiffProj` (`x == 7`) -> re-evaluates.
+        graph.setSource(cDiffProj, for: indirect)
+        #expect(graph.value(of: consumer) == 70)
+        #expect(runs == 2)
+
+        // Reset back to `a` (`x == 1`) -> re-evaluates.
+        graph.resetSource(for: indirect)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 3)
+
+        // A -> B -> A via setSource/resetSource before consumer evaluation -> sticky changed, re-evaluates.
+        graph.setSource(cDiffProj, for: indirect)
+        graph.resetSource(for: indirect)
+        #expect(graph.value(of: consumer) == 10)
+        #expect(runs == 4)
+    }
 }
