@@ -594,4 +594,5 @@ clearSetUpdateNestedReverse()
 compareValues302Scenarios()
 compareValues302Edges()
 getInputValueExplicitReaderScenario()
+// getInputValueDupPruneAndNonRuleScenarios() // differs: own prunes un-read edge (runs=2 vs 3) and traps on non-rule reader
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

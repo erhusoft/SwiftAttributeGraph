@@ -2154,3 +2154,34 @@ func getInputValueExplicitReaderScenario() {
     let v2 = graph.read(reader)
     print("get-input-value-explicit-reader|v1=\(v1)|v2=\(v2)|runs=\(runs)")
 }
+
+func getInputValueDupPruneAndNonRuleScenarios() {
+    // 1. Duplicates & pruning
+    do {
+        let graph = Driver()
+        let src = graph.input(Int64(5))
+        var runs = 0
+        let reader: Handle<Int64> = graph.rule {
+            runs += 1
+            return 1
+        }
+        _ = graph.read(reader)
+        let v1 = graph.inputValue(src, for: reader)
+        let v2 = graph.inputValue(src, for: reader)
+        graph.write(Int64(6), to: src)
+        _ = graph.read(reader)
+        graph.write(Int64(7), to: src)
+        _ = graph.read(reader)
+        print("get-input-value-dup-prune|vals=[\(v1), \(v2)]|runs=\(runs)")
+    }
+
+    // 2. Non-rule reader
+    do {
+        let graph = Driver()
+        let src = graph.input(Int64(10))
+        let nonRuleReader = graph.input(Int64(99))
+        let v = graph.inputValue(src, for: nonRuleReader)
+        graph.write(Int64(11), to: src)
+        print("get-input-value-non-rule-reader|v=\(v)|readerVal=\(graph.read(nonRuleReader))")
+    }
+}
