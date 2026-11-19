@@ -14,6 +14,8 @@ struct SubgraphTable {
     /// Set on a subgraph that is being invalidated or waits for the end of the update that asked for it: nothing can be
     /// created in it, but what it owns can still be read until it is freed.
     private var falling: [Bool] = []
+    var dirtyOwnFlags: [UInt8] = []
+    var dirtyDescendantFlags: [UInt8] = []
     private var visitedEpoch: [UInt32] = []
     private var currentEpoch: UInt32 = 0
     private var freeList: [UInt32] = []
@@ -37,6 +39,8 @@ struct SubgraphTable {
             children.append([])
             contexts.append(SubgraphTable.defaultContext)
             falling.append(false)
+            dirtyOwnFlags.append(0)
+            dirtyDescendantFlags.append(0)
             visitedEpoch.append(0)
             index = UInt32(generations.count - 1)
         }
@@ -204,7 +208,34 @@ struct SubgraphTable {
         var nextGeneration = generations[i] &+ 1
         if nextGeneration == 0 { nextGeneration = 1 }
         generations[i] = nextGeneration
+        dirtyOwnFlags[i] = 0
+        dirtyDescendantFlags[i] = 0
         freeList.append(index)
         liveCount -= 1
+    }
+
+    mutating func markDirtyFlags(_ flags: UInt8, on sgIndex: UInt32) {
+        guard flags != 0 else { return }
+        let start = Int(sgIndex)
+        guard start < dirtyOwnFlags.count else { return }
+        if (dirtyOwnFlags[start] & flags) == flags { return }
+        dirtyOwnFlags[start] |= flags
+
+        var queue = parents[start]
+        var head = 0
+        while head < queue.count {
+            let p = Int(queue[head])
+            head += 1
+            if (dirtyDescendantFlags[p] & flags) == flags { continue }
+            dirtyDescendantFlags[p] |= flags
+            queue.append(contentsOf: parents[p])
+        }
+    }
+
+    mutating func clearDirtyFlags(_ flags: UInt8, on sgIndex: UInt32) {
+        let i = Int(sgIndex)
+        guard i < dirtyOwnFlags.count else { return }
+        dirtyOwnFlags[i] &= ~flags
+        dirtyDescendantFlags[i] &= ~flags
     }
 }

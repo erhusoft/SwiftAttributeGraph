@@ -212,6 +212,7 @@ extension Graph {
         precondition(table.state[n] & NodeState.isRule != 0, "invalidateValue(of:): only rule attributes can be invalidated")
         let wasDirty = table.state[n] & NodeState.dirty != 0
         table.state[n] |= NodeState.dirty | NodeState.pending
+        if table.flags[n] != 0 { subgraphs.markDirtyFlags(table.flags[n], on: table.owner(at: index)) }
         if !wasDirty && (table.state[n] & NodeState.observed != 0) {
             queueNotification(index)
         }

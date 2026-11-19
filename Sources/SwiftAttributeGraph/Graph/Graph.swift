@@ -188,7 +188,11 @@ public final class Graph {
     public func setFlags(_ flags: AttributeFlags, for attribute: AnyAttribute) {
         assertOwnThread()
         precondition(table.isLive(attribute.id), "setFlags(_:for:): the attribute is dead")
-        table.flags[Int(attribute.id.index)] = flags.rawValue
+        let n = Int(attribute.id.index)
+        table.flags[n] = flags.rawValue
+        if flags.rawValue != 0 && (table.state[n] & NodeState.dirty) != 0 {
+            subgraphs.markDirtyFlags(flags.rawValue, on: table.owner(at: attribute.id.index))
+        }
     }
 
     /// Whether `subgraph` or any of its valid descendant subgraphs owns a live attribute whose flags intersect `flags`
@@ -209,15 +213,8 @@ public final class Graph {
     public func isDirty(_ subgraph: Subgraph, flags: AttributeFlags) -> Bool {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return false }
-        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
-            for member in subgraphs.members[Int(sgIndex)] where table.isLive(index: member) {
-                let m = Int(member)
-                if (table.flags[m] & flags.rawValue) != 0 && (table.state[m] & NodeState.dirty) != 0 {
-                    return true
-                }
-            }
-        }
-        return false
+        let i = Int(subgraph.id.index)
+        return ((subgraphs.dirtyOwnFlags[i] | subgraphs.dirtyDescendantFlags[i]) & flags.rawValue) != 0
     }
 
     /// Calls `body` on every live attribute in `subgraph` and its valid descendant subgraphs whose flags intersect
@@ -245,6 +242,7 @@ public final class Graph {
         guard isValid(subgraph), flags.rawValue != 0 else { return }
         withoutUpdate {
             for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+                subgraphs.clearDirtyFlags(flags.rawValue, on: sgIndex)
                 let members = subgraphs.members[Int(sgIndex)]
                 for member in members.reversed() where table.isLive(index: member) {
                     let m = Int(member)

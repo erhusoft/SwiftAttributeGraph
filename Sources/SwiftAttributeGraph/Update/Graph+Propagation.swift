@@ -27,6 +27,7 @@ extension Graph {
             let n = Int(node)
             if table.state[n] & NodeState.dirty != 0 { continue }
             table.state[n] |= NodeState.dirty
+            if table.flags[n] != 0 { subgraphs.markDirtyFlags(table.flags[n], on: table.owner(at: node)) }
             if table.state[n] & NodeState.observed != 0 { queueNotification(node) }
             for dependent in table.outputs[n] {
                 if table.state[Int(dependent)] & NodeState.indirect == 0,

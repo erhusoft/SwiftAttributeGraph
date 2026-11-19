@@ -504,6 +504,25 @@ import Testing
         #expect(!graph.isDirty(root, flags: .all))
     }
 
+    @Test func isDirtyRemainsSetAfterReadUntilSubgraphUpdate() {
+        let graph = Graph()
+        let sg = graph.makeSubgraph()
+        let node = graph.withCurrent(sg) { graph.makeRule { 10 } }
+        graph.setFlags(AttributeFlags(rawValue: 1), for: node)
+        let consumer = graph.withCurrent(sg) { graph.makeRule { node.value + 1 } }
+
+        #expect(graph.value(of: consumer) == 11)
+        #expect(graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+
+        graph.invalidateValue(of: node)
+        #expect(graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+        #expect(graph.value(of: consumer) == 11)
+        #expect(graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+
+        graph.update(sg, flags: AttributeFlags(rawValue: 1))
+        #expect(!graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+    }
+
     // MARK: C30 — withoutSubgraphInvalidation and isAncestor
 
     @Test func isAncestorAndWithoutSubgraphInvalidationDeferFreeingUntilScopeEnds() {
