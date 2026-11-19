@@ -34,6 +34,8 @@ public final class Graph {
         return ctx
     }()
     var isInUpdateCallback = false
+    var edgeComparators: [UInt32: [UInt32: (Any, Any) -> Bool]] = [:]
+    var stickyChangedEdges: [UInt32: Set<UInt32>] = [:]
     var isInvalidating = false
     var deferringSubgraphInvalidationDepth = 0
 

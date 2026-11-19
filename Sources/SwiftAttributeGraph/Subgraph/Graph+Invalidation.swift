@@ -151,6 +151,8 @@ extension Graph {
         // 3. Free the attributes, then the subgraphs.
         for node in owned {
             observers[node] = nil
+            edgeComparators.removeValue(forKey: node)
+            stickyChangedEdges.removeValue(forKey: node)
             table.free(index: node)
         }
         for index in order {

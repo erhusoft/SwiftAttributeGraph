@@ -236,10 +236,14 @@ extension Graph {
             return
         }
 
+        let oldValue = typedNode(attribute).value
         guard typedNode(attribute).store(value) else { return }
         globalVersion &+= 1
         table.versions[index] &+= 1
         if table.state[index] & NodeState.observed != 0 { queueNotification(UInt32(index)) }
+        if let oldValue {
+            evaluateEdgeComparators(for: UInt32(index), oldValue: oldValue, newValue: value)
+        }
         propagateDirty(from: UInt32(index))
         flushNotifications()
     }
@@ -283,7 +287,17 @@ extension Graph {
                     push(edge.source)
                     continue outer
                 }
-                if table.versions[source] != edge.seenVersion { mustRun = true }
+                if table.versions[source] != edge.seenVersion {
+                    if edgeComparators[node]?[edge.source] != nil {
+                        if stickyChangedEdges[node]?.contains(edge.source) == true {
+                            mustRun = true
+                        } else {
+                            table.inputs[n][i].seenVersion = table.versions[source]
+                        }
+                    } else {
+                        mustRun = true
+                    }
+                }
                 i += 1
             }
 
@@ -493,6 +507,8 @@ extension Graph {
                 }
                 writeIndex += 1
             } else {
+                edgeComparators[node]?.removeValue(forKey: edge.source)
+                stickyChangedEdges[node]?.remove(edge.source)
                 removeOutput(node, from: edge.source, at: edge.positionInOutputs)
             }
         }

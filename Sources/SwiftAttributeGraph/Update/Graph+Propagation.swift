@@ -5,7 +5,13 @@ extension Graph {
     /// already dirty too, because a node can only be brought up to date after its inputs.
     func propagateDirty(from source: UInt32) {
         dirtyStack.removeAll(keepingCapacity: true)
-        dirtyStack.append(contentsOf: table.outputs[Int(source)])
+        for dependent in table.outputs[Int(source)] {
+            if edgeComparators[dependent]?[source] != nil,
+               stickyChangedEdges[dependent]?.contains(source) != true {
+                continue
+            }
+            dirtyStack.append(dependent)
+        }
         drainDirtyStack()
     }
 
