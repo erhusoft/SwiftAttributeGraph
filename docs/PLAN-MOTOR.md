@@ -769,3 +769,4 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
 
 - **Comparación parcial en arista sobre cadenas de indirectos (release):** `PERF 20 writes over 20k indirect chain with partial comparator: 16.19 ms` (`0.016188292 s`).
 - **Indirectos con offset `(offset, size)` en arista (release):** `PERF 20 writes over 20k offset-indirect chain: 16.08 ms` (`0.016078041 s`).
+- **Optimización `hasOffsetInChain` $O(1)$ (`indirectsWithOffsetInChain`):** `IndirectPerformanceTests` (`20,000 indirects, write + read`) bajó de **67,326.73 ms** (`0eacd92`) a **4.37 ms** en `release`; `20 writes over 20k offset-indirect chain` en **19.51 ms**.

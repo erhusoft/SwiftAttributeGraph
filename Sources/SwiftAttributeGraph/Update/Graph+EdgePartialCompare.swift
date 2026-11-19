@@ -35,16 +35,7 @@ extension Graph {
     }
 
     func hasOffsetInChain(_ node: UInt32) -> Bool {
-        var current = node
-        var steps = 0
-        while table.state[Int(current)] & NodeState.indirect != 0 {
-            if offsetIndirects[current] != nil { return true }
-            guard let box = table.box(at: current) as? AnyIndirectNode else { break }
-            current = box.source.index
-            steps += 1
-            if steps > table.generations.count { break }
-        }
-        return false
+        !offsetIndirects.isEmpty && (offsetIndirects[node] != nil || indirectsWithOffsetInChain.contains(node))
     }
 
     func evaluateEdgeComparators(for source: UInt32, oldValue: Any, newValue: Any) {

@@ -230,4 +230,103 @@ struct OffsetIndirectEdgeCompareTests {
         graph.setValue(FloatPair(x: 2.0, y: .nan), for: source)
         #expect(runs == 3)
     }
+
+    @Test func mixedChainSourceToOffsetToNormalIndirectToConsumer() {
+        let graph = Graph()
+        let source = graph.makeInput(Pair(a: 1, b: 10))
+        let bOffset = MemoryLayout<Pair>.offset(of: \Pair.b)!
+        let offsetO = graph.makeOffsetIndirect(of: source, offset: bOffset, size: MemoryLayout<Int64>.size)
+        let normalP = graph.makeIndirect(offsetO)
+
+        var runs = 0
+        let consumer = graph.makeRule {
+            runs += 1
+            return normalP.value.b * 2
+        }
+        #expect(graph.value(of: consumer) == 20)
+        #expect(runs == 1)
+
+        // Range unchanged (`a` changed): consumer stays clean and does not re-run.
+        graph.setValue(Pair(a: 99, b: 10), for: source)
+        #expect(graph.table.state[Int(consumer.id.index)] & NodeState.dirty == 0)
+        #expect(graph.value(of: consumer) == 20)
+        #expect(runs == 1)
+
+        // Range changed (`b` changed): consumer re-runs.
+        graph.setValue(Pair(a: 99, b: 25), for: source)
+        #expect(graph.value(of: consumer) == 50)
+        #expect(runs == 2)
+
+        // A -> B -> A before consumer evaluation: keeps sticky bit and re-runs.
+        graph.setValue(Pair(a: 99, b: 30), for: source)
+        graph.setValue(Pair(a: 99, b: 25), for: source)
+        #expect(graph.value(of: consumer) == 50)
+        #expect(runs == 3)
+    }
+
+    @Test func twoConsumersOnSameNormalIndirectOneWithOffsetOneFull() {
+        let graph = Graph()
+        let source = graph.makeInput(Pair(a: 1, b: 10))
+        let bOffset = MemoryLayout<Pair>.offset(of: \Pair.b)!
+        let offsetO = graph.makeOffsetIndirect(of: source, offset: bOffset, size: MemoryLayout<Int64>.size)
+        let normalP = graph.makeIndirect(offsetO)
+        let fullP = graph.makeIndirect(source)
+
+        var offsetRuns = 0
+        let offsetConsumer = graph.makeRule {
+            offsetRuns += 1
+            return normalP.value.b
+        }
+        var fullRuns = 0
+        let fullConsumer = graph.makeRule {
+            fullRuns += 1
+            return fullP.value.a
+        }
+
+        #expect(graph.value(of: offsetConsumer) == 10)
+        #expect(graph.value(of: fullConsumer) == 1)
+        #expect(offsetRuns == 1 && fullRuns == 1)
+
+        graph.setValue(Pair(a: 2, b: 10), for: source)
+        #expect(graph.value(of: fullConsumer) == 2)
+        #expect(graph.value(of: offsetConsumer) == 10)
+        #expect(fullRuns == 2 && offsetRuns == 1)
+    }
+
+    @Test func redirectingIndirectTogglesOffsetInChainAndResetRestoresIt() {
+        let graph = Graph()
+        let source = graph.makeInput(Pair(a: 1, b: 10))
+        let bOffset = MemoryLayout<Pair>.offset(of: \Pair.b)!
+        let offsetO = graph.makeOffsetIndirect(of: source, offset: bOffset, size: MemoryLayout<Int64>.size)
+        let normalInd = graph.makeIndirect(offsetO)
+        let childInd = graph.makeIndirect(normalInd)
+
+        #expect(graph.indirectsWithOffsetInChain.contains(normalInd.id.index))
+        #expect(graph.indirectsWithOffsetInChain.contains(childInd.id.index))
+
+        // Redirect away from offset chain -> clears flag on `normalInd` and `childInd`.
+        graph.setSource(source, for: normalInd)
+        #expect(!graph.indirectsWithOffsetInChain.contains(normalInd.id.index))
+        #expect(!graph.indirectsWithOffsetInChain.contains(childInd.id.index))
+
+        // Reset back to `offsetO` -> restores flag on both.
+        graph.resetSource(for: normalInd)
+        #expect(graph.indirectsWithOffsetInChain.contains(normalInd.id.index))
+        #expect(graph.indirectsWithOffsetInChain.contains(childInd.id.index))
+    }
+
+    @Test func diamondWithDifferentOffsetRangesUsesFirstDiscoveredInBFS() {
+        let graph = Graph()
+        let source = graph.makeInput(Pair(a: 1, b: 10))
+        let aOffset = MemoryLayout<Pair>.offset(of: \Pair.a)!
+        let bOffset = MemoryLayout<Pair>.offset(of: \Pair.b)!
+        let indA = graph.makeOffsetIndirect(of: source, offset: aOffset, size: MemoryLayout<Int64>.size)
+        let indB = graph.makeOffsetIndirect(of: source, offset: bOffset, size: MemoryLayout<Int64>.size)
+        let consumer = graph.makeRule { indA.value.a + indB.value.b }
+        #expect(graph.value(of: consumer) == 11)
+
+        // Changing `a` triggers `indA` edge; consumer re-runs.
+        graph.setValue(Pair(a: 2, b: 10), for: source)
+        #expect(graph.value(of: consumer) == 12)
+    }
 }

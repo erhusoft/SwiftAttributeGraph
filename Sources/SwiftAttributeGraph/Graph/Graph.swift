@@ -37,6 +37,7 @@ public final class Graph {
     var edgeComparators: [UInt32: [UInt32: (Any, Any) -> Bool]] = [:]
     var stickyChangedEdges: [UInt32: Set<UInt32>] = [:]
     var offsetIndirects: [UInt32: (offset: Int, size: Int)] = [:]
+    var indirectsWithOffsetInChain: Set<UInt32> = []
     var isInvalidating = false
     var deferringSubgraphInvalidationDepth = 0
 
@@ -300,6 +301,9 @@ public final class Graph {
             | (table.state[s] & NodeState.dirty)
         let seenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
         let id = allocate(IndirectNode<Value>(source: source.id, sourceSeenVersion: seenVersion), state: initialState)
+        if offsetIndirects[source.id.index] != nil || indirectsWithOffsetInChain.contains(source.id.index) {
+            indirectsWithOffsetInChain.insert(id.index)
+        }
         rebuildIndirectEdges(for: id.index)
         return Attribute(id: id)
     }
@@ -353,6 +357,23 @@ public final class Graph {
         box.sourceSeenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
         box.sourceRedirected = true
         rebuildIndirectEdges(for: index)
+
+        let newHasOffset = offsetIndirects[newSource.id.index] != nil || indirectsWithOffsetInChain.contains(newSource.id.index)
+        var indQueue: [UInt32] = [index]
+        var indVisited: Set<UInt32> = [index]
+        var indHead = 0
+        while indHead < indQueue.count {
+            let cur = indQueue[indHead]
+            indHead += 1
+            if newHasOffset {
+                indirectsWithOffsetInChain.insert(cur)
+            } else {
+                indirectsWithOffsetInChain.remove(cur)
+            }
+            for dep in table.outputs[Int(cur)] where table.state[Int(dep)] & NodeState.indirect != 0 {
+                if indVisited.insert(dep).inserted { indQueue.append(dep) }
+            }
+        }
 
         globalVersion &+= 1
         table.versions[n] &+= 1

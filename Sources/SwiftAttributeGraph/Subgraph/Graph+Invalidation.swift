@@ -154,6 +154,7 @@ extension Graph {
             edgeComparators.removeValue(forKey: node)
             stickyChangedEdges.removeValue(forKey: node)
             offsetIndirects.removeValue(forKey: node)
+            indirectsWithOffsetInChain.remove(node)
             table.free(index: node)
         }
         for index in order {
