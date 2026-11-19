@@ -20,6 +20,4 @@ enum NodeState {
     static let resumable: UInt16 = 1 << 8
     /// The node is an indirect attribute: it redirects to another attribute and has no value of its own.
     static let indirect: UInt16 = 1 << 9
-    /// The node's last evaluation was cancelled before its version could be published; the next successful run forces a version bump.
-    static let cancelled: UInt16 = 1 << 10
 }

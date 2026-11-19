@@ -29,6 +29,12 @@ extension Graph {
         currentSubgraph = previousSubgraph
         _ = ThreadLocalGraph.install(previousGraph)
 
+        if frames[top].isCancelled {
+            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending
+            frames.removeLast()
+            return
+        }
+
         switch outcome.step {
         case .needsInput(let attribute):
             precondition(table.isLive(attribute.id), "needsInput: the attribute is dead")

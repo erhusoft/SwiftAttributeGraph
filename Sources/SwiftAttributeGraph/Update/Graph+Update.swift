@@ -365,15 +365,14 @@ extension Graph {
         evaluatingNode = previousNode
 
         if !frames.isEmpty, frames[frames.count - 1].isCancelled {
-            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending | NodeState.cancelled
+            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending
             return
         }
 
-        let wasCancelled = (table.state[n] & NodeState.cancelled) != 0
         pruneEdges(of: node)
-        table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending | NodeState.cancelled))
+        table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending))
             | NodeState.hasValue
-        if changed || wasCancelled {
+        if changed {
             globalVersion &+= 1
             table.versions[n] &+= 1
         } else {
