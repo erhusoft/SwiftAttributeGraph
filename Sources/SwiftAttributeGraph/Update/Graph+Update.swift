@@ -55,7 +55,13 @@ extension Graph {
         if let running = ThreadLocalGraph.current() {
             precondition(running === self, "a rule cannot read an attribute of another graph")
         }
-        flushUpdateCallbackIfReady()
+        // Native drains the update callbacks only when a rule is read, never an input [O]. An indirect attribute counts
+        // as the rule (or input) it resolves to, as `clearNeedsUpdateFlags` does.
+        if table.isLive(attribute.id) {
+            let node = table.state[Int(attribute.id.index)] & NodeState.indirect != 0
+                ? resolveIndirect(attribute).id.index : attribute.id.index
+            if table.state[Int(node)] & NodeState.isRule != 0 { flushUpdateCallbackIfReady() }
+        }
         return read(attribute)
     }
 

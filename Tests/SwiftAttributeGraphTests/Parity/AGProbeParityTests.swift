@@ -606,7 +606,7 @@ import SwiftAttributeGraph
 
         // NativeProbe `context-update-callback` measured `before=0|after=1|reentrant=3`:
         // `setNeedsUpdate` defers and coalesces until a read/update drains callbacks.
-        let dummy = g.makeInput(0)
+        let dummy = g.makeRule { 0 }   // a rule: reading an input drains nothing (shared-context-input-read [O])
         var samePassDrain = 0
         ctx.setUpdateCallback {
             samePassDrain += 1

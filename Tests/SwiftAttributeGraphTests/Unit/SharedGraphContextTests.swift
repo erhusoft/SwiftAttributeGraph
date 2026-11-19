@@ -87,6 +87,22 @@ import Testing
         #expect([calls1, calls2] == [2, 2])
     }
 
+    @Test func readingAnInputDrainsNoCallbackButReadingATopLevelRuleDrainsAllContexts() {
+        let graph = Graph()
+        let shared = graph.makeSharedContext()
+        var calls1 = 0, calls2 = 0
+        graph.setUpdateCallback { calls1 += 1 }
+        shared.setUpdateCallback { calls2 += 1 }
+        let sg1 = graph.defaultContext.makeSubgraph()
+        let a = graph.withCurrent(sg1) { graph.makeInput(Int64(1)) }
+        let r1 = graph.withCurrent(sg1) { graph.makeRule { graph.value(of: a) + 1 } }
+        graph.setNeedsUpdate(); shared.setNeedsUpdate()
+        _ = graph.value(of: a)
+        #expect([calls1, calls2] == [0, 0], "native: an input read drains nothing, afterInput=0,0 [O]")
+        _ = graph.value(of: r1)
+        #expect([calls1, calls2] == [1, 1], "native: a top-level rule read drains every context, afterRule=1,1 [O]")
+    }
+
     @Test func contextThreadUpdatingIsOnlyOneForTheContextOfTheRunningRule() {
         let graph = Graph()
         let shared = graph.makeSharedContext()

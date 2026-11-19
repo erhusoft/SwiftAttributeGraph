@@ -205,7 +205,7 @@ struct NodeCacheAndUpdateCallbackTests {
         #expect(count1 == 1)
         #expect(count2 == 0)
 
-        let dummy = graph.makeInput(0)
+        let dummy = graph.makeRule { 0 }   // a rule: reading an input drains nothing (shared-context-input-read [O])
         ctx2.setNeedsUpdate()
         #expect(count2 == 0)
         _ = graph.value(of: dummy)
