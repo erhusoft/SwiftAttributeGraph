@@ -30,7 +30,7 @@ enum ValueComparator {
         case .bits:
             return { bitwiseEqual($0, $1) }
         case .equatableUnlessPOD:
-            if TypeLayout.isPOD(Value.self) { return { bitwiseEqual($0, $1) } }
+            if TypeLayout.isPOD(Value.self) { return planned(Value.self, mode: .view) }
             if let equal = equatableComparator(Value.self) { return equal }
             return { bitwiseEqual($0, $1) }
         case .viewValue:
