@@ -86,4 +86,38 @@ struct OffsetAttributeTests {
         graph.setValue(NonTrivial(title: "a", count: 2), for: source)
         #expect(graph.value(of: titleAttr) == "a")
     }
+
+    @Test func projectedAttributeOverIndirectSourceHandlesRedirectAndReset() {
+        let graph = Graph()
+        let a = graph.makeInput(PaddedStruct(flag: true, count: 10, tag: 1))
+        let b = graph.makeInput(PaddedStruct(flag: false, count: 10, tag: 2))
+        let c = graph.makeInput(PaddedStruct(flag: false, count: 25, tag: 3))
+
+        let indirect = graph.makeIndirect(a)
+        let projected = graph.makeProjectedAttribute(of: indirect) { $0.count }
+
+        var consumerRuns = 0
+        let consumer = graph.makeRule {
+            consumerRuns += 1
+            return projected.value * 2
+        }
+
+        #expect(graph.value(of: consumer) == 20)
+        #expect(consumerRuns == 1)
+
+        // Redirect to `b` (same `count = 10`, different `flag`/`tag`) -> cuts off, consumer does not re-run.
+        graph.setSource(b, for: indirect)
+        #expect(graph.value(of: consumer) == 20)
+        #expect(consumerRuns == 1)
+
+        // Redirect to `c` (`count = 25`) -> consumer re-runs.
+        graph.setSource(c, for: indirect)
+        #expect(graph.value(of: consumer) == 50)
+        #expect(consumerRuns == 2)
+
+        // Reset back to `a` (`count = 10`) -> consumer re-runs.
+        graph.resetSource(for: indirect)
+        #expect(graph.value(of: consumer) == 20)
+        #expect(consumerRuns == 3)
+    }
 }
