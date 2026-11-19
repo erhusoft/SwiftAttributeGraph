@@ -70,6 +70,7 @@ SCENARIOS = [
     "cooperative-cancel-consumer",
     "cooperative-cancel-nested",
     "cooperative-cancel-first-eval",
+    "context-update-callback-on-write",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
