@@ -2382,6 +2382,69 @@ func getCounterScenario() {
     print("get-counter|\(log)")
 }
 
+/// `AGGraphGetCounter`, the context and state selectors: `graphID` and `contextID` of graphs created in sequence
+/// (relative to the first one, since the absolute numbers depend on how many graphs the process made before),
+/// `threadUpdating` and `contextThreadUpdating` outside, inside and inside a nested rule, `needsUpdate` and
+/// `contextNeedsUpdate` around `setNeedsUpdate`, and `mainThreadUpdates` next to `updates`.
+func getCounterContextScenario() {
+    var log: [String] = []
+    let first = Driver()
+    let base = first.stateCounters()[0]
+    func rel(_ d: Driver) -> String {
+        let s = d.stateCounters()
+        return "\(Int(s[0]) - Int(base)),\(Int(s[1]) - Int(base))"
+    }
+    var ids = [rel(first)]
+    var kept = [first]
+    for _ in 0..<3 { let d = Driver(); kept.append(d); ids.append(rel(d)) }
+    kept.removeAll()
+    for _ in 0..<2 { let d = Driver(); ids.append(rel(d)) }
+    let k1 = Driver(); ids.append(rel(k1))
+    do { let t = Driver(); ids.append(rel(t)) }
+    let k2 = Driver(); ids.append(rel(k2))
+    // Subgraphs and attributes do not consume numbers.
+    _ = k2.input(Int64(1))
+    _ = k2.makeSubgraph()
+    let k3 = Driver(); ids.append(rel(k3))
+    log.append("ids=\(ids)")
+    // threadUpdating and contextThreadUpdating: [tu, ctu] outside, in a rule, in a nested rule.
+    let d = Driver()
+    func tu() -> String { let s = d.stateCounters(); return "\(s[2])\(s[3])" }
+    var seen: [String] = []
+    let a = d.input(Int64(1))
+    let mid: Handle<Int64> = d.rule { seen.append("mid=\(tu())"); return d.read(a) }
+    let tail: Handle<Int64> = d.rule { seen.append("tailPre=\(tu())"); let v = d.read(mid); seen.append("tailPost=\(tu())"); return v }
+    seen.append("outside=\(tu())")
+    _ = d.read(tail)
+    seen.append("after=\(tu())")
+    d.withoutUpdate { seen.append("withoutUpdate=\(tu())") }
+    let other = Driver()
+    let probeRule: Handle<Int64> = d.rule { seen.append("otherGraphInRule=\(other.stateCounters()[2])"); return 1 }
+    _ = d.read(probeRule)
+    log.append("updating=\(seen)")
+    // needsUpdate and contextNeedsUpdate: [nu, cnu].
+    var flags: [String] = []
+    func nu() -> String { let s = d.stateCounters(); return "\(s[4])\(s[5])" }
+    flags.append("start=\(nu())")
+    d.setNeedsUpdate(); flags.append("set=\(nu())")
+    d.setNeedsUpdate(); flags.append("setTwice=\(nu())")
+    _ = d.read(a); flags.append("readInput=\(nu())")
+    d.write(Int64(5), to: a); flags.append("write=\(nu())")
+    _ = d.read(tail); flags.append("readRule=\(nu())")
+    d.setNeedsUpdate(); _ = d.read(tail); flags.append("setThenCleanRule=\(nu())")
+    let ind = d.indirect(tail)
+    d.setNeedsUpdate(); _ = d.read(d.attribute(of: ind)); flags.append("setThenIndirectRule=\(nu())")
+    d.write(Int64(6), to: a); flags.append("writeOnly=\(nu())")
+    let outer: Handle<Int64> = d.rule { d.setNeedsUpdate(); flags.append("inRule=\(nu())"); return d.read(tail) }
+    _ = d.read(outer); flags.append("afterRuleSet=\(nu())")
+    _ = d.read(outer); flags.append("readAgain=\(nu())")
+    log.append("needsUpdate=\(flags)")
+    // mainThreadUpdates next to updates.
+    let s = d.stateCounters()
+    log.append("mainThreadUpdates=\(s[6] == d.graphUpdates())")
+    print("get-counter-context|\(log)")
+}
+
 /// `AGGraphGetAttributeGraph` and `AGSubgraphGetGraph`: the graph of an attribute and of a subgraph, compared by
 /// object identity, with two graphs alive in the process and the same slot index in both.
 func getAttributeGraphScenario() {

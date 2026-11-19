@@ -97,6 +97,7 @@ SCENARIOS = [
     "get-current-attribute",
     "current-attribute-was-modified",
     "get-counter",
+    "get-counter-context",
     "get-attribute-graph",
     "get-subgraph-current",
 ]

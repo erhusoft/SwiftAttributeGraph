@@ -167,6 +167,14 @@ final class Driver {
          graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
          graph.counter(for: .createdSubgraphs)].map(String.init).joined(separator: ",")
     }
+    /// The context and state selectors: graphID, contextID, threadUpdating, contextThreadUpdating, needsUpdate,
+    /// contextNeedsUpdate and mainThreadUpdates.
+    func stateCounters() -> [UInt64] {
+        [graph.counter(for: .graphID), graph.counter(for: .contextID), graph.counter(for: .threadUpdating),
+         graph.counter(for: .contextThreadUpdating), graph.counter(for: .needsUpdate),
+         graph.counter(for: .contextNeedsUpdate), graph.counter(for: .mainThreadUpdates)]
+    }
+    func graphUpdates() -> UInt64 { graph.counter(for: .updates) }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
@@ -388,6 +396,14 @@ final class Driver {
          graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
          graph.counter(for: .createdSubgraphs)].map(String.init).joined(separator: ",")
     }
+    /// The context and state selectors: graphID, contextID, threadUpdating, contextThreadUpdating, needsUpdate,
+    /// contextNeedsUpdate and mainThreadUpdates.
+    func stateCounters() -> [UInt64] {
+        [graph.counter(for: .graphID), graph.counter(for: .contextID), graph.counter(for: .threadUpdating),
+         graph.counter(for: .contextThreadUpdating), graph.counter(for: .needsUpdate),
+         graph.counter(for: .contextNeedsUpdate), graph.counter(for: .mainThreadUpdates)]
+    }
+    func graphUpdates() -> UInt64 { graph.counter(for: .updates) }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
@@ -657,6 +673,7 @@ getValueOptionScenario(name: "get-value-opt6", options: 6)
 getCurrentAttributeScenario()
 currentAttributeWasModifiedScenario()
 getCounterScenario()
+getCounterContextScenario()
 getAttributeGraphScenario()
 getSubgraphCurrentScenario()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
