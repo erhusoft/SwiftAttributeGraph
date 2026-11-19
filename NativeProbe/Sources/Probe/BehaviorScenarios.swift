@@ -2139,3 +2139,18 @@ func compareValues302Edges() {
 
     print("compare-values-302-edges|res=[\(mixedStrEq), \(mixedClsEq), \(paddedEq), \(sameClsEq), \(sameClEq), \(tupleEq), \(enumEq), \(optNestedEq)]")
 }
+
+func getInputValueExplicitReaderScenario() {
+    let graph = Driver()
+    let src = graph.input(Int64(5))
+    var runs = 0
+    let reader: Handle<Int64> = graph.rule {
+        runs += 1
+        return 1
+    }
+    _ = graph.read(reader)
+    let v1 = graph.inputValue(src, for: reader)
+    graph.write(Int64(6), to: src)
+    let v2 = graph.read(reader)
+    print("get-input-value-explicit-reader|v1=\(v1)|v2=\(v2)|runs=\(runs)")
+}

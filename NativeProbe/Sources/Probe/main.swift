@@ -4,6 +4,14 @@ import AttributeGraph
 @_silgen_name("AGCompareValues")
 private func c_AGCompareValues(_ lhs: UnsafeRawPointer, _ rhs: UnsafeRawPointer, _ type: Metadata, _ options: UInt32) -> Bool
 
+struct ProbeAGValuePair {
+    var value: UnsafeRawPointer
+    var changed: Bool
+}
+
+@_silgen_name("AGGraphGetInputValue")
+private func c_AGGraphGetInputValue(_ attribute: AnyAttribute, _ input: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
+
 @_silgen_name("AGGraphResetIndirectAttribute")
 private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 
@@ -107,6 +115,11 @@ final class Driver {
                 c_AGCompareValues(pa, pb, Metadata(T.self), 0x303)
             }
         }
+    }
+
+    func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
+        c_AGGraphGetInputValue(reader.identifier, input.identifier, 0, Metadata(V.self))
+            .value.assumingMemoryBound(to: V.self).pointee
     }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Subgraph(graph: Graph())
@@ -305,6 +318,10 @@ final class Driver {
         g.setValue(b, for: attr)
         _ = g.value(of: r)
         return runs == 1
+    }
+
+    func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
+        graph.inputValue(of: input, for: reader.erased)
     }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Graph().makeSubgraph()
@@ -576,4 +593,5 @@ clearAndSetUpdateScenario()
 clearSetUpdateNestedReverse()
 compareValues302Scenarios()
 compareValues302Edges()
+getInputValueExplicitReaderScenario()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
