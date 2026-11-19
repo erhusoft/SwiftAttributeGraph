@@ -1498,3 +1498,32 @@ func offsetStickyInsideThenOutside() {
     let r2 = runs
     print("offset-sticky-inside-then-outside|values=\([v1, v2])|runs=\([r1, r2])")
 }
+
+func offsetMixedChain() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    let ind = graph.indirect(field)
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(ind.projectedValue) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    // Outside range
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    // Inside range
+    graph.write(Pair(x: 99, y: 20), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    // Sticky: inside then back to original before reading
+    graph.write(Pair(x: 99, y: 30), to: source)
+    graph.write(Pair(x: 99, y: 20), to: source)
+    let v4 = graph.read(consumer)
+    let r4 = runs
+    print("offset-mixed-chain|values=\([v1, v2, v3, v4])|runs=\([r1, r2, r3, r4])")
+}

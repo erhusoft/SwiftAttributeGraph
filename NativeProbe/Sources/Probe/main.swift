@@ -473,3 +473,4 @@ for name in ["create-input-in-rule-scoped", "create-rule-in-rule-scoped", "creat
 }
 offsetRangeInsideAndOutside()
 offsetStickyInsideThenOutside()
+offsetMixedChain()
