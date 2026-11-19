@@ -1930,3 +1930,13 @@ func subgraphAddChildSecondaryParent() {
     let validAfterP2 = graph.isValid(child)
     print("subgraph-add-child-secondary-parent|valid=[\(validBefore), \(validAfterP1), \(validAfterP2)]")
 }
+
+func subgraphCreate2() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let sg = graph.makeSubgraph(for: a)
+    let validBefore = graph.isValid(sg)
+    graph.invalidate(sg)
+    let validAfter = graph.isValid(sg)
+    print("subgraph-create2|valid=[\(validBefore), \(validAfter)]")
+}
