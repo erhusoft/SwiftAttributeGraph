@@ -1458,3 +1458,24 @@ func multiObserverTreeOrderAndCancel() {
     precondition(events == ["parent-obs1", "parent-obs2", "child2-obs1", "child1-obs1", "child1-obs2", "grand1-obs1"])
     print("multi-observer-tree-order-and-cancel|events=\(events)")
 }
+
+func offsetRangeInsideAndOutside() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    var runs = 0
+    let consumer = graph.rule {
+        runs += 1
+        return graph.read(field) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    graph.write(Pair(x: 99, y: 25), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    print("offset-range-inside-outside|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}

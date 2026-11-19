@@ -88,6 +88,9 @@ final class Driver {
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
     func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { currentSubgraph.apply { IndirectHandle(source: source) } }
+    func offsetIndirect<V: BitwiseCopyable, Field>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
+        currentSubgraph.apply { source[keyPath: keyPath] }
+    }
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.projectedValue }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.source }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { indirect.source = newSource }
@@ -244,6 +247,9 @@ final class Driver {
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
     func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(scope) { graph.makeIndirect(source) } }
+    func offsetIndirect<V: BitwiseCopyable, Field: BitwiseCopyable>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
+        graph.withCurrent(scope) { graph.makeOffsetFieldAttribute(of: source, keyPath: keyPath) }
+    }
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { graph.source(of: indirect) }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
@@ -465,3 +471,4 @@ for name in ["create-input-in-rule-scoped", "create-rule-in-rule-scoped", "creat
     ccScopedReads = false
     ccScenarios.first { $0.0 == name }!.1()
 }
+offsetRangeInsideAndOutside()
