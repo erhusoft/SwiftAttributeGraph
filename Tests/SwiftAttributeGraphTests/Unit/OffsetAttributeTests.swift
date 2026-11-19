@@ -8,64 +8,66 @@ struct OffsetAttributeTests {
         var second: Int64
     }
 
+    struct Empty: BitwiseCopyable, Equatable {}
+
     @Test func changeInsideProjectedRangePropagatesAndOutsideRangeCutsOff() {
         let graph = Graph()
         let source = graph.makeInput(Pair(first: 1, second: 2))
         let secondOffset = MemoryLayout<Pair>.offset(of: \Pair.second)!
-        let projected: Attribute<Int64> = graph.makeOffsetAttribute(of: source, offset: secondOffset)
+        let projected = graph.makeByteRangeAttribute(of: source, offset: secondOffset, size: MemoryLayout<Int64>.size)
 
         var consumerRuns = 0
         let consumer = graph.makeRule {
             consumerRuns += 1
-            return projected.value * 10
+            return projected.value.count
         }
 
-        #expect(graph.value(of: consumer) == 20)
+        #expect(graph.value(of: consumer) == MemoryLayout<Int64>.size)
         #expect(consumerRuns == 1)
 
         // Change outside projected range (`first` only): `projected` cuts off, `consumer` does not re-run.
         graph.setValue(Pair(first: 99, second: 2), for: source)
-        #expect(graph.value(of: consumer) == 20)
+        #expect(graph.value(of: consumer) == MemoryLayout<Int64>.size)
         #expect(consumerRuns == 1)
 
-        // Change inside projected range (`second`): `consumer` re-runs with new value.
+        // Change inside projected range (`second`): `consumer` re-runs.
         graph.setValue(Pair(first: 99, second: 5), for: source)
-        #expect(graph.value(of: consumer) == 50)
+        #expect(graph.value(of: consumer) == MemoryLayout<Int64>.size)
         #expect(consumerRuns == 2)
     }
 
-    @Test func fullRangeReturnsSourceDirectlyWithoutExtraNode() {
+    @Test func zeroSizeRangeAndZeroSizeTypeDoNotCrashOrPropagate() {
         let graph = Graph()
-        let source = graph.makeInput(Pair(first: 3, second: 4))
-        let full: Attribute<Pair> = graph.makeOffsetAttribute(of: source, offset: 0, as: Pair.self)
-        #expect(full.id == source.id)
-        #expect(graph.value(of: full) == Pair(first: 3, second: 4))
-    }
-
-    @Test func zeroSizeRangeNeverPropagatesChanges() {
-        let graph = Graph()
-        let source = graph.makeInput(Pair(first: 1, second: 2))
-        let zero = graph.makeZeroSizeOffsetAttribute(of: source, offset: 0)
+        let pairSource = graph.makeInput(Pair(first: 1, second: 2))
+        let zeroAtEnd = graph.makeByteRangeAttribute(of: pairSource, offset: MemoryLayout<Pair>.size, size: 0)
 
         var runs = 0
         let consumer = graph.makeRule {
             runs += 1
-            return zero.value + 1
+            return zeroAtEnd.value.count
         }
-
-        #expect(graph.value(of: consumer) == 1)
+        #expect(graph.value(of: consumer) == 0)
         #expect(runs == 1)
 
-        graph.setValue(Pair(first: 100, second: 200), for: source)
-        #expect(graph.value(of: consumer) == 1)
+        graph.setValue(Pair(first: 100, second: 200), for: pairSource)
+        #expect(graph.value(of: consumer) == 0)
         #expect(runs == 1)
+
+        let emptySource = graph.makeInput(Empty())
+        let emptyRange = graph.makeByteRangeAttribute(of: emptySource, offset: 0, size: 0)
+        #expect(graph.value(of: emptyRange).isEmpty)
     }
 
     @Test func outOfBoundsOrOverflowOffsetStopsTheProgram() async {
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
             let source = graph.makeInput(Pair(first: 1, second: 2))
-            let _: Attribute<Int64> = graph.makeOffsetAttribute(of: source, offset: MemoryLayout<Pair>.size)
+            _ = graph.makeByteRangeAttribute(of: source, offset: MemoryLayout<Pair>.size, size: 1)
+        }
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let source = graph.makeInput(Pair(first: 1, second: 2))
+            _ = graph.makeByteRangeAttribute(of: source, offset: 8, size: Int.max)
         }
     }
 
