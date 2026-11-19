@@ -77,9 +77,9 @@ public final class Graph {
     /// Creates a new invalidation context distinct from the root subgraph's default context.
     public func makeSubgraphContext() -> SubgraphContext {
         assertOwnThread()
+        precondition(nextSubgraphContextID != UInt32.max, "makeSubgraphContext: context ID space exhausted")
         let id = nextSubgraphContextID
-        nextSubgraphContextID &+= 1
-        if nextSubgraphContextID == 0 { nextSubgraphContextID = 2 }
+        nextSubgraphContextID += 1
         return SubgraphContext(rawValue: id)
     }
 

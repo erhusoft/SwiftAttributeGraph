@@ -99,11 +99,19 @@ struct SubgraphTable {
         parents[c].removeAll { $0 == parent }
     }
 
+    private mutating func nextEpoch() -> UInt32 {
+        currentEpoch &+= 1
+        if currentEpoch == 0 {
+            visitedEpoch.replaceSubrange(0..<visitedEpoch.count, with: repeatElement(0, count: visitedEpoch.count))
+            currentEpoch = 1
+        }
+        return currentEpoch
+    }
+
     /// Whether `ancestor` is `node` or an ancestor of `node` in the subgraph DAG. Iterative with epoch deduplication.
     mutating func isAncestor(_ ancestor: UInt32, of node: UInt32) -> Bool {
         if ancestor == node { return true }
-        currentEpoch &+= 1
-        let epoch = currentEpoch
+        let epoch = nextEpoch()
         var stack: [UInt32] = [node]
         visitedEpoch[Int(node)] = epoch
         while let current = stack.popLast() {
@@ -123,8 +131,7 @@ struct SubgraphTable {
     /// Deduplicates DAG diamonds with `visitedEpoch` and uses an explicit stack.
     mutating func reverseCreationSubgraphOrder(from root: UInt32) -> [UInt32] {
         guard !falling[Int(root)] else { return [] }
-        currentEpoch &+= 1
-        let epoch = currentEpoch
+        let epoch = nextEpoch()
         var result: [UInt32] = []
         var stack: [UInt32] = [root]
         while let current = stack.popLast() {
@@ -149,8 +156,7 @@ struct SubgraphTable {
     /// - Children in a different context are NOT invalidated; their `(parent, child)` edges are returned in `detachedEdges`.
     mutating func invalidationPlan(from root: UInt32) -> (toInvalidate: [UInt32], detachedEdges: [(parent: UInt32, child: UInt32)]) {
         let rootContext = contexts[Int(root)]
-        currentEpoch &+= 1
-        let epoch = currentEpoch
+        let epoch = nextEpoch()
         var toInvalidate: [UInt32] = []
         var detachedEdges: [(parent: UInt32, child: UInt32)] = []
         var stack: [UInt32] = [root]

@@ -171,6 +171,59 @@ struct SubgraphDAGTests {
         }
         #expect(visitedAfterUnlink.isEmpty)
     }
+
+    @Test func addingCycleStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let p = graph.makeSubgraph()
+            let c = graph.makeSubgraph(parent: p)
+            graph.addChild(p, to: c)
+        }
+    }
+
+    @Test func repeatedAddChildDoesNotDuplicateEdge() {
+        let graph = Graph()
+        let p = graph.makeSubgraph()
+        let c = graph.makeSubgraph(parent: p)
+
+        graph.addChild(c, to: p)
+        graph.addChild(c, to: p)
+
+        #expect(graph.subgraphs.children(of: p.id.index) == [c.id.index])
+        #expect(graph.subgraphs.parents(of: c.id.index) == [p.id.index])
+    }
+
+    @Test func removingNonExistentChildIsNoOp() {
+        let graph = Graph()
+        let p1 = graph.makeSubgraph()
+        let p2 = graph.makeSubgraph()
+        let c = graph.makeSubgraph(parent: p1)
+
+        graph.removeChild(c, from: p2)
+
+        #expect(graph.subgraphs.parents(of: c.id.index) == [p1.id.index])
+        #expect(graph.subgraphs.children(of: p2.id.index).isEmpty)
+    }
+
+    @Test func invalidatingBothParentsInSequenceWithDifferentContextKillsChildOnSecondParent() {
+        let graph = Graph()
+        let p1 = graph.makeSubgraph()
+        let ctx2 = graph.makeSubgraphContext()
+        let p2 = graph.makeSubgraph(context: ctx2)
+        let c = graph.makeSubgraph(parent: p2)
+        graph.addChild(c, to: p1)
+
+        var cNotices = 0
+        graph.observe(c) { cNotices += 1 }
+
+        graph.invalidate(p1)
+        #expect(graph.isValid(c))
+        #expect(cNotices == 0)
+
+        graph.invalidate(p2)
+        #expect(!graph.isValid(c))
+        #expect(cNotices == 1)
+    }
 }
 
 private extension Graph {
