@@ -175,10 +175,53 @@ struct NodeCacheAndUpdateCallbackTests {
             graph.setValue(2, for: source)
             #expect(calls == 0)
         }
-        // Batch close drained call 1 (which wrote 3, setting needsUpdateCallback = true again).
-        #expect(calls == 1)
-        // Next top-level read drains the pending callback before evaluating `rule`.
-        #expect(graph.value(of: rule) == 30)
+        // Same-pass draining: call 1 dirtied `rule` again, so call 2 drains in the same pass.
         #expect(calls == 2)
+        #expect(graph.value(of: rule) == 30)
+    }
+
+    @Test func twoGraphContextsReceiveOnlyTheirOwnCallbacksAndCoalesce() {
+        let graph = Graph()
+        let ctx1 = graph.makeContext()
+        let ctx2 = graph.makeContext()
+        var count1 = 0
+        var count2 = 0
+        ctx1.setUpdateCallback { count1 += 1 }
+        ctx2.setUpdateCallback { count2 += 1 }
+
+        graph.withBatch {
+            ctx1.setNeedsUpdate()
+            ctx1.setNeedsUpdate()
+            ctx1.setNeedsUpdate()
+            #expect(count1 == 0)
+            #expect(count2 == 0)
+        }
+        #expect(count1 == 1)
+        #expect(count2 == 0)
+
+        ctx2.setNeedsUpdate()
+        #expect(count1 == 1)
+        #expect(count2 == 1)
+    }
+
+    @Test func contextCallbackRequestingAnotherUpdateDrainsInSamePassAndUpdatesSource() {
+        let graph = Graph()
+        let source = graph.makeInput(1)
+        let rule = graph.makeRule { source.value * 5 }
+        #expect(graph.value(of: rule) == 5)
+
+        let ctx = graph.makeContext()
+        var runs = 0
+        ctx.setUpdateCallback {
+            runs += 1
+            if runs == 1 {
+                graph.setValue(4, for: source)
+                ctx.setNeedsUpdate()
+            }
+        }
+
+        ctx.setNeedsUpdate()
+        #expect(runs == 2)
+        #expect(graph.value(of: rule) == 20)
     }
 }

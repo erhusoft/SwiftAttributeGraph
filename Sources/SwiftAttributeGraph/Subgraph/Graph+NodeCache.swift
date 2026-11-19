@@ -1,24 +1,46 @@
 extension Graph {
-    /// Registers a callback invoked when the graph transitions from clean to needing an update (matching
-    /// `AGGraphSetUpdateCallback` / `Context::call_update()` in native AttributeGraph).
+    /// Creates a new ``GraphContext`` for independent per-context update callbacks.
+    public func makeContext() -> GraphContext {
+        assertOwnThread()
+        precondition(nextGraphContextID != UInt32.max, "makeContext: context ID space exhausted")
+        let id = nextGraphContextID
+        nextGraphContextID += 1
+        let ctx = GraphContext(graph: self, id: id)
+        updateContexts.append(ctx)
+        return ctx
+    }
+
+    /// Registers a callback on the graph's default context, invoked when the graph transitions from clean to needing an
+    /// update (matching `AGGraphSetUpdateCallback` / `Context::call_update()` in native AttributeGraph).
     ///
     /// If a batch or rule evaluation is currently active, delivery is deferred until the outermost scope completes.
     public func setUpdateCallback(_ callback: (() -> Void)?) {
         assertOwnThread()
-        updateCallback = callback
+        defaultUpdateContext.setUpdateCallback(callback)
     }
 
     func markNeedsUpdateCallback() {
-        needsUpdateCallback = true
+        defaultUpdateContext.needsUpdate = true
         flushUpdateCallbackIfReady()
     }
 
     func flushUpdateCallbackIfReady() {
-        guard !isInUpdateCallback, needsUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
+        guard !isInUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
         isInUpdateCallback = true
         defer { isInUpdateCallback = false }
-        needsUpdateCallback = false
-        updateCallback?()
+        var iterations = 0
+        let maxIterations = 1024
+        while batchDepth == 0 && evaluatingNode == Graph.noNode && !isInvalidating {
+            var firedAny = false
+            for ctx in updateContexts where ctx.needsUpdate {
+                ctx.needsUpdate = false
+                firedAny = true
+                ctx.updateCallback?()
+            }
+            if !firedAny { break }
+            iterations += 1
+            precondition(iterations < maxIterations, "update callback loop exceeded \(maxIterations) iterations")
+        }
     }
 
     /// Looks up or creates a cached attribute in `owner` (or the currently evaluating node's owner subgraph, matching

@@ -22,8 +22,13 @@ public final class Graph {
     /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
     var deferredInvalidations: [Subgraph] = []
     var nodeCaches: [UInt32: SubgraphNodeCache] = [:]
-    var updateCallback: (() -> Void)?
-    var needsUpdateCallback = false
+    var updateContexts: [GraphContext] = []
+    var nextGraphContextID: UInt32 = 1
+    lazy var defaultUpdateContext: GraphContext = {
+        let ctx = GraphContext(graph: self, id: 0)
+        updateContexts.append(ctx)
+        return ctx
+    }()
     var isInUpdateCallback = false
     var isInvalidating = false
     var deferringSubgraphInvalidationDepth = 0
