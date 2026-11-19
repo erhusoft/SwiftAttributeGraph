@@ -39,6 +39,6 @@ extension Graph {
                 dirtyStack.append(dependent)
             }
         }
-        if didDirty { markNeedsUpdateCallback() }
+        _ = didDirty
     }
 }

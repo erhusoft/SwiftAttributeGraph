@@ -91,15 +91,19 @@ struct NodeCacheAndUpdateCallbackTests {
         graph.setValue(1, for: source)
         #expect(callbackCount == 0)
 
-        // Dirtying write outside batch -> fires once.
+        // Explicit setNeedsUpdate outside batch -> deferred until read, fires once.
         graph.setValue(2, for: source)
-        #expect(callbackCount == 1)
+        graph.setNeedsUpdate()
+        #expect(callbackCount == 0)
         #expect(graph.value(of: rule) == 4)
+        #expect(callbackCount == 1)
 
-        // Multiple writes inside batch -> deferred and coalesced to one callback.
+        // Multiple setNeedsUpdate calls inside batch -> deferred and coalesced to one callback on batch exit.
         graph.withBatch {
             graph.setValue(3, for: source)
+            graph.setNeedsUpdate()
             graph.setValue(4, for: source)
+            graph.setNeedsUpdate()
             #expect(callbackCount == 1)
         }
         #expect(callbackCount == 2)
@@ -165,14 +169,16 @@ struct NodeCacheAndUpdateCallbackTests {
         graph.setUpdateCallback {
             calls += 1
             if calls == 1 {
-                // Re-entrant read + write inside callback: must not infinite-loop, and leaves pending work for next drain.
+                // Re-entrant read + write + setNeedsUpdate inside callback: must not infinite-loop, and drains in same pass.
                 _ = graph.value(of: rule)
                 graph.setValue(3, for: source)
+                graph.setNeedsUpdate()
             }
         }
 
         graph.withBatch {
             graph.setValue(2, for: source)
+            graph.setNeedsUpdate()
             #expect(calls == 0)
         }
         // Same-pass draining: call 1 dirtied `rule` again, so call 2 drains in the same pass.
@@ -314,5 +320,21 @@ struct NodeCacheAndUpdateCallbackTests {
         graph.setNeedsUpdate()
         _ = graph.value(of: r)
         #expect(calls == 3)
+    }
+
+    @Test func setValueDoesNotTriggerUpdateCallback() {
+        let graph = Graph()
+        var calls = 0
+        graph.setUpdateCallback { calls += 1 }
+        let a = graph.makeInput(Int64(10))
+        let r = graph.makeRule { a.value * 2 }
+        _ = graph.value(of: r)
+        #expect(calls == 0)
+
+        graph.setValue(20, for: a)
+        #expect(calls == 0)
+
+        #expect(graph.value(of: r) == 40)
+        #expect(calls == 0)
     }
 }
