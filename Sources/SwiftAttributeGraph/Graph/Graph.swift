@@ -31,7 +31,8 @@ public final class Graph {
     var updateContexts: [WeakGraphContext] = []
     var nextGraphContextID: UInt32 = 1
     lazy var defaultUpdateContext: GraphContext = {
-        let ctx = GraphContext(graph: self, id: 0, subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
+        let ctx = GraphContext(graph: self, id: 0, contextID: graphCounterID + 1,
+                               subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
         updateContexts.append(WeakGraphContext(value: ctx))
         return ctx
     }()

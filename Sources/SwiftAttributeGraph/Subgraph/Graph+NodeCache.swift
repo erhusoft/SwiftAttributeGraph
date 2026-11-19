@@ -1,14 +1,73 @@
 extension Graph {
-    /// Creates a new ``GraphContext`` for independent per-context update callbacks and subgraph lifecycle.
-    public func makeContext() -> GraphContext {
+    /// The graph's own context, the one ``counter(for:)`` and ``setUpdateCallback(_:)`` refer to. Its
+    /// ``GraphContext/contextID`` is `graphID + 1` [O]. Subgraphs not created through another context belong to it.
+    public var defaultContext: GraphContext {
         assertOwnThread()
-        precondition(nextGraphContextID != UInt32.max, "makeContext: context ID space exhausted")
+        return defaultUpdateContext
+    }
+
+    /// Creates a second context over this same graph (`AGGraphCreateShared(graph)` in native AttributeGraph).
+    ///
+    /// The new context has the graph's ``Graph/CounterQueryType/graphID`` and takes the next number of the process-wide
+    /// counter as its ``GraphContext/contextID`` [O]; it is not the same object as the default context [O]. Subgraphs
+    /// created with ``GraphContext/makeSubgraph(parent:)`` belong to it (``graphContext(of:)-(Subgraph)``).
+    public func makeSharedContext() -> GraphContext {
+        assertOwnThread()
+        precondition(nextGraphContextID != UInt32.max, "makeSharedContext: context ID space exhausted")
         let id = nextGraphContextID
         nextGraphContextID += 1
-        let ctx = GraphContext(graph: self, id: id, subgraphContext: makeSubgraphContext())
+        let ctx = GraphContext(graph: self, id: id, contextID: GraphRegistry.reserveCounterID(),
+                               subgraphContext: makeSubgraphContext())
         updateContexts.removeAll { $0.value == nil }
         updateContexts.append(WeakGraphContext(value: ctx))
         return ctx
+    }
+
+    /// Same as ``makeSharedContext()``: every context created after the default one is a shared context and takes a
+    /// number of the process-wide counter [O].
+    public func makeContext() -> GraphContext { makeSharedContext() }
+
+    /// The context a subgraph belongs to: the one it was created with (``GraphContext/makeSubgraph(parent:)``), or the
+    /// parent's when it was created without one, or the default context.
+    ///
+    /// Subgraphs made with ``makeSubgraph(parent:context:)`` and a bare ``SubgraphContext`` that no ``GraphContext``
+    /// owns report the default context [?]. Native keeps the context chosen by `Subgraph(graph:)`, where the graph
+    /// object passed is the context [O]; `AGSubgraphGetCurrentGraphContext` through the Swift overlay crashes (exit 139)
+    /// and the "current" context was not measured [?].
+    public func graphContext(of subgraph: Subgraph) -> GraphContext {
+        assertOwnThread()
+        precondition(subgraphs.isLive(subgraph.id), "graphContext(of:): the subgraph was invalidated")
+        return graphContext(forSubgraphContext: subgraphs.context(of: subgraph.id.index))
+    }
+
+    /// The context of the subgraph that owns `attribute` (what native shows as the graph object of the attribute [O]).
+    public func graphContext<Value>(of attribute: Attribute<Value>) -> GraphContext {
+        assertOwnThread()
+        precondition(table.isLive(attribute.id), "graphContext(of:): the attribute is dead")
+        return graphContext(forSubgraphContext: subgraphs.context(of: table.owner(at: attribute.id.index)))
+    }
+
+    /// The context that owns the subgraph context with this raw value; the default one if none does.
+    func graphContext(forSubgraphContext raw: UInt32) -> GraphContext {
+        if raw != SubgraphTable.defaultContext {
+            for entry in updateContexts {
+                if let ctx = entry.value, ctx.subgraphContext.rawValue == raw { return ctx }
+            }
+        }
+        return defaultUpdateContext
+    }
+
+    /// Whether the innermost running rule belongs to a subgraph of `context`.
+    func isRunning(in context: GraphContext) -> Bool {
+        guard let frame = frames.last else { return false }
+        return graphContext(forSubgraphContext: subgraphs.context(of: table.owner(at: frame.node))) === context
+    }
+
+    /// Lowers the graph's `needsUpdate` and every context's `contextNeedsUpdate` (a top-level rule read does, from any
+    /// context [O]).
+    func clearNeedsUpdateFlags() {
+        needsUpdateFlag = false
+        for entry in updateContexts { entry.value?.counterNeedsUpdate = false }
     }
 
     func invalidateContext(_ context: GraphContext) {
@@ -42,7 +101,6 @@ extension Graph {
     /// (matching `AGGraphSetNeedsUpdate`).
     public func setNeedsUpdate() {
         assertOwnThread()
-        needsUpdateFlag = true
         defaultUpdateContext.setNeedsUpdate()
     }
 

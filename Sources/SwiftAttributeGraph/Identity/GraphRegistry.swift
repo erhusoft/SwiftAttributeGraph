@@ -102,6 +102,16 @@ enum GraphRegistry {
         }
     }
 
+    /// Reserves one number of the same counter for a shared context (`AGGraphCreateShared`): native takes the next
+    /// number of the process-wide counter, so the context gets the number after the last graph or context created [O].
+    static func reserveCounterID() -> UInt64 {
+        lock.withLock {
+            let id = state.nextCounterID
+            state.nextCounterID += 1
+            return id
+        }
+    }
+
     /// Makes `graph` the owner of `tag`. Called once the graph is fully initialized.
     static func bind(tag: UInt32, to graph: Graph) {
         guard tag != 0 else { return }

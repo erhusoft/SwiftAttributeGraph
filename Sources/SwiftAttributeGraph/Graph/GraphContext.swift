@@ -4,18 +4,36 @@
 /// Each `GraphContext` owns a distinct ``SubgraphContext`` for invalidation scoping, maintains its own `needsUpdate`
 /// flag and update callback, and invalidates its live subgraphs when ``invalidate()`` is called or when the context is
 /// deallocated while its `Graph` is still alive.
+///
+/// Minimal model of native shared contexts (`AGGraphCreateShared`) [O]: a graph has a default context (``Graph/defaultContext``)
+/// and any number of shared ones (``Graph/makeSharedContext()``). Every context has its own ``contextID``, update
+/// callback, `needsUpdate` flag (as seen by ``counter(for:)``), and subgraphs; they all share the graph's attributes,
+/// counters and ``graphID``. Not modelled [?]: dependencies between attributes of different contexts (native aborts with
+/// exit 134 on a read across graphs, not across contexts, and was not measured), `AGGraphSetInvalidationCallback` per
+/// context, `AGGraphSetContext`/`GetContext` and the main-thread handler.
 public final class GraphContext {
     private weak var graph: Graph?
     let id: UInt32
+    /// Process-wide number of this context, from the counter shared with graph IDs (`contextID` of
+    /// `AGGraphGetCounter`): the default context of a graph is `graphID + 1`; a shared context takes the next number of
+    /// the counter when it is created [O].
+    public let contextID: UInt64
+    /// Process-wide number of the graph this context belongs to; shared by all its contexts [O].
+    public let graphID: UInt64
+    /// What ``counter(for:)`` reports as `contextNeedsUpdate`: raised by this context's `setNeedsUpdate`, lowered by the
+    /// next top-level rule read of the graph, from any context [O].
+    var counterNeedsUpdate = false
     /// The invalidation context associated with this `GraphContext`.
     public let subgraphContext: SubgraphContext
     var updateCallback: (() -> Void)?
     var needsUpdate = false
     private(set) var isInvalidated = false
 
-    init(graph: Graph, id: UInt32, subgraphContext: SubgraphContext) {
+    init(graph: Graph, id: UInt32, contextID: UInt64, subgraphContext: SubgraphContext) {
         self.graph = graph
         self.id = id
+        self.contextID = contextID
+        self.graphID = graph.graphCounterID
         self.subgraphContext = subgraphContext
     }
 
@@ -40,6 +58,32 @@ public final class GraphContext {
         graph.assertOwnThread()
         guard !isInvalidated else { return }
         needsUpdate = true
+        counterNeedsUpdate = true
+        graph.needsUpdateFlag = true
+    }
+
+    /// The graph this context belongs to, or `nil` once it was released.
+    public var owningGraph: Graph? { graph }
+
+    /// The value of a counter as seen from this context (`AGGraphGetCounter` on a shared `Graph` object in native
+    /// AttributeGraph). Measured with a graph and one shared context on macOS 15.8.3 [O]:
+    /// - ``Graph/CounterQueryType/contextID`` is this context's number, ``Graph/CounterQueryType/graphID`` is the graph's.
+    /// - ``Graph/CounterQueryType/contextNeedsUpdate`` is this context's flag; ``Graph/CounterQueryType/needsUpdate``
+    ///   is the graph's, raised by any context.
+    /// - ``Graph/CounterQueryType/contextThreadUpdating`` is `1` only while a rule of a subgraph of this context runs;
+    ///   ``Graph/CounterQueryType/threadUpdating`` is `1` for every context of the graph.
+    /// - Every other selector (nodes, subgraphs, updates, ...) is graph-wide.
+    ///
+    /// A rule that runs in another context while a rule of this one waits for it (nested reads across contexts) was
+    /// not measured; the engine looks at the innermost running rule [?].
+    public func counter(for query: Graph.CounterQueryType) -> UInt64 {
+        switch query {
+        case .contextID: return contextID
+        case .graphID: return graphID
+        case .contextNeedsUpdate: return counterNeedsUpdate ? 1 : 0
+        case .contextThreadUpdating: return graph?.isRunning(in: self) == true ? 1 : 0
+        default: return graph?.counter(for: query) ?? 0
+        }
     }
 
     /// Creates a subgraph in this context's ``subgraphContext``.
@@ -56,6 +100,7 @@ public final class GraphContext {
         isInvalidated = true
         updateCallback = nil
         needsUpdate = false
+        counterNeedsUpdate = false
         graph?.invalidateContext(self)
     }
 }

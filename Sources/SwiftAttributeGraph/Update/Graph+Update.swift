@@ -114,7 +114,7 @@ extension Graph {
                 return result
             }
             let resolved = resolveIndirect(attribute)
-            if frames.isEmpty && table.state[Int(resolved.id.index)] & NodeState.isRule != 0 { transactionCount &+= 1; needsUpdateFlag = false }
+            if frames.isEmpty && table.state[Int(resolved.id.index)] & NodeState.isRule != 0 { transactionCount &+= 1; if needsUpdateFlag { clearNeedsUpdateFlags() } }
             if let reader = offsetFieldReaders[resolved.id.index] {
                 guard let result = reader() as? Value else {
                     preconditionFailure("offsetFieldReaders: projected field type mismatch")
@@ -131,7 +131,7 @@ extension Graph {
             return value
         }
 
-        if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1; needsUpdateFlag = false }
+        if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1; if needsUpdateFlag { clearNeedsUpdateFlags() } }
         if table.state[n] & NodeState.dirty != 0 {
             precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
             update(index)

@@ -2,8 +2,9 @@ extension Graph {
     /// Selectors of ``counter(for:)``: the 14 of `AGGraphCounterQueryType`, each checked against a native probe on
     /// macOS 15.8.3 [O] except where a case says `[?]`.
     ///
-    /// The engine has no shared graph contexts (`AGGraphCreateShared`), so every graph has exactly one context and the
-    /// "context" selectors repeat the graph's own value [?].
+    /// Called on a ``Graph`` it answers for the graph's default context; ``GraphContext/counter(for:)`` answers for any
+    /// context, so the "context" selectors differ between the contexts of a graph that has shared contexts
+    /// (``Graph/makeSharedContext()``) [O].
     public enum CounterQueryType: Sendable {
         /// Live attributes that are not indirect: ``Graph/nodeCount`` minus the indirect attributes (and the offset
         /// field attributes, which are indirect). Native AttributeGraph does not count them: a rule plus an indirect
@@ -31,21 +32,22 @@ extension Graph {
         /// that starts at `1`: the graph first, its context next (`graphID` 1 and `contextID` 2 for the first graph of
         /// the process, 3 and 4 for the second). Releasing graphs, creating subgraphs or attributes does not consume or
         /// give back numbers [O]. Native `AGGraphCreateShared` adds a context that takes one more number and keeps the
-        /// graph's `graphID` [O]; the engine does not model shared contexts, so its `makeContext()` takes none [?].
+        /// graph's `graphID` [O]; ``Graph/makeSharedContext()`` does the same.
         case contextID
         /// Process-wide number of the graph, always the one just before ``contextID`` [O].
         case graphID
         /// `1` while a rule of this graph is running (also in a nested rule), `0` outside any update, inside
         /// `withoutUpdate` called outside a rule, and for a graph other than the one whose rule is running [O].
-        /// Native has a per-thread and a per-context variant; with one context and one thread per graph they coincide
-        /// [?].
+        /// Native has a per-thread and a per-context variant: with a shared context, `1` only for the context whose
+        /// rule is running (``GraphContext/counter(for:)``), while ``threadUpdating`` is `1` for all [O].
         case contextThreadUpdating
         /// `1` while a rule of this graph is running, `0` otherwise; see ``contextThreadUpdating`` [O].
         case threadUpdating
         /// `1` after ``Graph/setNeedsUpdate()``; a second call does not add up, reading an input or writing does not
         /// clear it, and the next top-level read of a rule (clean or not, direct or through an indirect attribute)
         /// sets it back to `0`. Raised inside a rule it stays up when that update ends [O]. Native tracks it per
-        /// context as well as per graph; with one context they coincide [?].
+        /// context as well as per graph: ``Graph/setNeedsUpdate()`` raises it for the default context only and the
+        /// graph's flag for all; any top-level rule read lowers every flag, whatever its context [O].
         case contextNeedsUpdate
         /// Same as ``contextNeedsUpdate`` for the graph as a whole [O].
         case needsUpdate
@@ -72,8 +74,10 @@ extension Graph {
         case .createdSubgraphs: return UInt64(subgraphs.createdCount - 1)
         case .contextID: return graphCounterID + 1
         case .graphID: return graphCounterID
-        case .contextThreadUpdating, .threadUpdating: return frames.isEmpty ? 0 : 1
-        case .contextNeedsUpdate, .needsUpdate: return needsUpdateFlag ? 1 : 0
+        case .threadUpdating: return frames.isEmpty ? 0 : 1
+        case .contextThreadUpdating: return isRunning(in: defaultUpdateContext) ? 1 : 0
+        case .needsUpdate: return needsUpdateFlag ? 1 : 0
+        case .contextNeedsUpdate: return defaultUpdateContext.counterNeedsUpdate ? 1 : 0
         case .mainThreadUpdates: return updateCount
         }
     }
