@@ -3,72 +3,75 @@ import Testing
 
 @Suite("OffsetAttributeTests")
 struct OffsetAttributeTests {
-    struct Pair: BitwiseCopyable, Equatable {
-        var first: Int64
-        var second: Int64
+    struct PaddedStruct: Equatable {
+        var flag: Bool
+        var count: Int64
+        var tag: UInt8
     }
 
-    struct Empty: BitwiseCopyable, Equatable {}
+    enum Mode: Equatable {
+        case idle
+        case active(Int)
+    }
 
-    @Test func changeInsideProjectedRangePropagatesAndOutsideRangeCutsOff() {
+    @Test func projectedSliceCutsOffChangesOutsideProjectedField() {
         let graph = Graph()
-        let source = graph.makeInput(Pair(first: 1, second: 2))
-        let secondOffset = MemoryLayout<Pair>.offset(of: \Pair.second)!
-        let projected = graph.makeByteRangeAttribute(of: source, offset: secondOffset, size: MemoryLayout<Int64>.size)
+        let source = graph.makeInput(PaddedStruct(flag: true, count: 10, tag: 1))
+        let projected = graph.makeProjectedAttribute(of: source) { $0.count }
 
         var consumerRuns = 0
         let consumer = graph.makeRule {
             consumerRuns += 1
-            return projected.value.count
+            return projected.value * 2
         }
 
-        #expect(graph.value(of: consumer) == MemoryLayout<Int64>.size)
+        #expect(graph.value(of: consumer) == 20)
         #expect(consumerRuns == 1)
 
-        // Change outside projected range (`first` only): `projected` cuts off, `consumer` does not re-run.
-        graph.setValue(Pair(first: 99, second: 2), for: source)
-        #expect(graph.value(of: consumer) == MemoryLayout<Int64>.size)
+        // Changes to `flag` / `tag` (and any padding) do not re-run `consumer`.
+        graph.setValue(PaddedStruct(flag: false, count: 10, tag: 9), for: source)
+        #expect(graph.value(of: consumer) == 20)
         #expect(consumerRuns == 1)
 
-        // Change inside projected range (`second`): `consumer` re-runs.
-        graph.setValue(Pair(first: 99, second: 5), for: source)
-        #expect(graph.value(of: consumer) == MemoryLayout<Int64>.size)
+        // Change to `count` propagates.
+        graph.setValue(PaddedStruct(flag: false, count: 15, tag: 9), for: source)
+        #expect(graph.value(of: consumer) == 30)
         #expect(consumerRuns == 2)
     }
 
-    @Test func zeroSizeRangeAndZeroSizeTypeDoNotCrashOrPropagate() {
+    @Test func projectedEnumAndBoolWithCustomComparator() {
         let graph = Graph()
-        let pairSource = graph.makeInput(Pair(first: 1, second: 2))
-        let zeroAtEnd = graph.makeByteRangeAttribute(of: pairSource, offset: MemoryLayout<Pair>.size, size: 0)
+        let source = graph.makeInput((flag: true, mode: Mode.active(1)))
+        let projected = graph.makeProjectedAttribute(
+            of: source,
+            project: { $0.mode },
+            isEqual: { lhs, rhs in
+                switch (lhs, rhs) {
+                case (.idle, .idle): true
+                case (.active, .active): true
+                default: false
+                }
+            }
+        )
 
         var runs = 0
         let consumer = graph.makeRule {
             runs += 1
-            return zeroAtEnd.value.count
+            return projected.value
         }
-        #expect(graph.value(of: consumer) == 0)
+
+        #expect(graph.value(of: consumer) == .active(1))
         #expect(runs == 1)
 
-        graph.setValue(Pair(first: 100, second: 200), for: pairSource)
-        #expect(graph.value(of: consumer) == 0)
+        // Same case `.active(2)` treated as equal by custom comparator -> cuts off.
+        graph.setValue((flag: false, mode: .active(2)), for: source)
+        #expect(graph.value(of: consumer) == .active(1))
         #expect(runs == 1)
 
-        let emptySource = graph.makeInput(Empty())
-        let emptyRange = graph.makeByteRangeAttribute(of: emptySource, offset: 0, size: 0)
-        #expect(graph.value(of: emptyRange).isEmpty)
-    }
-
-    @Test func outOfBoundsOrOverflowOffsetStopsTheProgram() async {
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let source = graph.makeInput(Pair(first: 1, second: 2))
-            _ = graph.makeByteRangeAttribute(of: source, offset: MemoryLayout<Pair>.size, size: 1)
-        }
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let source = graph.makeInput(Pair(first: 1, second: 2))
-            _ = graph.makeByteRangeAttribute(of: source, offset: 8, size: Int.max)
-        }
+        // Different case `.idle` -> propagates.
+        graph.setValue((flag: false, mode: .idle), for: source)
+        #expect(graph.value(of: consumer) == .idle)
+        #expect(runs == 2)
     }
 
     @Test func focusHandlesNonTrivialTypesSafely() {

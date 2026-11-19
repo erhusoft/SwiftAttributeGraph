@@ -1,38 +1,43 @@
+private struct ProjectedRule<Source, Projected>: StatefulRule {
+    typealias Value = Projected
+    static var initialValue: Projected? { nil }
+    let source: Attribute<Source>
+    let project: (Source) -> Projected
+    let isEqual: (Projected, Projected) -> Bool
+
+    mutating func updateValue(_ context: inout RuleContext<Projected>) {
+        let next = project(source.value)
+        if context.hasValue, isEqual(context.value, next) {
+            return
+        }
+        context.value = next
+    }
+}
+
 extension Graph {
-    private static let maxOffsetAttributeOffset = 0x3fff_ffff
-
-    /// Projects a raw byte slice `[offset, offset + size)` from a `BitwiseCopyable` source attribute as `[UInt8]`.
+    /// Projects a typed slice from `source` with an explicit equality comparator, cutting off downstream propagation
+    /// when the projected value is unchanged.
     ///
-    /// - Note: Unlike native `AGGraphCreateOffsetAttribute` + `loadUnaligned`, this never constructs an arbitrary
-    ///   typed `Projected` value from raw bytes (which would be undefined behavior for `Bool`, `enum`s, or `Optional`
-    ///   with invalid bit patterns). All `UInt8` bit patterns are valid. For typed projections, use ``makeFocus(_:keyPath:)``
-    ///   or ``makeMap(_:_:)``. Note also that `withUnsafeBytes` includes any struct padding bytes at `[offset, offset + size)`.
-    public func makeByteRangeAttribute<Source: BitwiseCopyable>(
+    /// - Note: Unlike native `AGGraphCreateOffsetAttribute` + `AG::Graph::compare_edge_values`, `SwiftAttributeGraph`
+    ///   does not expose raw `(offset, size)` byte slicing over arbitrary Swift generics because `BitwiseCopyable` does
+    ///   not guarantee that padding bytes are initialized or that arbitrary byte ranges form valid `Bool`/`enum`
+    ///   patterns. This API emulates the **change-cut decision** of a projected slice safely at the Swift type level;
+    ///   for key-path projections, ``makeFocus(_:keyPath:)`` is also available.
+    public func makeProjectedAttribute<Source, Projected>(
         of source: Attribute<Source>,
-        offset: Int,
-        size: Int
-    ) -> Attribute<[UInt8]> {
+        project: @escaping (Source) -> Projected,
+        isEqual: @escaping (Projected, Projected) -> Bool
+    ) -> Attribute<Projected> {
         assertOwnThread()
-        let sourceSize = MemoryLayout<Source>.size
-        precondition(offset >= 0 && offset < Graph.maxOffsetAttributeOffset, "invalid offset: \(offset)")
-        precondition(size >= 0, "invalid negative size: \(size)")
-        let (end, overflow) = offset.addingReportingOverflow(size)
-        precondition(!overflow && end <= sourceSize, "offset range [\(offset), +\(size)) exceeds \(sourceSize)")
+        return makeStatefulRule(ProjectedRule(source: source, project: project, isEqual: isEqual))
+    }
 
-        if size == 0 {
-            return makeRule {
-                _ = source.value
-                return []
-            }
-        }
-
-        return makeRule {
-            let value = source.value
-            return withUnsafeBytes(of: value) { raw in
-                guard let base = raw.baseAddress else { return [] }
-                return Array(UnsafeBufferPointer(start: base.assumingMemoryBound(to: UInt8.self).advanced(by: offset),
-                                                 count: size))
-            }
-        }
+    /// Projects an `Equatable` slice from `source`, cutting off downstream propagation when the projected value is
+    /// equal.
+    public func makeProjectedAttribute<Source, Projected: Equatable>(
+        of source: Attribute<Source>,
+        project: @escaping (Source) -> Projected
+    ) -> Attribute<Projected> {
+        makeProjectedAttribute(of: source, project: project, isEqual: ==)
     }
 }
