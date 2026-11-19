@@ -362,4 +362,52 @@ struct OffsetIndirectEdgeCompareTests {
         #expect(graph.value(of: consumer) == 60)
         #expect(runs == 2)
     }
+
+    @Test func offsetFieldAttributeDoesNotRetainGraph() {
+        weak var weakGraph: Graph?
+        do {
+            let graph = Graph()
+            weakGraph = graph
+            let src = graph.makeInput(Pair(a: 1, b: 10))
+            let field = graph.makeOffsetFieldAttribute(of: src, keyPath: \.b)
+            #expect(graph.value(of: field) == 10)
+        }
+        #expect(weakGraph == nil)
+    }
+
+    @Test func offsetFieldAttributeOverIndirectRuleAndInputAndRejectsWrite() async {
+        let graph = Graph()
+        let input = graph.makeInput(Pair(a: 1, b: 10))
+        let rule = graph.makeRule { Pair(a: input.value.a, b: input.value.b + 5) }
+        let ind = graph.makeIndirect(rule)
+        let field = graph.makeOffsetFieldAttribute(of: ind, keyPath: \.b)
+        #expect(graph.value(of: field) == 15)
+
+        await #expect(processExitsWith: .failure) {
+            let g = Graph()
+            let s = g.makeInput(Pair(a: 1, b: 10))
+            let f = g.makeOffsetFieldAttribute(of: s, keyPath: \.b)
+            g.setValue(99, for: f)
+        }
+    }
+
+    @Test func offsetFieldAttributeCleanupAndInvalidateValue() {
+        let graph = Graph()
+        let baseSubgraphs = graph.liveSubgraphCount
+        let sg = graph.makeSubgraph()
+        let src = graph.withCurrent(sg) { graph.makeInput(Pair(a: 1, b: 10)) }
+        var mult = 1
+        let rule = graph.withCurrent(sg) { graph.makeRule { Pair(a: src.value.a, b: src.value.b * Int64(mult)) } }
+        let field = graph.withCurrent(sg) { graph.makeOffsetFieldAttribute(of: rule, keyPath: \.b) }
+
+        #expect(graph.value(of: field) == 10)
+        mult = 3
+        graph.invalidateValue(of: rule)
+        #expect(graph.value(of: field) == 30)
+
+        graph.invalidate(sg)
+        #expect(graph.liveSubgraphCount == baseSubgraphs)
+        #expect(graph.offsetIndirects[field.id.index] == nil)
+        #expect(graph.offsetFieldReaders[field.id.index] == nil)
+    }
 }

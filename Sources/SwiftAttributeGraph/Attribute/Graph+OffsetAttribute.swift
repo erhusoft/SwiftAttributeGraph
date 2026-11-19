@@ -79,7 +79,7 @@ extension Graph {
         let seenVersion = table.state[s] & NodeState.hasValue != 0 ? table.versions[s] : 0
         let id = allocate(IndirectNode<Field>(source: source.id, sourceSeenVersion: seenVersion), state: initialState)
         offsetIndirects[id.index] = (offset, MemoryLayout<Field>.size)
-        offsetFieldReaders[id.index] = {
+        offsetFieldReaders[id.index] = { [unowned self] in
             let prev = self.evaluatingNode
             self.evaluatingNode = Graph.noNode
             defer { self.evaluatingNode = prev }

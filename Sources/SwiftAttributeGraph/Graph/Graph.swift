@@ -329,6 +329,8 @@ public final class Graph {
         precondition(table.isLive(indirect.id), "setSource(_:for:): the indirect attribute is dead")
         precondition(table.isLive(newSource.id), "setSource(_:for:): the source attribute is dead")
         let index = indirect.id.index
+        precondition(offsetFieldReaders[index] == nil,
+                     "setSource(_:for:): cannot redirect an offset-field attribute")
         let n = Int(index)
         precondition(table.state[n] & NodeState.indirect != 0,
                      "setSource(_:for:): the attribute is not an indirect attribute")
@@ -408,6 +410,8 @@ public final class Graph {
         assertOwnThread()
         precondition(table.isLive(indirect.id), "resetSource(for:): the indirect attribute is dead")
         let index = indirect.id.index
+        precondition(offsetFieldReaders[index] == nil,
+                     "setSource(_:for:): cannot redirect an offset-field attribute")
         precondition(table.state[Int(index)] & NodeState.indirect != 0,
                      "resetSource(for:): the attribute is not an indirect attribute")
         let box = table.box(at: index) as! IndirectNode<Value>
@@ -436,6 +440,8 @@ public final class Graph {
         assertOwnThread()
         precondition(table.isLive(indirect.id), "setDependency(_:for:): the indirect attribute is dead")
         let index = indirect.id.index
+        precondition(offsetFieldReaders[index] == nil,
+                     "setSource(_:for:): cannot redirect an offset-field attribute")
         let n = Int(index)
         precondition(table.state[n] & NodeState.indirect != 0,
                      "setDependency(_:for:): the attribute is not an indirect attribute")

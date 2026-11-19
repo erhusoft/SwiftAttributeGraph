@@ -70,7 +70,10 @@ extension Graph {
             }
             if evaluatingNode != Graph.noNode { recordRead(of: index) }
             if let reader = offsetFieldReaders[index] {
-                return reader() as! Value
+                guard let result = reader() as? Value else {
+                    preconditionFailure("offsetFieldReaders: projected field type mismatch")
+                }
+                return result
             }
             let resolved = resolveIndirect(attribute)
             if table.state[Int(resolved.id.index)] & NodeState.dirty != 0 {
@@ -235,6 +238,8 @@ extension Graph {
 
         // An indirect attribute redirects to another attribute: writing it writes to the terminal source.
         if table.state[index] & NodeState.indirect != 0 {
+            precondition(offsetFieldReaders[attribute.id.index] == nil,
+                         "setValue(_:for:): cannot write to an offset-field attribute")
             setValue(value, for: resolveIndirect(attribute))
             return
         }
