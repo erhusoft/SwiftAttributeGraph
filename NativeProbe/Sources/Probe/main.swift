@@ -258,8 +258,8 @@ final class Driver {
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { graph.addChild(child, to: parent) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { graph.addChild(child, to: parent) }
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
-    func clearUpdateToken() -> UnsafeRawPointer? { nil }
-    func setUpdateToken(_: UnsafeRawPointer?) {}
+    func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
+    func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
     func makeSubgraphInNewContext() -> SubgraphHandle {
         Graph().makeSubgraph()
     }
@@ -526,4 +526,4 @@ weakReadAfterChildInvalidate()
 weakMultipleOnSameChild()
 weakCombinerThreeChildrenInvalidateMiddle()
 subgraphAddChildSecondaryParentReverse()
-// clearAndSetUpdateScenario() // differs: own engine has closure-based withoutUpdate, no token API
+clearAndSetUpdateScenario()
