@@ -67,6 +67,9 @@ SCENARIOS = [
     "subgraph-dag-add-child",
     "context-update-callback",
     "cooperative-cancel",
+    "cooperative-cancel-consumer",
+    "cooperative-cancel-nested",
+    "cooperative-cancel-first-eval",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

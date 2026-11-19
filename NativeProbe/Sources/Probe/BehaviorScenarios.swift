@@ -1678,3 +1678,79 @@ func contextUpdateCallbackOnWrite() {
     let callsAfterRead = calls
     print("context-update-callback-on-write|value=\(v)|calls=[\(callsInitial), \(callsAfterWrite), \(callsAfterRead)]")
 }
+
+func cooperativeCancelConsumer() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = false
+    var innerRuns = 0
+    var consumerRuns = 0
+    let inner: Handle<Int64> = graph.rule {
+        innerRuns += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let consumer: Handle<Int64> = graph.rule {
+        consumerRuns += 1
+        return graph.read(inner) + 1
+    }
+    let v1 = graph.read(consumer); let ir1 = innerRuns; let cr1 = consumerRuns
+    graph.write(Int64(50), to: a)
+    shouldCancel = true
+    let v2 = graph.read(consumer); let ir2 = innerRuns; let cr2 = consumerRuns
+    shouldCancel = false
+    let v3 = graph.read(consumer); let ir3 = innerRuns; let cr3 = consumerRuns
+    print("cooperative-cancel-consumer|values=\([v1, v2, v3])|innerRuns=\([ir1, ir2, ir3])|consumerRuns=\([cr1, cr2, cr3])")
+}
+
+func cooperativeCancelNested() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = false
+    var innerRuns = 0
+    var outerRuns = 0
+    let inner: Handle<Int64> = graph.rule {
+        innerRuns += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let outer: Handle<Int64> = graph.rule {
+        outerRuns += 1
+        return graph.read(inner) * 10
+    }
+    let v1 = graph.read(outer); let ir1 = innerRuns; let or1 = outerRuns
+    graph.write(Int64(50), to: a)
+    shouldCancel = true
+    let v2 = graph.read(outer); let ir2 = innerRuns; let or2 = outerRuns
+    shouldCancel = false
+    let v3 = graph.read(outer); let ir3 = innerRuns; let or3 = outerRuns
+    print("cooperative-cancel-nested|values=\([v1, v2, v3])|innerRuns=\([ir1, ir2, ir3])|outerRuns=\([or1, or2, or3])")
+}
+
+func cooperativeCancelFirstEval() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = true
+    var runs = 0
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let v1 = graph.read(r); let r1 = runs
+    shouldCancel = false
+    let v2 = graph.read(r); let r2 = runs
+    print("cooperative-cancel-first-eval|values=\([v1, v2])|runs=\([r1, r2])")
+}
