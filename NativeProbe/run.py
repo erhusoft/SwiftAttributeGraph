@@ -89,6 +89,8 @@ SCENARIOS = [
     "compare-values-302-collections",
     "compare-values-302-edges",
     "get-input-value-explicit-reader",
+    "get-input-value-dup-prune",
+    "get-input-value-non-rule-reader",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
