@@ -16,6 +16,15 @@ public enum Comparison: Sendable {
     /// Only the bytes of the value (references by identity), without looking at the type: the policy of M0. A safe
     /// floor: it can run a rule that SwiftUI would skip, never skip one that SwiftUI would run.
     case bits
+    /// Corresponds to `AGComparisonMode` 2 (EquatableUnlessPOD) in its warm state, i.e. with the type layouts already
+    /// built (measured on macOS 15.8.3 with options `0x302`). A trivial (POD) type is compared by its bytes, so an
+    /// `==` of its own is ignored, `Double.nan` equals itself and `0.0` differs from `-0.0`. A non-trivial `Equatable`
+    /// type uses its `==`. A non-trivial type that is not `Equatable` (a class without `==`, a closure) is compared by
+    /// its bytes, that is, by identity.
+    ///
+    /// The cold behaviour of the native function (the first call, with asynchronous layouts, compares by bytes) is
+    /// deliberately not reproduced.
+    case equatableUnlessPOD
 }
 
 /// Compares the bytes of two values of the same type, eight at a time.

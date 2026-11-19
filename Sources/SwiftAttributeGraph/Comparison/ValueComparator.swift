@@ -29,6 +29,10 @@ enum ValueComparator {
             return { _, _ in false }
         case .bits:
             return { bitwiseEqual($0, $1) }
+        case .equatableUnlessPOD:
+            if TypeLayout.isPOD(Value.self) { return { bitwiseEqual($0, $1) } }
+            if let equal = equatableComparator(Value.self) { return equal }
+            return { bitwiseEqual($0, $1) }
         case .viewValue:
             return planned(Value.self, mode: .view)
         case .stateWrite:
@@ -51,5 +55,21 @@ enum ValueComparator {
                 withUnsafeBytes(of: right) { r in plan.equal(l.baseAddress!, r.baseAddress!) }
             }
         }
+    }
+
+    /// `==` of `Value` if it is `Equatable`; `nil` otherwise.
+    private static func equatableComparator<Value>(_: Value.Type) -> ((Value, Value) -> Bool)? {
+        guard let type = Value.self as? any Equatable.Type else { return nil }
+        func open<E: Equatable>(_: E.Type) -> (Value, Value) -> Bool {
+            { left, right in
+                withUnsafePointer(to: left) { l in
+                    withUnsafePointer(to: right) { r in
+                        UnsafeRawPointer(l).assumingMemoryBound(to: E.self).pointee
+                            == UnsafeRawPointer(r).assumingMemoryBound(to: E.self).pointee
+                    }
+                }
+            }
+        }
+        return open(type)
     }
 }
