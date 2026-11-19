@@ -50,7 +50,9 @@ enum GraphRegistry {
     static let maxTag: UInt32 = 0xFFFF
 
     private struct Slot {
-        weak var graph: Graph?
+        /// Unretained pointer cleared by `Graph.deinit` via `release(tag:)`. Using `Unmanaged` avoids creating a
+        /// Swift ARC weak side table on every `Graph`, which would otherwise slow down retain/release in hot rule loops.
+        var graph: Unmanaged<Graph>?
     }
 
     private struct State {
@@ -115,7 +117,7 @@ enum GraphRegistry {
     /// Makes `graph` the owner of `tag`. Called once the graph is fully initialized.
     static func bind(tag: UInt32, to graph: Graph) {
         guard tag != 0 else { return }
-        lock.withLock { state.slots[Int(tag)].graph = graph }
+        lock.withLock { state.slots[Int(tag)].graph = .passUnretained(graph) }
     }
 
     /// Gives the tag back when its graph is released.
@@ -130,6 +132,6 @@ enum GraphRegistry {
     /// The live graph that owns `tag`, if any.
     static func graph(forTag tag: UInt32) -> Graph? {
         guard tag != 0, tag <= maxTag else { return nil }
-        return lock.withLock { Int(tag) < state.slots.count ? state.slots[Int(tag)].graph : nil }
+        return lock.withLock { Int(tag) < state.slots.count ? state.slots[Int(tag)].graph?.takeUnretainedValue() : nil }
     }
 }
