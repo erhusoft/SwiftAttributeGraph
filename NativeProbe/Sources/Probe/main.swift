@@ -76,6 +76,10 @@ final class Driver {
     }
     func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
     func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
+    func makeSubgraphInNewContext() -> SubgraphHandle {
+        Subgraph(graph: Graph())
+    }
     @discardableResult
     func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> SubgraphObserverHandle {
         let id = subgraph.addObserver(body)
@@ -237,6 +241,10 @@ final class Driver {
     }
     func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
     func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { graph.addChild(child, to: parent) }
+    func makeSubgraphInNewContext() -> SubgraphHandle {
+        Graph().makeSubgraph()
+    }
     @discardableResult
     func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> SubgraphObserverHandle {
         let token = graph.observe(subgraph, onInvalidate: body)
@@ -477,3 +485,4 @@ offsetMixedChain()
 indirectSetSameValue()
 directEdgeEqualAndDifferentWrite()
 offsetWholeValue()
+subgraphDagAddChild()

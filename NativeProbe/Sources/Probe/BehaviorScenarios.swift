@@ -1587,3 +1587,18 @@ func offsetWholeValue() {
     let r3 = runs
     print("offset-whole-value|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
 }
+
+func subgraphDagAddChild() {
+    let graph = Driver()
+    // Case A: same context (parent1 -> child, then parent2 -> child; invalidate parent1)
+    let p1 = graph.makeSubgraph()
+    let p2 = graph.makeSubgraph()
+    let childSame = graph.withSubgraph(p1) { graph.makeSubgraph() }
+    graph.addChild(childSame, to: p2)
+    graph.invalidate(p1)
+    let sameValidAfterP1 = graph.isValid(childSame)
+    graph.invalidate(p2)
+    let sameValidAfterP2 = graph.isValid(childSame)
+
+    print("subgraph-dag-add-child|same=[\(sameValidAfterP1), \(sameValidAfterP2)]")
+}
