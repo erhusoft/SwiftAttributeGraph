@@ -100,6 +100,10 @@ SCENARIOS = [
     "get-counter-context",
     "get-attribute-graph",
     "get-subgraph-current",
+    "shared-context-ids",
+    "shared-context-needs-update",
+    "shared-context-update-callback",
+    "shared-context-subgraphs",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
