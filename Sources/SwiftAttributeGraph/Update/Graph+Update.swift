@@ -512,16 +512,29 @@ extension Graph {
 
     // MARK: Tracking
 
+    /// Reads `input` and records a dependency edge against `reader` rather than the currently evaluating rule
+    /// (`AGGraphGetInputValue` in native AttributeGraph).
+    public func inputValue<Value>(of input: Attribute<Value>, for reader: AnyAttribute) -> Value {
+        assertOwnThread()
+        let result = withoutUpdate { value(of: input) }
+        recordRead(of: input.id.index, by: reader.id.index)
+        return result
+    }
+
     /// Records that the running rule read `source`. Edges are kept sorted by ascending `source` index; edges not
     /// marked `read` when the rule ends are pruned by `pruneEdges(of:)`.
     @usableFromInline func recordRead(of source: UInt32) {
-        let consumer = Int(evaluatingNode)
-        precondition(source != evaluatingNode, "a rule cannot read itself")
+        recordRead(of: source, by: evaluatingNode)
+    }
+
+    @usableFromInline func recordRead(of source: UInt32, by consumerNode: UInt32) {
+        let consumer = Int(consumerNode)
+        precondition(source != consumerNode, "a rule cannot read itself")
         let version = table.versions[Int(source)]
         let count = table.inputs[consumer].count
 
         if count == 0 || table.inputs[consumer][count - 1].source < source {
-            table.outputs[Int(source)].append(evaluatingNode)
+            table.outputs[Int(source)].append(consumerNode)
             let position = UInt32(table.outputs[Int(source)].count - 1)
             table.inputs[consumer].append(InputEdge(source: source, seenVersion: version, read: true, changed: true,
                                                     positionInOutputs: position))

@@ -186,4 +186,21 @@ import Testing
         #expect(created != nil)
         #expect(graph.value(of: created!) == 42)
     }
+
+    @Test func explicitInputValueRecordsDependencyForReader() {
+        let graph = Graph()
+        let src = graph.makeInput(5)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return 1
+        }
+        _ = graph.value(of: reader)
+        let v1 = graph.inputValue(of: src, for: reader.erased)
+        graph.setValue(6, for: src)
+        let v2 = graph.value(of: reader)
+        #expect(v1 == 5)
+        #expect(v2 == 1)
+        #expect(runs == 2)
+    }
 }
