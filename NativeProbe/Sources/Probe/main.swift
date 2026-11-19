@@ -527,3 +527,5 @@ weakMultipleOnSameChild()
 weakCombinerThreeChildrenInvalidateMiddle()
 subgraphAddChildSecondaryParentReverse()
 clearAndSetUpdateScenario()
+clearSetUpdateNestedReverse()
+// clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true

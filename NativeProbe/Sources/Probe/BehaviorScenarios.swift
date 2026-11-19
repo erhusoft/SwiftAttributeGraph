@@ -2040,3 +2040,39 @@ func clearAndSetUpdateScenario() {
 
     print("clear-set-update|token1NonNil=\(token1NonNil)|token2Nil=\(token2Nil)|values=[\(v1), \(v2), \(v3)]|runs=\(runs)")
 }
+
+func clearSetUpdateNestedReverse() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let b = graph.input(Int64(10))
+    var tokens: [String] = []
+    var runs = 0
+
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let t1 = graph.clearUpdateToken()
+        let t2 = graph.clearUpdateToken()
+        tokens.append("\(t1 != nil)/\(t2 != nil)")
+        let vb = graph.read(b)
+        graph.setUpdateToken(t2)
+        let vbMid = graph.read(b)
+        graph.setUpdateToken(t1)
+        let va = graph.read(a)
+        return va + vb + vbMid
+    }
+
+    let v1 = graph.read(r)
+    graph.write(Int64(20), to: b)
+    let v2 = graph.read(r)
+    graph.write(Int64(2), to: a)
+    let v3 = graph.read(r)
+
+    print("clear-set-update-nested-reverse|tokens=\(tokens)|values=[\(v1), \(v2), \(v3)]|runs=\(runs)")
+}
+
+func clearSetUpdateOutsideRule() {
+    let graph = Driver()
+    let t = graph.clearUpdateToken()
+    graph.setUpdateToken(t)
+    print("clear-set-update-outside-rule|tokenNonNil=\(t != nil)")
+}
