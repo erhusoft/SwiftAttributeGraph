@@ -80,6 +80,12 @@ enum ThreadLocalGraph {
         return Unmanaged<Graph>.fromOpaque(pointer).takeUnretainedValue()
     }
 
+    /// Makes `graph` the current one (`nil` for none).
+    @inline(__always)
+    static func set(_ graph: Graph?) {
+        rawSet(graph.map { Unmanaged.passUnretained($0).toOpaque() })
+    }
+
     /// Installs `graph` as the current one and returns the previous one so the caller can restore it.
     @inline(__always)
     static func install(_ graph: Graph?) -> Graph? {

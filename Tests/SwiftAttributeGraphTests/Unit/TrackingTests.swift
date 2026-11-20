@@ -250,4 +250,28 @@ import Testing
         _ = graph.value(of: r)
         #expect(mods == [false, false, true, false])
     }
+
+    /// The thread-local slot is swapped only when a run finds another graph (or none) in it: nested runs of the same
+    /// graph and runs of a second graph started from a rule must still see their own graph through `Attribute.value`.
+    @Test func nestedRunsAndRunsOfAnotherGraphSeeTheirOwnGraph() {
+        let outerGraph = Graph()
+        let innerGraph = Graph()
+        let innerInput = innerGraph.makeInput(5)
+        let innerRule = innerGraph.makeRule { innerInput.value * 2 }
+        let a = outerGraph.makeInput(1)
+        let b = outerGraph.makeRule { a.value + 1 }                       // nested run when `c` first reads it
+        let c = outerGraph.makeRule {
+            let first = b.value
+            innerGraph.updateValue(of: innerRule)                         // runs a rule of another graph
+            return first + a.value
+        }
+        #expect(outerGraph.value(of: c) == 2 + 1)
+        #expect(!innerGraph.isDirty(innerRule.id))
+        #expect(Graph.currentAttribute == nil)
+        outerGraph.setValue(3, for: a)
+        innerGraph.setValue(6, for: innerInput)
+        #expect(outerGraph.value(of: c) == 4 + 3)
+        #expect(!innerGraph.isDirty(innerRule.id))
+        #expect(innerGraph.value(of: innerRule) == 12)
+    }
 }

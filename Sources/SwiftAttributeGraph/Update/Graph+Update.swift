@@ -644,7 +644,12 @@ extension Graph {
 
         let previousNode = evaluatingNode
         evaluatingNode = node
-        let previousGraph = ThreadLocalGraph.install(self)
+        // A run nested in a rule of this graph finds the thread-local slot already holding this graph: it is read, and
+        // written (and restored) only when it holds something else. Swapping it unconditionally cost three
+        // thread-local calls per run, and `pthread_get/setspecific` were 6 % of the `diamond-layers` profile [O].
+        let previousGraph = ThreadLocalGraph.current()
+        let swapsGraph = previousGraph !== self
+        if swapsGraph { ThreadLocalGraph.set(self) }
         let previousSubgraph = currentSubgraph
         let owner = table.owner(at: node)
         if !subgraphs.isLive(currentSubgraph) || subgraphs.isFalling(index: currentSubgraph.index) {
@@ -655,7 +660,7 @@ extension Graph {
         let changed = table.box(at: node).evaluate(in: self, node: node)
 
         currentSubgraph = previousSubgraph
-        _ = ThreadLocalGraph.install(previousGraph)
+        if swapsGraph { ThreadLocalGraph.set(previousGraph) }
         evaluatingNode = previousNode
 
         if !frames.isEmpty, frames[frames.count - 1].isCancelled {
