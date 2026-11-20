@@ -2256,11 +2256,11 @@ func currentAttributeWasModifiedInvalidateScenario() {
     var innerMods: [Bool] = []
 
     let inner: Handle<Int64> = graph.rule {
-        innerMods.append(graph.currentAttributeWasModified())
+        innerMods.append(graph.currentWasModified())
         return graph.read(a) * 10
     }
     let outer: Handle<Int64> = graph.rule {
-        mods.append(graph.currentAttributeWasModified())
+        mods.append(graph.currentWasModified())
         return graph.read(inner) + 1
     }
 
@@ -2450,27 +2450,27 @@ func currentAttributeWasModifiedScenario() {
     let d = Driver()
     let src = d.input(Int64(1))
     var log: [String] = []
-    let outside = d.currentAttributeWasModified()
+    let outside = d.currentWasModified()
     let writer: Handle<Int64> = d.statefulRule(initialValue: Int64(0)) { context in
         let s = d.read(src)
-        let before = d.currentAttributeWasModified()
+        let before = d.currentWasModified()
         context.value = 10 + s
-        log.append("writer=\(before),\(d.currentAttributeWasModified())")
+        log.append("writer=\(before),\(d.currentWasModified())")
     }
     let silent: Handle<Int64> = d.statefulRule(initialValue: Int64(0)) { _ in
         _ = d.read(src)
-        log.append("silent=\(d.currentAttributeWasModified())")
+        log.append("silent=\(d.currentWasModified())")
     }
     let sameValue: Handle<Int64> = d.statefulRule(initialValue: Int64(5)) { context in
         _ = d.read(src)
         context.value = 5
-        log.append("same=\(d.currentAttributeWasModified())")
+        log.append("same=\(d.currentWasModified())")
     }
-    let plain: Handle<Int64> = d.rule { log.append("plain=\(d.currentAttributeWasModified())"); return 1 }
+    let plain: Handle<Int64> = d.rule { log.append("plain=\(d.currentWasModified())"); return 1 }
     let outer: Handle<Int64> = d.rule {
-        let before = d.currentAttributeWasModified()
+        let before = d.currentWasModified()
         let v = d.read(writer)
-        log.append("outer=\(before),\(d.currentAttributeWasModified())")
+        log.append("outer=\(before),\(d.currentWasModified())")
         return v
     }
     for handle in [writer, silent, sameValue, plain, outer] { _ = d.read(handle) }

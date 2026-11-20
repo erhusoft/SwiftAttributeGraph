@@ -291,16 +291,10 @@ extension Graph {
         return AnyAttribute(id: AttributeID(index: node, generation: graph.table.generations[Int(node)]))
     }
 
-    /// Whether the running rule's attribute was modified (`AGGraphCurrentAttributeWasModified` in native
-    /// AttributeGraph).
-    ///
-    /// [O] Natively this was `false` in every measured case: outside a rule, in plain rules, in stateful rules before
-    /// and after writing their value (a different or an equal value, through the context or through
-    /// `AGGraphSetOutputValue`), in stateful rules that do not write, and in an outer rule after an inner stateful rule
-    /// wrote. [?] The condition that makes it `true` was not found (writing a rule attribute from outside is refused
-    /// natively, and `AGGraphSetValue`/`AGGraphInvalidateValue` on the current attribute aborted), so this always
-    /// returns `false`.
-    public static var currentAttributeWasModified: Bool {
+    /// Whether the running rule was modified by its own write (`AGAttribute.currentWasModified` in native AttributeGraph,
+    /// a static getter there). Read from the rule's self-modified bit, which the oracle scenarios
+    /// `current-attribute-was-modified*` measure against native.
+    public static var currentWasModified: Bool {
         guard let graph = ThreadLocalGraph.current(), graph.evaluatingNode != Graph.noNode else { return false }
         return (graph.table.state[Int(graph.evaluatingNode)] & NodeState.selfModified) != 0
     }

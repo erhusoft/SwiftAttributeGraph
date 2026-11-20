@@ -238,7 +238,7 @@ import Testing
         let a = graph.makeInput(1)
         var mods: [Bool] = []
         let r = graph.makeRule {
-            mods.append(Graph.currentAttributeWasModified)
+            mods.append(Graph.currentWasModified)
             return a.value + 1
         }
         _ = graph.value(of: r)

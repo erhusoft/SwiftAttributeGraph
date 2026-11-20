@@ -188,7 +188,7 @@ final class Driver {
         if raw == 2 /* AGAttributeNil, measured as 2 */ { return "nil" }
         return raw == handle?.identifier.rawValue ? "self" : "other"
     }
-    func currentAttributeWasModified() -> Bool { c_AGGraphCurrentAttributeWasModified() }
+    func currentWasModified() -> Bool { c_AGGraphCurrentAttributeWasModified() }
     func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
         c_AGGraphGetValue(attribute.identifier, options, Metadata(V.self))
             .value.assumingMemoryBound(to: V.self).pointee
@@ -464,7 +464,7 @@ final class Driver {
         guard let current = Graph.currentAttribute else { return "nil" }
         return current == handle?.erased ? "self" : "other"
     }
-    func currentAttributeWasModified() -> Bool { Graph.currentAttributeWasModified }
+    func currentWasModified() -> Bool { Graph.currentWasModified }
     func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
         graph.value(of: attribute, options: Graph.ReadOptions(rawValue: options))
     }

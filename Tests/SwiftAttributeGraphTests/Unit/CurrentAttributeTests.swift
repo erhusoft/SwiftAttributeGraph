@@ -1,7 +1,7 @@
 import Testing
 @testable import SwiftAttributeGraph
 
-/// `Graph.currentAttribute` (`AGGraphGetCurrentAttribute`) and `Graph.currentAttributeWasModified`
+/// `Graph.currentAttribute` (`AGGraphGetCurrentAttribute`) and `Graph.currentWasModified`
 /// (`AGGraphCurrentAttributeWasModified`). Expected values were measured natively on macOS 15.8.3
 /// (probe_getvalue_and_current.swift, probe_current_b.swift, probe_current_c.swift).
 @Suite struct CurrentAttributeTests {
@@ -13,7 +13,7 @@ import Testing
         #expect(Graph.currentAttribute == nil)
         _ = graph.value(of: input)
         #expect(Graph.currentAttribute == nil)
-        #expect(Graph.currentAttributeWasModified == false)
+        #expect(Graph.currentWasModified == false)
     }
 
     @Test func insideARuleTheCurrentAttributeIsTheRuleItselfOnEveryRun() {
@@ -93,19 +93,19 @@ import Testing
         let log = Log()
         let writer = graph.makeStatefulRule(initialValue: 0) { (context: inout RuleContext<Int>) in
             let s = graph.value(of: src)
-            log.items.append("before=\(Graph.currentAttributeWasModified)")
+            log.items.append("before=\(Graph.currentWasModified)")
             context.value = 10 + s
-            log.items.append("after=\(Graph.currentAttributeWasModified)")
+            log.items.append("after=\(Graph.currentWasModified)")
         }
         let silent = graph.makeStatefulRule(initialValue: 0) { (_: inout RuleContext<Int>) in
             _ = graph.value(of: src)
-            log.items.append("silent=\(Graph.currentAttributeWasModified)")
+            log.items.append("silent=\(Graph.currentWasModified)")
         }
-        let plain = graph.makeRule { log.items.append("plain=\(Graph.currentAttributeWasModified)"); return 1 }
+        let plain = graph.makeRule { log.items.append("plain=\(Graph.currentWasModified)"); return 1 }
         let outer = graph.makeRule {
-            let b = Graph.currentAttributeWasModified
+            let b = Graph.currentWasModified
             let v = graph.value(of: writer)
-            log.items.append("outer=\(b),\(Graph.currentAttributeWasModified)")
+            log.items.append("outer=\(b),\(Graph.currentWasModified)")
             return v
         }
         _ = graph.value(of: writer); _ = graph.value(of: silent); _ = graph.value(of: plain); _ = graph.value(of: outer)
