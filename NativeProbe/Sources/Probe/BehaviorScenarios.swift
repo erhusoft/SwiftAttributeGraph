@@ -2858,3 +2858,15 @@ func valueStateScenario() {
     let s3 = d.valueState(of: r)
     print("value-state|s0=\(s0)|s1=\(s1)|s2=\(s2)|s3=\(s3)")
 }
+
+/// `AGAttribute.subgraph` (`AGGraphGetAttributeSubgraph`): the owner is the subgraph that was current at creation;
+/// an attribute created outside any subgraph is owned by the current subgraph at the top level.
+func attributeSubgraphScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let a = d.makeSubgraph()
+    let b = d.makeSubgraph()
+    let inA: Handle<Int64> = d.withSubgraph(a) { d.input(1) }
+    let outside: Handle<Int64> = d.input(3)
+    print("attribute-subgraph|inA=\(d.owns(a, inA))|inB=\(d.owns(b, inA))|outsideIsTop=\(d.owns(d.currentSubgraph, outside))|outsideIsA=\(d.owns(a, outside))")
+}

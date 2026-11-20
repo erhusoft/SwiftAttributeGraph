@@ -132,6 +132,7 @@ SCENARIOS = [
     "is-dirty-descendant-subgraph",
     "invalidate-all-values",
     "value-state",
+    "attribute-subgraph",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
