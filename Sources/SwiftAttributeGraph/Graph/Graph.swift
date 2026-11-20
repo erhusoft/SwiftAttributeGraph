@@ -333,19 +333,33 @@ public final class Graph {
 
     /// Updates every dirty live attribute in `subgraph` and its valid descendant subgraphs whose flags intersect
     /// `flags`, visiting attributes and child subgraphs in reverse creation order (`Subgraph.update(flags:)` in native
-    /// AttributeGraph).
+    /// AttributeGraph), repeating the walk until a pass updates nothing: attributes with `flags` that become dirty while
+    /// it runs (for example through ``mutateBody(of:as:invalidating:_:)`` from a rule it updates) are updated in the same
+    /// call. The ``isDirty(_:flags:)`` bits are cleared for `subgraph` and its descendants once the walk ends.
     public func update(_ subgraph: Subgraph, flags: AttributeFlags = .all) {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return }
         withoutUpdate {
-            for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
-                subgraphs.clearDirtyFlags(flags.rawValue, on: sgIndex)
-                let members = subgraphs.members[Int(sgIndex)]
-                for member in members.reversed() where table.isLive(index: member) {
-                    let m = Int(member)
-                    if (table.flags[m] & flags.rawValue) != 0 && (table.state[m] & NodeState.dirty) != 0 {
-                        update(member)
+            var updatedAny = true
+            while updatedAny {
+                updatedAny = false
+                for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+                    let members = subgraphs.members[Int(sgIndex)]
+                    for member in members.reversed() where table.isLive(index: member) {
+                        let m = Int(member)
+                        if (table.flags[m] & flags.rawValue) != 0 && (table.state[m] & NodeState.dirty) != 0 {
+                            update(member)
+                            // A node that is still dirty (cancelled, or kept dirty by a body mutation) must not
+                            // make the walk repeat forever.
+                            if table.state[m] & NodeState.dirty == 0 { updatedAny = true }
+                        }
                     }
+                }
+            }
+            // Cleared only after the last pass: what became dirty during the walk was updated in this same call.
+            if subgraphs.isLive(subgraph.id) {
+                for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+                    subgraphs.clearDirtyFlags(flags.rawValue, on: sgIndex)
                 }
             }
         }
