@@ -27,4 +27,7 @@ enum NodeState {
     /// The node was on the update stack when the body of one of its inputs was mutated with invalidation: it stays
     /// dirty when its frame ends (native parity, `NativeProbe` scenario `write-in-rule-mutate-body-invalidating`).
     static let staysDirty: UInt16 = 1 << 12
+    /// The node has at least one input edge from an attribute belonging to another `GraphContext` (`Node+7` bit 2 in
+    /// native AttributeGraph [O]).
+    static let hasCrossContextInput: UInt16 = 1 << 13
 }

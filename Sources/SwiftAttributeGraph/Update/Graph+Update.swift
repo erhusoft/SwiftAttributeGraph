@@ -102,6 +102,7 @@ extension Graph {
         let index = id.index
         let n = Int(index)
         if table.state[n] & NodeState.indirect != 0 { return nil }
+        readEpoch &+= 1
         if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1; if needsUpdateFlag { clearNeedsUpdateFlags() } }
         if table.state[n] & NodeState.dirty != 0 {
             precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
@@ -177,6 +178,7 @@ extension Graph {
         // An indirect attribute redirects to another attribute: bringing the indirect up to date updates its source,
         // and the reader records a single dependency edge on the indirect attribute itself.
         if table.state[n] & NodeState.indirect != 0 {
+            readEpoch &+= 1
             if table.state[n] & NodeState.dirty != 0 {
                 precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
                 update(index)
@@ -773,6 +775,9 @@ extension Graph {
         let position = UInt32(table.outputs[Int(source)].count - 1)
         table.addInput(InputEdge(source: source, seenVersion: version, read: true, keepForNextPrune: keepForNextPrune,
                                  changed: true, positionInOutputs: position), at: low, of: consumer)
+        if subgraphs.context(of: table.owner(at: consumerNode)) != subgraphs.context(of: table.owner(at: source)) {
+            table.state[consumer] |= NodeState.hasCrossContextInput
+        }
     }
 
     /// Removes the edges that the rule did not read in its last run (mark-and-sweep preserving ascending `source` order).

@@ -73,7 +73,9 @@ extension Graph {
     func invalidateContext(_ context: GraphContext) {
         assertOwnThread()
         context.updateCallback = nil
+        context.invalidationCallback = nil
         context.needsUpdate = false
+        refreshHasAnyInvalidationCallback()
         let targetCtx = context.subgraphContext.rawValue
         for index in 0..<subgraphs.slotCount {
             let sgID = subgraphs.id(at: UInt32(index))
@@ -85,6 +87,37 @@ extension Graph {
                 invalidate(sg)
             }
         }
+    }
+
+    func refreshHasAnyInvalidationCallback() {
+        var any = false
+        for entry in updateContexts {
+            if let ctx = entry.value, !ctx.isInvalidated, ctx.invalidationCallback != nil {
+                any = true
+                break
+            }
+        }
+        hasAnyInvalidationCallback = any
+    }
+
+    /// User-supplied opaque context pointer on the graph's default context (`AGGraphGetContext` / `AGGraphSetContext` in
+    /// native AttributeGraph; defaults to `nil` [O]).
+    public var context: UnsafeRawPointer? {
+        get {
+            assertOwnThread()
+            return defaultUpdateContext.context
+        }
+        set {
+            assertOwnThread()
+            defaultUpdateContext.context = newValue
+        }
+    }
+
+    /// Registers a cross-context invalidation callback on the graph's default context (`AGGraphSetInvalidationCallback`
+    /// in native AttributeGraph [O]).
+    public func setInvalidationCallback(_ callback: ((AnyAttribute) -> Void)?) {
+        assertOwnThread()
+        defaultUpdateContext.setInvalidationCallback(callback)
     }
 
     /// Registers a callback on the graph's default context, invoked when the graph transitions from clean to needing an

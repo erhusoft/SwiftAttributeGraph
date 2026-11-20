@@ -31,6 +31,9 @@ extension Graph {
             table.inputs[n].append(
                 InputEdge(source: src, seenVersion: seenVersion, read: true, positionInOutputs: position)
             )
+            if subgraphs.context(of: table.owner(at: indirect)) != subgraphs.context(of: table.owner(at: src)) {
+                table.state[n] |= NodeState.hasCrossContextInput
+            }
         }
     }
 

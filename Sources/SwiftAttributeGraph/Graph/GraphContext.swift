@@ -6,11 +6,10 @@
 /// deallocated while its `Graph` is still alive.
 ///
 /// Minimal model of native shared contexts (`AGGraphCreateShared`) [O]: a graph has a default context (``Graph/defaultContext``)
-/// and any number of shared ones (``Graph/makeSharedContext()``). Every context has its own ``contextID``, update
-/// callback, `needsUpdate` flag (as seen by ``counter(for:)``), and subgraphs; they all share the graph's attributes,
-/// counters and ``graphID``. Not modelled [?]: dependencies between attributes of different contexts (native aborts with
-/// exit 134 on a read across graphs, not across contexts, and was not measured), `AGGraphSetInvalidationCallback` per
-/// context, `AGGraphSetContext`/`GetContext` and the main-thread handler.
+/// and any number of shared ones (``Graph/makeSharedContext()``). Every context has its own ``contextID``, user
+/// ``context`` pointer (`AGGraphSetContext`/`AGGraphGetContext`), update callback, cross-context invalidation callback
+/// (`AGGraphSetInvalidationCallback`), `needsUpdate` flag (as seen by ``counter(for:)``), and subgraphs; they all share
+/// the graph's attributes, counters and ``graphID`` [O].
 public final class GraphContext {
     private weak var graph: Graph?
     let id: UInt32
@@ -25,7 +24,12 @@ public final class GraphContext {
     var counterNeedsUpdate = false
     /// The invalidation context associated with this `GraphContext`.
     public let subgraphContext: SubgraphContext
+    /// User-supplied opaque context pointer associated with this `GraphContext` (`AGGraphGetContext` / `AGGraphSetContext`
+    /// in native AttributeGraph; defaults to `nil` [O]).
+    public var context: UnsafeRawPointer?
     var updateCallback: (() -> Void)?
+    var invalidationCallback: ((AnyAttribute) -> Void)?
+    var lastInvalidationEpoch: UInt32 = 0
     var needsUpdate = false
     private(set) var isInvalidated = false
 
@@ -49,6 +53,18 @@ public final class GraphContext {
         graph.assertOwnThread()
         guard !isInvalidated else { return }
         updateCallback = callback
+    }
+
+    /// Registers a callback invoked during dirty propagation when an attribute of another context of the same graph
+    /// changes, reaches a clean consumer in this context that has at least one output, and at least one value read has
+    /// occurred on the graph since this context was last notified (`AGGraphSetInvalidationCallback` in native
+    /// AttributeGraph [O]).
+    public func setInvalidationCallback(_ callback: ((AnyAttribute) -> Void)?) {
+        guard let graph else { return }
+        graph.assertOwnThread()
+        guard !isInvalidated else { return }
+        invalidationCallback = callback
+        graph.refreshHasAnyInvalidationCallback()
     }
 
     /// Marks this context as needing an update without invoking the callback immediately; callbacks are drained
@@ -99,6 +115,7 @@ public final class GraphContext {
         guard !isInvalidated else { return }
         isInvalidated = true
         updateCallback = nil
+        invalidationCallback = nil
         needsUpdate = false
         counterNeedsUpdate = false
         graph?.invalidateContext(self)

@@ -35,6 +35,8 @@ public final class Graph {
 
     var updateContexts: [WeakGraphContext] = []
     var nextGraphContextID: UInt32 = 1
+    var hasAnyInvalidationCallback = false
+    @usableFromInline var readEpoch: UInt32 = 0
     lazy var defaultUpdateContext: GraphContext = {
         let ctx = GraphContext(graph: self, id: 0, contextID: graphCounterID + 1,
                                subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
@@ -98,6 +100,8 @@ public final class Graph {
 
     @exclusivity(unchecked) var updateContexts: [WeakGraphContext] = []
     @exclusivity(unchecked) var nextGraphContextID: UInt32 = 1
+    @exclusivity(unchecked) var hasAnyInvalidationCallback = false
+    @exclusivity(unchecked) @usableFromInline var readEpoch: UInt32 = 0
     lazy var defaultUpdateContext: GraphContext = {
         let ctx = GraphContext(graph: self, id: 0, contextID: graphCounterID + 1,
                                subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
