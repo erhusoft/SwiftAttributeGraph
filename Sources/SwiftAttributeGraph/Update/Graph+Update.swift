@@ -474,6 +474,19 @@ extension Graph {
                 || frames[top].inputChanged
 
             var i = frames[top].next
+            // Common case: no partial edge comparator on this node and no offset attribute in the graph, so any changed
+            // version means "must run" and the scan needs no dictionary lookup.
+            if offsetIndirects.isEmpty && (edgeComparators.isEmpty || edgeComparators[node] == nil) {
+                let scan = table.scanInputs(of: n, from: i)
+                if scan.changed { mustRun = true }
+                if scan.stop < table.inputs[n].count {
+                    frames[top].next = scan.stop
+                    frames[top].inputChanged = mustRun
+                    push(table.inputs[n][scan.stop].source)
+                    continue outer
+                }
+                i = scan.stop
+            }
             while i < table.inputs[n].count {
                 let edge = table.inputs[n][i]
                 let source = Int(edge.source)
@@ -557,12 +570,7 @@ extension Graph {
     /// Runs the rule of a node, rebuilds its input edges from what it read and bumps its version if the value changed.
     private func run(_ node: UInt32) {
         let n = Int(node)
-        for i in table.inputs[n].indices {
-            let edge = table.inputs[n][i]
-            table.inputs[n][i].read = edge.keepForNextPrune
-            table.inputs[n][i].keepForNextPrune = false
-            table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion
-        }
+        table.beginRun(of: n)
 
         let previousNode = evaluatingNode
         evaluatingNode = node
@@ -678,28 +686,8 @@ extension Graph {
     @usableFromInline func recordRead(of source: UInt32, by consumerNode: UInt32, keepForNextPrune: Bool = false) {
         let consumer = Int(consumerNode)
         precondition(source != consumerNode, "a rule cannot read itself")
+        guard let low = table.markRead(of: source, by: consumer) else { return }
         let version = table.versions[Int(source)]
-        let count = table.inputs[consumer].count
-
-        // Fast path: appending at the end (the common case: rules usually read in ascending slot order).
-        var low = count
-        if count != 0 && table.inputs[consumer][count - 1].source >= source {
-            low = 0
-            var high = count
-            while low < high {
-                let mid = (low + high) >> 1
-                if table.inputs[consumer][mid].source < source {
-                    low = mid + 1
-                } else {
-                    high = mid
-                }
-            }
-            if low < count, table.inputs[consumer][low].source == source {
-                table.inputs[consumer][low].read = true
-                table.inputs[consumer][low].seenVersion = version
-                return
-            }
-        }
 
         // New edge, appended or inserted in the middle: the same bookkeeping for both. The reader is always
         // `consumerNode` (outside a rule `evaluatingNode` is `noNode`), and `positionInOutputs` is where it sits in
@@ -715,6 +703,7 @@ extension Graph {
     /// Removes the edges that the rule did not read in its last run (mark-and-sweep preserving ascending `source` order).
     func pruneEdges(of node: UInt32) {
         let n = Int(node)
+        if table.keepAllInputsIfAllRead(of: n) { return }
         let count = table.inputs[n].count
         var writeIndex = 0
         for readIndex in 0..<count {
