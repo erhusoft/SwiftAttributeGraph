@@ -2961,3 +2961,22 @@ func addInputScenario() {
     _ = d.read(dst)
     print("add-input|dirtyAfterAdd=\(dirtyAfterAdd)|dirtyAfterWrite=\(dirtyAfterWrite)|runs=\(runsAfterFirst)|runsAfterSecondWrite=\(runs)")
 }
+
+/// `AGGraphRegisterDependency(attribute, options)` called inside a rule (SwiftUI passes the attribute in `w0` and 0 in
+/// `w1`, at four call sites). The rule depends on `source` without reading it.
+func registerDependencyInRuleScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let source: Handle<Int64> = d.input(1)
+    var runs = 0
+    let rule: Handle<Int64> = d.rule {
+        runs += 1
+        d.registerDependency(on: source)
+        return 5
+    }
+    _ = d.read(rule)
+    d.write(2, to: source)
+    let dirty = d.valueState(of: rule) & 0x01
+    _ = d.read(rule)
+    print("register-dependency-in-rule|dirtyAfterWrite=\(dirty)|runs=\(runs)")
+}

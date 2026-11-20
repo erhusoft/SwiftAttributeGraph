@@ -139,7 +139,7 @@ SCENARIOS = [
     "deadline-nesting",
     "unique-id",
     "add-input",
-]
+    "register-dependency-in-rule",]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
 

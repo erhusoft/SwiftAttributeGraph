@@ -40,6 +40,8 @@ private func AGGraphUpdateWasCancelled() -> Bool
 private func AGMakeUniqueID() -> UInt
 @_silgen_name("AGGraphAddInput")
 private func AGGraphAddInput(_ attribute1: AnyAttribute, _ attribute2: AnyAttribute, _ options: UInt32, _ token: Int)
+@_silgen_name("AGGraphRegisterDependency")
+private func AGGraphRegisterDependency(_ attribute: AnyAttribute, _ options: UInt32)
 @_silgen_name("AGGraphCancelUpdateIfNeeded")
 private func AGGraphCancelUpdateIfNeeded()
 
@@ -290,6 +292,7 @@ final class Driver {
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
     func addInput<V, W>(_ attribute1: Handle<V>, _ attribute2: Handle<W>, options: UInt32 = 0) { AGGraphAddInput(attribute1.identifier, attribute2.identifier, options, 0) }
+    func registerDependency<W>(on attribute: Handle<W>, options: UInt32 = 0) { AGGraphRegisterDependency(attribute.identifier, options) }
     func cancelUpdateIfNeeded() { AGGraphCancelUpdateIfNeeded() }
     func withDeadline<V>(_ kind: DeadlineKind, _ body: () -> V) -> V { graph.withDeadline(kind == .past ? 1 : UInt64.max, body) }
     func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
@@ -553,6 +556,7 @@ final class Driver {
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
     func addInput<V, W>(_ attribute1: Handle<V>, _ attribute2: Handle<W>, options: UInt32 = 0) { precondition(options == 0); graph.addInput(attribute1, attribute2) }
+    func registerDependency<W>(on attribute: Handle<W>, options: UInt32 = 0) { precondition(options == 0); graph.registerDependency(on: attribute) }
     func cancelUpdateIfNeeded() { graph.cancelUpdateIfNeeded() }
     func withDeadline<V>(_ kind: DeadlineKind, _ body: () -> V) -> V {
         let now = ContinuousClock.now
@@ -802,3 +806,4 @@ deadlineNoAutoCancelScenario()
 deadlineNestingScenario()
 uniqueIDScenario()
 addInputScenario()
+registerDependencyInRuleScenario()
