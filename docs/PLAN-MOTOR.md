@@ -779,3 +779,4 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
   - `100 batches of 32 writes + update 1,000 shared dependents`: `710.67 ms` (`c9ee9db`) → `601.48 ms` (`7991c61`, `+2.3 %` vs `633e3de`).
   - `M3 50 cycles x 1,000 plain rules` / `stateful`: `39.63 ms` / `55.81 ms` → `34.22 ms` / `44.5 ms`.
   - `1,000 rules x 10 inputs x 100 writes`: `233.25 ms` → `195.96 ms` (`+1.5 %` vs `633e3de`).
+- **Benchmark Nativo vs Propio (`/Users/erhusoft/NativeAttributeGraphBackendProbe/BENCH_NATIVO_VS_PROPIO.md`, `release`):** 3 razones más desfavorables (propio/nativo): `batch-writes` N=1.000 (**4.85x**, 101.45 ms vs 492.17 ms), `batch-writes` N=10.000 (**3.87x**, 1254.78 ms vs 4856.50 ms), `fan-out` N=1.000 (**3.05x**, 0.42 ms vs 1.29 ms).
