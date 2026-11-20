@@ -13,7 +13,13 @@
 
 /// A box holding a value of a known type.
 @usableFromInline class TypedNode<Value>: NodeBox {
-    @usableFromInline var value: Value?
+    // Release builds skip the dynamic exclusivity check on the value, read on every attribute read (see `Graph`).
+    // Every access copies the value in or out; none stays open while user code runs.
+    #if DEBUG && !SAG_UNCHECKED
+    @usableFromInline final var value: Value?
+    #else
+    @exclusivity(unchecked) @usableFromInline final var value: Value?
+    #endif
     /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
     let isEqual: (Value, Value) -> Bool
 

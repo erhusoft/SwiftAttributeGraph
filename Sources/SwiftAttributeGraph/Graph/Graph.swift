@@ -8,6 +8,11 @@ public final class Graph {
     /// Marks "no rule is running".
     static let noNode = UInt32.max
 
+    // Mutable state. Release builds turn off the dynamic exclusivity check on these stored properties: the profile of
+    // `batch-writes` spent 29 % of its time in `swift_beginAccess`/`SwiftTLSContext::get` on them [O]. The graph is used
+    // from one thread and no engine function holds a long `inout` access to one of them while it calls back into user
+    // code, which is what the check would catch; debug builds keep the check so the tests still find such an access.
+    #if DEBUG && !SAG_UNCHECKED
     var table = NodeTable()
     /// The tag that the IDs of this graph carry (see `GraphRegistry`).
     let graphTag: UInt32
@@ -70,6 +75,70 @@ public final class Graph {
     var nextObserverID = 0
     var batchDepth = 0
     var isFlushing = false
+    #else
+    @exclusivity(unchecked) var table = NodeTable()
+    /// The tag that the IDs of this graph carry (see `GraphRegistry`).
+    let graphTag: UInt32
+    /// Comparators resolved so far, one per value type and policy (see `ValueComparator.Cache`).
+    @exclusivity(unchecked) var comparators = ValueComparator.Cache()
+    @exclusivity(unchecked) var subgraphs = SubgraphTable()
+    @exclusivity(unchecked) var currentSubgraph: SubgraphID
+
+    /// Global epoch counter bumped every time an attribute value in the graph changes.
+    @exclusivity(unchecked) public internal(set) var globalVersion: UInt32 = 1
+
+    // Subgraph invalidation (see `Graph+Invalidation.swift`).
+    @exclusivity(unchecked) var subgraphObservers: [UInt32: [Observer]] = [:]
+    /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
+    @exclusivity(unchecked) var deferredInvalidations: [Subgraph] = []
+    @exclusivity(unchecked) var nodeCaches: [UInt32: SubgraphNodeCache] = [:]
+    struct WeakGraphContext {
+        weak var value: GraphContext?
+    }
+
+    @exclusivity(unchecked) var updateContexts: [WeakGraphContext] = []
+    @exclusivity(unchecked) var nextGraphContextID: UInt32 = 1
+    lazy var defaultUpdateContext: GraphContext = {
+        let ctx = GraphContext(graph: self, id: 0, contextID: graphCounterID + 1,
+                               subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
+        updateContexts.append(WeakGraphContext(value: ctx))
+        return ctx
+    }()
+    @exclusivity(unchecked) var isInUpdateCallback = false
+    @exclusivity(unchecked) var edgeComparators: [UInt32: [UInt32: (Any, Any) -> Bool]] = [:]
+    @exclusivity(unchecked) var stickyChangedEdges: [UInt32: Set<UInt32>] = [:]
+    @exclusivity(unchecked) var offsetIndirects: [UInt32: (offset: Int, size: Int)] = [:]
+    @exclusivity(unchecked) var offsetFieldReaders: [UInt32: () -> Any] = [:]
+    @exclusivity(unchecked) var indirectsWithOffsetInChain: Set<UInt32> = []
+    @exclusivity(unchecked) var isInvalidating = false
+    @exclusivity(unchecked) var deferringSubgraphInvalidationDepth = 0
+
+    // Update machinery (see `Graph+Update.swift`).
+    @exclusivity(unchecked) var frames: [UpdateFrame] = []
+    @exclusivity(unchecked) @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
+    @exclusivity(unchecked) var isResumingStep = false
+    /// Number of times a rule has been executed (recalculations) since the graph was created.
+    @exclusivity(unchecked) public internal(set) var recalculationCount = 0
+
+    // Counters behind `counter(for:)` (see `Graph+Counters.swift`).
+    @exclusivity(unchecked) var transactionCount: UInt64 = 0
+    @exclusivity(unchecked) var updateCount: UInt64 = 0
+    @exclusivity(unchecked) var changeCount: UInt64 = 0
+    @exclusivity(unchecked) var createdNodeCount: UInt64 = 0
+    @exclusivity(unchecked) var countsUpdateOnNextRule = false
+    /// `counter(for: .graphID)`; the default context is `graphCounterID + 1`.
+    let graphCounterID: UInt64
+    /// Raised by ``setNeedsUpdate()``, lowered at the start of the next top-level read of a rule.
+    @exclusivity(unchecked) var needsUpdateFlag = false
+
+    // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
+    @exclusivity(unchecked) var dirtyStack: [UInt32] = []
+    @exclusivity(unchecked) var pendingNotifications: [UInt32] = []
+    @exclusivity(unchecked) var observers: [UInt32: [Observer]] = [:]
+    @exclusivity(unchecked) var nextObserverID = 0
+    @exclusivity(unchecked) var batchDepth = 0
+    @exclusivity(unchecked) var isFlushing = false
+    #endif
 
     #if DEBUG && !SAG_UNCHECKED
     let owningThread = currentThreadToken()
