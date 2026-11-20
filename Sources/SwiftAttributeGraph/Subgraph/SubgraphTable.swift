@@ -11,7 +11,16 @@ struct SubgraphTable {
     var generationBase: UInt32 = 0
     private(set) var members: [[UInt32]] = []
     private(set) var parents: [[UInt32]] = []
-    private(set) var children: [[UInt32]] = []
+    /// Raw child adjacency list per slot, in link order. Entries equal to ``none`` are tombstones left by O(1)
+    /// removals in ``removeChild(_:from:)`` and ``release(index:)`` so that sibling order is preserved without O(N)
+    /// array shifts (`multi-observer-tree-order-and-cancel`, `subgraph-flags-forEach-and-update` [O]).
+    private var rawChildren: [[UInt32]] = []
+    /// For each slot `c`, `positionInParents[c][k]` is the index of `c` inside `rawChildren[parents[c][k]]`, enabling
+    /// O(1) tombstoning when `c` is unlinked or released.
+    private var positionInParents: [[UInt32]] = []
+    /// Number of ``none`` tombstones currently in `rawChildren[p]`; compacted when tombstones reach half of
+    /// `rawChildren[p].count`.
+    private var childTombstoneCount: [UInt32] = []
     private(set) var contexts: [UInt32] = []
     /// Set on a subgraph that is being invalidated or waits for the end of the update that asked for it: nothing can be
     /// created in it, but what it owns can still be read until it is freed.
@@ -41,7 +50,9 @@ struct SubgraphTable {
             generations.append(generationBase | 1)
             members.append([])
             parents.append([])
-            children.append([])
+            rawChildren.append([])
+            positionInParents.append([])
+            childTombstoneCount.append(0)
             contexts.append(SubgraphTable.defaultContext)
             falling.append(false)
             dirtyOwnFlags.append(0)
@@ -54,8 +65,10 @@ struct SubgraphTable {
         contexts[i] = resolvedContext
         if let parent {
             let p = Int(parent.index)
+            let pos = UInt32(rawChildren[p].count)
+            rawChildren[p].append(index)
             parents[i].append(parent.index)
-            children[p].append(index)
+            positionInParents[i].append(pos)
         }
         return SubgraphID(index: index, generation: generations[i])
     }
@@ -85,7 +98,47 @@ struct SubgraphTable {
 
     /// The children of a subgraph, in the order they were linked.
     func children(of index: UInt32) -> [UInt32] {
-        children[Int(index)]
+        let p = Int(index)
+        if childTombstoneCount[p] == 0 {
+            return rawChildren[p]
+        }
+        return rawChildren[p].filter { $0 != SubgraphTable.none }
+    }
+
+    /// Compacts `rawChildren[p]` in place when its tombstone count reaches at least half of its buffer length (minimum
+    /// 64), updating `positionInParents` of each surviving child in O(surviving) so amortized removal is O(1) while
+    /// preserving exact creation/link order.
+    private mutating func compactChildrenIfNeeded(of parent: UInt32) {
+        let p = Int(parent)
+        let dead = Int(childTombstoneCount[p])
+        let total = rawChildren[p].count
+        guard dead >= 64 && dead * 2 >= total else { return }
+        var write = 0
+        for read in 0..<total {
+            let child = rawChildren[p][read]
+            guard child != SubgraphTable.none else { continue }
+            if write != read {
+                rawChildren[p][write] = child
+                let c = Int(child)
+                if let k = parents[c].firstIndex(of: parent) {
+                    positionInParents[c][k] = UInt32(write)
+                }
+            }
+            write += 1
+        }
+        rawChildren[p].removeSubrange(write..<total)
+        childTombstoneCount[p] = 0
+    }
+
+    /// Marks `child` as a tombstone at `pos` inside `rawChildren[parent]`.
+    private mutating func markChildTombstone(in parent: UInt32, at pos: UInt32) {
+        let p = Int(parent)
+        let idx = Int(pos)
+        if idx < rawChildren[p].count && rawChildren[p][idx] != SubgraphTable.none {
+            rawChildren[p][idx] = SubgraphTable.none
+            childTombstoneCount[p] &+= 1
+            compactChildrenIfNeeded(of: parent)
+        }
     }
 
     /// Links `child` under `parent` in the DAG. Rejects self-links and cycles.
@@ -98,22 +151,27 @@ struct SubgraphTable {
     /// 52 ms [O]. The cycle rejection itself is this engine's own addition (native behaviour on a cycle is [?]).
     mutating func addChild(_ child: UInt32, to parent: UInt32) {
         precondition(child != parent, "addChild: a subgraph cannot be its own parent")
-        precondition(children[Int(child)].isEmpty || !isAncestor(child, of: parent),
-                     "addChild: cycle detected in subgraph DAG")
         let p = Int(parent)
         let c = Int(child)
-        if !children[p].contains(child) {
-            children[p].append(child)
+        let childHasLiveChildren = rawChildren[c].count > Int(childTombstoneCount[c])
+        precondition(!childHasLiveChildren || !isAncestor(child, of: parent),
+                     "addChild: cycle detected in subgraph DAG")
+        if !parents[c].contains(parent) {
+            let pos = UInt32(rawChildren[p].count)
+            rawChildren[p].append(child)
             parents[c].append(parent)
+            positionInParents[c].append(pos)
         }
     }
 
     /// Unlinks `child` from `parent` without invalidating `child`.
     mutating func removeChild(_ child: UInt32, from parent: UInt32) {
-        let p = Int(parent)
         let c = Int(child)
-        children[p].removeAll { $0 == child }
-        parents[c].removeAll { $0 == parent }
+        guard let k = parents[c].firstIndex(of: parent) else { return }
+        let pos = positionInParents[c][k]
+        parents[c].remove(at: k)
+        positionInParents[c].remove(at: k)
+        markChildTombstone(in: parent, at: pos)
     }
 
     private mutating func nextEpoch() -> UInt32 {
@@ -156,7 +214,7 @@ struct SubgraphTable {
             if falling[c] || visitedEpoch[c] == epoch { continue }
             visitedEpoch[c] = epoch
             result.append(current)
-            for child in children[c] {
+            for child in rawChildren[c] where child != SubgraphTable.none {
                 let ci = Int(child)
                 if !falling[ci] && visitedEpoch[ci] != epoch {
                     stack.append(child)
@@ -181,7 +239,7 @@ struct SubgraphTable {
 
         while let current = stack.popLast() {
             toInvalidate.append(current)
-            for child in children[Int(current)] {
+            for child in rawChildren[Int(current)] where child != SubgraphTable.none {
                 let ci = Int(child)
                 if contexts[ci] == rootContext {
                     if visitedEpoch[ci] != epoch {
@@ -207,14 +265,22 @@ struct SubgraphTable {
     /// bumps the generation and queues the slot for reuse.
     mutating func release(index: UInt32) {
         let i = Int(index)
-        for p in parents[i] {
-            children[Int(p)].removeAll { $0 == index }
+        for k in 0..<parents[i].count {
+            let p = parents[i][k]
+            let pos = positionInParents[i][k]
+            markChildTombstone(in: p, at: pos)
         }
-        for c in children[i] {
-            parents[Int(c)].removeAll { $0 == index }
+        for c in rawChildren[i] where c != SubgraphTable.none {
+            let ci = Int(c)
+            if let k = parents[ci].firstIndex(of: index) {
+                parents[ci].remove(at: k)
+                positionInParents[ci].remove(at: k)
+            }
         }
         parents[i] = []
-        children[i] = []
+        positionInParents[i] = []
+        rawChildren[i] = []
+        childTombstoneCount[i] = 0
         falling[i] = false
         members[i] = []
         contexts[i] = SubgraphTable.defaultContext
