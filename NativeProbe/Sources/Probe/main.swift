@@ -123,6 +123,10 @@ final class Driver {
     func invalidateAllValues() { graph.invalidateAllValues() }
     func valueState<V>(of attribute: Handle<V>) -> UInt8 { UInt8(truncatingIfNeeded: attribute.valueState.rawValue) & 0x0B }
     func owns<V>(_ subgraph: SubgraphHandle, _ attribute: Handle<V>) -> Bool { attribute.subgraph == subgraph }
+    func anyWeakEmpty() -> AnyWeakAttribute { AnyWeakAttribute(nil) }
+    func anyWeak<V>(_ attribute: Handle<V>) -> AnyWeakAttribute { AnyWeakAttribute(attribute.identifier) }
+    func anyWeakHasAttribute(_ weak: AnyWeakAttribute) -> Bool { weak.attribute != nil }
+    func anyWeakEqual(_ a: AnyWeakAttribute, _ b: AnyWeakAttribute) -> Bool { a == b }
     func makeSubgraph(for attribute: Handle<Int64>) -> SubgraphHandle { Subgraph(graph: graph, attribute: attribute.identifier) }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -401,6 +405,10 @@ final class Driver {
     /// Own side: engine state bits. Main-thread bits of Apple are not modeled, so the mask 0x0B is compared on both sides.
     func valueState<V>(of attribute: Handle<V>) -> UInt8 { graph.valueState(of: attribute).rawValue & 0x0B }
     func owns<V>(_ subgraph: SubgraphHandle, _ attribute: Handle<V>) -> Bool { graph.subgraph(of: attribute) == subgraph }
+    func anyWeakEmpty() -> AnyWeakAttribute { AnyWeakAttribute(nil) }
+    func anyWeak<V>(_ attribute: Handle<V>) -> AnyWeakAttribute { AnyWeakAttribute(attribute.erased) }
+    func anyWeakHasAttribute(_ weak: AnyWeakAttribute) -> Bool { weak.attribute != nil }
+    func anyWeakEqual(_ a: AnyWeakAttribute, _ b: AnyWeakAttribute) -> Bool { a == b }
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -807,3 +815,4 @@ deadlineNestingScenario()
 uniqueIDScenario()
 addInputScenario()
 registerDependencyInRuleScenario()
+anyWeakAttributeScenario()

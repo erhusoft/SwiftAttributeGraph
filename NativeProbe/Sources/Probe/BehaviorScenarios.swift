@@ -2980,3 +2980,21 @@ func registerDependencyInRuleScenario() {
     _ = d.read(rule)
     print("register-dependency-in-rule|dirtyAfterWrite=\(dirty)|runs=\(runs)")
 }
+
+/// `AnyWeakAttribute` (`AGWeakAttribute`): an empty one has no attribute; one made from a live attribute resolves to it;
+/// after its subgraph is invalidated it resolves to nothing; two of the same attribute compare equal.
+func anyWeakAttributeScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let sub = d.makeSubgraph()
+    let x: Handle<Int64> = d.withSubgraph(sub) { d.input(1) }
+    let empty = d.anyWeakEmpty()
+    let live = d.anyWeak(x)
+    let same = d.anyWeak(x)
+    let emptyHas = d.anyWeakHasAttribute(empty)
+    let liveBefore = d.anyWeakHasAttribute(live)
+    let equal = d.anyWeakEqual(live, same)
+    sub.invalidate()
+    let liveAfter = d.anyWeakHasAttribute(live)
+    print("any-weak|emptyHas=\(emptyHas)|liveBefore=\(liveBefore)|equal=\(equal)|liveAfter=\(liveAfter)")
+}
