@@ -2130,6 +2130,47 @@ func clearSetUpdateOutsideRule() {
     print("clear-set-update-outside-rule|tokenNonNil=\(t != nil)")
 }
 
+func compareValues103102Scenario() {
+    struct POD { var a: Int64; var b: Int64 }
+    struct PODEq: Equatable {
+        var a: Int64; var b: Int64
+        static func == (lhs: PODEq, rhs: PODEq) -> Bool { lhs.a == rhs.a }
+    }
+    struct StrEq: Equatable {
+        var s: String; var tag: Int
+        static func == (lhs: StrEq, rhs: StrEq) -> Bool { lhs.s == rhs.s }
+    }
+    final class PlainClass { var x: Int; init(_ x: Int) { self.x = x } }
+    final class EqClass: Equatable {
+        var x: Int; init(_ x: Int) { self.x = x }
+        static func == (lhs: EqClass, rhs: EqClass) -> Bool { lhs.x == rhs.x }
+    }
+
+    let d = Driver()
+    func fmt(_ b: Bool?) -> String { b.map { $0 ? "t" : "f" } ?? "-" }
+    let plain = PlainClass(1)
+    let eq = EqClass(1)
+    let s = [
+        fmt(d.compareValues103(POD(a: 1, b: 2), POD(a: 1, b: 3))),
+        fmt(d.compareValues103(PODEq(a: 1, b: 2), PODEq(a: 1, b: 3))),
+        fmt(d.compareValues103(Double.nan, Double.nan)),
+        fmt(d.compareValues103(0.0, -0.0)),
+        fmt(d.compareValues103(StrEq(s: "a", tag: 1), StrEq(s: "a", tag: 2))),
+        fmt(d.compareValues103(plain, PlainClass(1))),
+        fmt(d.compareValues103(eq, EqClass(1))),
+    ].joined(separator: ",")
+    let t = [
+        fmt(d.compareValues102(POD(a: 1, b: 2), POD(a: 1, b: 3))),
+        fmt(d.compareValues102(PODEq(a: 1, b: 2), PODEq(a: 1, b: 3))),
+        fmt(d.compareValues102(Double.nan, Double.nan)),
+        fmt(d.compareValues102(0.0, -0.0)),
+        fmt(d.compareValues102(StrEq(s: "a", tag: 1), StrEq(s: "a", tag: 2))),
+        fmt(d.compareValues102(plain, PlainClass(1))),
+        fmt(d.compareValues102(eq, EqClass(1))),
+    ].joined(separator: ",")
+    print("compare-values-103-102|0x103=[\(s)]|0x102=[\(t)]")
+}
+
 func compareValues302Scenarios() {
     struct POD { var a: Int64; var b: Int64 }
     struct CustomEq: Equatable {

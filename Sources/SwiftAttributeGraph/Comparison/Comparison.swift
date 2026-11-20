@@ -25,6 +25,11 @@ public enum Comparison: Sendable {
     /// The cold behaviour of the native function (the first call, with asynchronous layouts, compares by bytes) is
     /// deliberately not reproduced.
     case equatableUnlessPOD
+    /// Corresponds to `AGComparisonMode` 3 (EquatableAlways, options `0x103`), measured on macOS 15.7.9 with the
+    /// `compare-values-103-102` scenario. An `Equatable` type is compared with its `==`, POD included (so `Double.nan`
+    /// differs from itself and `0.0` equals `-0.0`). A type that is not `Equatable` is compared by its bytes, that is,
+    /// by identity for references. It differs from ``equatableUnlessPOD`` only for POD types.
+    case equatableAlways
 }
 
 /// Compares the bytes of two values of the same type, eight at a time.

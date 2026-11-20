@@ -113,6 +113,32 @@ final class Driver {
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
 
+    func compareValues103<T>(_ a: T, _ b: T) -> Bool? {
+        withUnsafePointer(to: a) { pa in
+            withUnsafePointer(to: b) { pb in
+                let meta = Metadata(T.self)
+                _ = c_AGCompareValues(pa, pb, meta, 0x103)
+                usleep(20_000)
+                _ = c_AGCompareValues(pa, pb, meta, 0x103)
+                usleep(20_000)
+                return c_AGCompareValues(pa, pb, meta, 0x103)
+            }
+        }
+    }
+
+    func compareValues102<T>(_ a: T, _ b: T) -> Bool? {
+        withUnsafePointer(to: a) { pa in
+            withUnsafePointer(to: b) { pb in
+                let meta = Metadata(T.self)
+                _ = c_AGCompareValues(pa, pb, meta, 0x102)
+                usleep(20_000)
+                _ = c_AGCompareValues(pa, pb, meta, 0x102)
+                usleep(20_000)
+                return c_AGCompareValues(pa, pb, meta, 0x102)
+            }
+        }
+    }
+
     func compareValues302<T>(_ a: T, _ b: T) -> Bool {
         withUnsafePointer(to: a) { pa in
             withUnsafePointer(to: b) { pb in
@@ -352,6 +378,28 @@ final class Driver {
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
+
+    func compareValues103<T>(_ a: T, _ b: T) -> Bool? {
+        let g = Graph()
+        let attr = g.makeInput(a, comparison: .equatableAlways)
+        var runs = 0
+        let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
+        _ = g.value(of: r)
+        g.setValue(b, for: attr)
+        _ = g.value(of: r)
+        return runs == 1
+    }
+
+    func compareValues102<T>(_ a: T, _ b: T) -> Bool? {
+        let g = Graph()
+        let attr = g.makeInput(a, comparison: .equatableUnlessPOD)
+        var runs = 0
+        let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
+        _ = g.value(of: r)
+        g.setValue(b, for: attr)
+        _ = g.value(of: r)
+        return runs == 1
+    }
 
     func compareValues302<T>(_ a: T, _ b: T) -> Bool {
         let g = Graph()
@@ -683,6 +731,7 @@ clearAndSetUpdateScenario()
 clearSetUpdateNestedReverse()
 compareValues302Scenarios()
 compareValues302Edges()
+compareValues103102Scenario()
 getInputValueExplicitReaderScenario()
 getInputValueDupPruneAndNonRuleScenarios()
 currentAttributeWasModifiedInvalidateScenario()
