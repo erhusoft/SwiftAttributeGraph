@@ -385,6 +385,19 @@ extension Graph {
         invalidateRuleValue(attribute)
     }
 
+    /// Marks every live rule attribute dirty and pending, so each one re-evaluates on its next read while keeping its
+    /// stored value (`AGGraphInvalidateAllValues` in native AttributeGraph; the oracle scenario
+    /// `invalidate-all-values` measures that `hasValue` stays true and the read runs the rule again). Input attributes
+    /// are not touched. Like ``invalidateValue(of:)-(AnyAttribute)``, it must not run inside a rule.
+    public func invalidateAllValues() {
+        assertOwnThread()
+        precondition(evaluatingNode == Graph.noNode, "invalidateAllValues(): setting value during update")
+        for n in 0..<table.slotCount {
+            guard table.isLive(index: UInt32(n)), table.state[n] & NodeState.isRule != 0 else { continue }
+            invalidateRuleValue(AnyAttribute(id: AttributeID(index: UInt32(n), generation: table.generations[n])))
+        }
+    }
+
     /// The invalidation shared by ``invalidateValue(of:)-(AnyAttribute)`` and ``mutateBody(of:as:invalidating:_:)``;
     /// it does not check whether a rule is running.
     func invalidateRuleValue(_ attribute: AnyAttribute) {

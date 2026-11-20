@@ -110,6 +110,7 @@ final class Driver {
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child, tag: tag) }
     func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { parent.removeChild(child) }
+    func invalidateAllValues() { graph.invalidateAllValues() }
     func makeSubgraph(for attribute: Handle<Int64>) -> SubgraphHandle { Subgraph(graph: graph, attribute: attribute.identifier) }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -377,6 +378,8 @@ final class Driver {
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child) }
     func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { parent.removeChild(child) }
+    /// Own side: the engine method under test.
+    func invalidateAllValues() { graph.invalidateAllValues() }
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -764,3 +767,4 @@ coldChainDepth()
 writeInRuleInvalidateValueWithoutUpdate()
 writeInRuleMutateBodyInvalidating()
 for (_, run) in isDirtyScenarios { run() }
+invalidateAllValuesScenario()

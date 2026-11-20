@@ -130,6 +130,7 @@ SCENARIOS = [
     "is-dirty-partial-and-full-update",
     "is-dirty-flags-changed-while-dirty",
     "is-dirty-descendant-subgraph",
+    "invalidate-all-values",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

@@ -2827,3 +2827,17 @@ func setFlagsHighBitsScenario() {
     let c0F = d.countMatching(sub, flags: 0x0F)
     print("set-flags-high-bits|count10=\(c10)|count80=\(c80)|countF0=\(cF0)|count0F=\(c0F)")
 }
+
+/// `AGGraphInvalidateAllValues`: invalidates every value; the next read must recompute and no value may stay stale.
+func invalidateAllValuesScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var runs = 0
+    let r: Handle<Int64> = d.rule { runs += 1; return 42 }
+    let v0 = d.read(r)
+    let runsBefore = runs
+    d.invalidateAllValues()
+    let hasAfter = d.hasValue(of: r)
+    let v1 = d.read(r)
+    print("invalidate-all-values|v0=\(v0)|runsBefore=\(runsBefore)|hasValueAfter=\(hasAfter)|v1=\(v1)|runsAfter=\(runs)")
+}
