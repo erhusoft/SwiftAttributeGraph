@@ -2813,3 +2813,17 @@ func setFlagsBit3AndMaskScenario() {
     d.update(sub, flags: 8)
     print("set-flags-bit3-and-mask|count8=\(count8)|count3=\(count3)|countAll=\(countFF)|dirty8=\(dirty8)|dirty2=\(dirty2)|order=\(order)")
 }
+
+func setFlagsHighBitsScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let sub = d.makeSubgraph()
+    _ = d.withSubgraph(sub) { d.setFlags(0x10, for: d.rule { 1 }) }
+    _ = d.withSubgraph(sub) { d.setFlags(0x80, for: d.rule { 1 }) }
+    _ = d.withSubgraph(sub) { d.setFlags(0xF0, for: d.rule { 1 }) }
+    let c10 = d.countMatching(sub, flags: 0x10)
+    let c80 = d.countMatching(sub, flags: 0x80)
+    let cF0 = d.countMatching(sub, flags: 0xF0)
+    let c0F = d.countMatching(sub, flags: 0x0F)
+    print("set-flags-high-bits|count10=\(c10)|count80=\(c80)|countF0=\(cF0)|count0F=\(c0F)")
+}
