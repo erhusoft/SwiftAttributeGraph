@@ -136,6 +136,25 @@ import Testing
         #expect(Subgraph.current == nil)
     }
 
+    @Test func creatingAnAttributeAfterSettingCurrentToNilInsideWithCurrentStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let sub = graph.makeSubgraph()
+            graph.withCurrent(sub) {
+                Subgraph.current = nil
+                _ = graph.makeInput(1)
+            }
+        }
+    }
+
+    @Test func creatingAnAttributeAfterSettingCurrentToNilOutsideWithCurrentStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            Subgraph.current = nil
+            _ = graph.makeInput(1)
+        }
+    }
+
     @Test func isPerThread() {
         final class Box: @unchecked Sendable { var seen: [Bool] = []; let done = DispatchSemaphore(value: 0) }
         let graph = Graph()

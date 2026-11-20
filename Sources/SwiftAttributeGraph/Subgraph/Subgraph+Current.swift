@@ -12,12 +12,13 @@ extension Subgraph {
     ///
     /// Setting it (`AGSubgraphSetCurrent`) makes `newValue` current until it is set again; `withCurrent` restores the
     /// value that was set. Attributes are created in the subgraph made current [O for the getter, own for creation].
-    /// Setting `nil` clears what ``current`` reports but the graph keeps creating attributes in the last subgraph set;
-    /// natively a creation with no current subgraph is a programming error that the engine does not model [?].
+    /// Setting `nil` clears the current subgraph on this thread; attempting to create an attribute while it is cleared
+    /// stops the program with a precondition failure, matching native AttributeGraph (`attempting to create attribute
+    /// with no subgraph`, exit 133 [O]).
     public static var current: Subgraph? {
         get {
             let raw = ThreadLocalSubgraph.get()
-            guard raw != 0 else { return nil }
+            guard raw != 0, raw != ThreadLocalSubgraph.cleared else { return nil }
             let id = SubgraphID(rawValue: raw)
             guard let graph = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
             graph.assertOwnThread()
@@ -25,7 +26,7 @@ extension Subgraph {
         }
         set {
             guard let subgraph = newValue else {
-                ThreadLocalSubgraph.exchange(0)
+                ThreadLocalSubgraph.exchange(ThreadLocalSubgraph.cleared)
                 return
             }
             let graph = subgraph.graph

@@ -164,6 +164,7 @@ public final class Graph {
         let root = subgraphs.allocate(parent: nil)
         rootSubgraph = Subgraph(id: root)
         currentSubgraph = root
+        ThreadLocalSubgraph.resetCleared()
         GraphRegistry.bind(tag: tag, to: self)
     }
 
@@ -650,6 +651,8 @@ public final class Graph {
     }
 
     func allocate(_ box: NodeBox, state: UInt16) -> AttributeID {
+        precondition(ThreadLocalSubgraph.get() != ThreadLocalSubgraph.cleared,
+                     "attempting to create attribute with no subgraph")
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
         precondition(!subgraphs.isFalling(index: currentSubgraph.index), "the current subgraph is being invalidated")
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)

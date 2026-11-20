@@ -99,9 +99,14 @@ enum ThreadLocalGraph {
 /// touch it.
 ///
 /// The slot holds the subgraph's packed ID (never `0`, because generations start at 1) in a pointer-sized value, so it
-/// needs no allocation. The ID is meaningful only while the subgraph is valid: `Subgraph.current` checks that.
+/// needs no allocation; `cleared` (`UInt64.max`) marks that `Subgraph.current = nil` was explicitly set. The ID is
+/// meaningful only while the subgraph is valid: `Subgraph.current` checks that.
 enum ThreadLocalSubgraph {
-    /// The packed ID of the current subgraph, or `0` when there is none.
+    /// Sentinel stored when `Subgraph.current = nil` is called explicitly.
+    static let cleared = UInt64.max
+
+    /// The packed ID of the current subgraph, or `0` when there is none, or ``cleared`` when `Subgraph.current = nil`
+    /// was explicitly called.
     @inline(__always)
     static func get() -> UInt64 { UInt64(UInt(bitPattern: rawGetSubgraph())) }
 
@@ -112,5 +117,13 @@ enum ThreadLocalSubgraph {
         let previous = get()
         rawSetSubgraph(UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: rawValue)))
         return previous
+    }
+
+    /// Resets the current subgraph slot to `0` if it was left in the ``cleared`` state outside any active subgraph.
+    @inline(__always)
+    static func resetCleared() {
+        if get() == cleared {
+            rawSetSubgraph(nil)
+        }
     }
 }
