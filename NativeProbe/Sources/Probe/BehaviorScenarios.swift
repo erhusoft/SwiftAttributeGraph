@@ -2009,6 +2009,59 @@ func weakCombinerThreeChildrenInvalidateMiddle() {
     print("weak-combiner-three-children-invalidate-middle|values=[\(v1), \(v2)]|runs=\(combinerRuns)|order=\(order)")
 }
 
+func weakAttributeOutsideRule() {
+    let d1 = Driver()
+    let child1 = d1.makeSubgraph()
+    let src1 = d1.withSubgraph(child1) { d1.input(Int64(5)) }
+    var targetRuns = 0
+    let target1: Handle<Int64> = d1.withSubgraph(child1) {
+        d1.rule {
+            targetRuns += 1
+            return d1.read(src1) + 10
+        }
+    }
+    let w1 = d1.weak(target1)
+
+    // (a) & (c): read dirty/live target outside a rule
+    let attrAliveBefore = d1.attribute(of: w1) != nil
+    let v1 = d1.readWeak(w1)
+    let runs1 = targetRuns
+    d1.write(Int64(20), to: src1)
+    let v2 = d1.readWeak(w1)
+    let runs2 = targetRuns
+    let v3 = d1.readWeak(w1)
+    let runs3 = targetRuns
+
+    // (d): read via AGGraphGetWeakValue with options 0, 2, 4 outside a rule
+    d1.write(Int64(30), to: src1)
+    let opt0 = d1.readWeak(w1, options: 0)
+    d1.write(Int64(40), to: src1)
+    let opt2 = d1.readWeak(w1, options: 2)
+    d1.write(Int64(50), to: src1)
+    let opt4 = d1.readWeak(w1, options: 4)
+    let runsAfterOpts = targetRuns
+
+    // (e): read weak attribute of another graph outside a rule
+    let d2 = Driver()
+    let child2 = d2.makeSubgraph()
+    let src2 = d2.withSubgraph(child2) { d2.input(Int64(7)) }
+    let r2: Handle<Int64> = d2.withSubgraph(child2) { d2.rule { d2.read(src2) * 2 } }
+    let w2 = d2.weak(r2)
+    let cross1 = d1.readWeak(w2)
+    d2.write(Int64(9), to: src2)
+    let cross2 = d1.readWeak(w2)
+
+    // (b): after invalidating target subgraphs
+    d1.invalidate(child1)
+    let attrAliveAfter = d1.attribute(of: w1) != nil
+    let after1 = d1.readWeak(w1)
+    let afterOpt0 = d1.readWeak(w1, options: 0)
+    d2.invalidate(child2)
+    let crossAfter = d1.readWeak(w2)
+
+    print("weak-attribute-outside-rule|attr=[\(attrAliveBefore), \(attrAliveAfter)]|vals=[\(String(describing: v1)), \(String(describing: v2)), \(String(describing: v3))]|runs=[\(runs1), \(runs2), \(runs3), \(runsAfterOpts)]|opts=[\(String(describing: opt0)), \(String(describing: opt2)), \(String(describing: opt4))]|cross=[\(String(describing: cross1)), \(String(describing: cross2)), \(String(describing: crossAfter))]|after=[\(String(describing: after1)), \(String(describing: afterOpt0))]")
+}
+
 func clearAndSetUpdateScenario() {
     let graph = Driver()
     let a = graph.input(Int64(1))

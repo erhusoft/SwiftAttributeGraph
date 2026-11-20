@@ -82,6 +82,7 @@ SCENARIOS = [
     "weak-read-after-child-invalidate",
     "weak-multiple-on-same-child",
     "weak-combiner-three-children-invalidate-middle",
+    "weak-attribute-outside-rule",
     "subgraph-add-child-secondary-parent-reverse",
     "clear-set-update",
     "clear-set-update-nested-reverse",

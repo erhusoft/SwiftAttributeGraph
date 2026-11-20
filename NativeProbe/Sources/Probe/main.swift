@@ -15,6 +15,14 @@ private func c_AGGraphGetInputValue(_ attribute: AnyAttribute, _ input: AnyAttri
 @_silgen_name("AGGraphGetValue")
 private func c_AGGraphGetValue(_ attribute: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
 
+struct ProbeAGWeakValuePair {
+    var value: UnsafeRawPointer?
+    var changed: Bool
+}
+
+@_silgen_name("AGGraphGetWeakValue")
+private func c_AGGraphGetWeakValue(_ weakAttribute: AnyWeakAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGWeakValuePair
+
 @_silgen_name("AGGraphGetCurrentAttribute")
 private func c_AGGraphGetCurrentAttribute() -> UInt32
 
@@ -178,6 +186,10 @@ final class Driver {
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
+    func readWeak<V>(_ weakAttribute: WeakHandle<V>, options: UInt32) -> V? {
+        c_AGGraphGetWeakValue(weakAttribute.base, options, Metadata(V.self))
+            .value?.assumingMemoryBound(to: V.self).pointee
+    }
     func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { currentSubgraph.apply { IndirectHandle(source: source) } }
     func offsetIndirect<V: BitwiseCopyable, Field>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
         currentSubgraph.apply { source[keyPath: keyPath] }
@@ -407,6 +419,9 @@ final class Driver {
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
+    func readWeak<V>(_ weakAttribute: WeakHandle<V>, options: UInt32) -> V? {
+        graph.value(of: weakAttribute, options: Graph.ReadOptions(rawValue: options))
+    }
     func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(currentSubgraph) { graph.makeIndirect(source) } }
     func offsetIndirect<V: BitwiseCopyable, Field: BitwiseCopyable>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
         graph.withCurrent(scope) { graph.makeOffsetFieldAttribute(of: source, keyPath: keyPath) }
@@ -662,6 +677,7 @@ subgraphCreate2()
 weakReadAfterChildInvalidate()
 weakMultipleOnSameChild()
 weakCombinerThreeChildrenInvalidateMiddle()
+weakAttributeOutsideRule()
 subgraphAddChildSecondaryParentReverse()
 clearAndSetUpdateScenario()
 clearSetUpdateNestedReverse()
