@@ -78,4 +78,21 @@ extension NodeTable {
             return true
         }
     }
+
+    /// Capacity of the edge array that the first input edge of a node allocates.
+    ///
+    /// The array grew one slot at a time: a rule that read two inputs reallocated and copied it on its first run, 14 %
+    /// of the `diamond-layers` profile [O]. Two, not four: every edge array of a one-input rule grows from 48 to 64
+    /// bytes (96 with four), and the longer arrays made a 20,000-rule verification walk 3 % (6 % with four) slower [O].
+    static let firstInputCapacity = 2
+
+    /// Adds a new input edge to node `n` at `index` (the position that keeps ascending `source` order).
+    mutating func addInput(_ edge: InputEdge, at index: Int, of n: Int) {
+        if inputs[n].isEmpty { inputs[n].reserveCapacity(NodeTable.firstInputCapacity) }
+        if index == inputs[n].count {
+            inputs[n].append(edge)
+        } else {
+            inputs[n].insert(edge, at: index)
+        }
+    }
 }

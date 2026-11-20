@@ -85,4 +85,32 @@ import Testing
         #expect(graph.value(of: rule) == 12)
         #expect(runs == 2)
     }
+
+    /// A reader whose edges are created by appends and by insertions in every order keeps them sorted, finds each one
+    /// again on later runs and prunes the ones it stops reading (guards the pre-sized first edge array).
+    @Test func edgesStaySortedAcrossAppendsAndInsertionsOfManyInputs() {
+        let graph = Graph()
+        let inputs = (0..<9).map { graph.makeInput($0) }
+        let order = [4, 8, 0, 6, 2, 7, 1, 5, 3]
+        var useAll = true
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            var sum = 0
+            for i in order where useAll || i % 2 == 0 { sum += graph.value(of: inputs[i]) }
+            return sum
+        }
+        #expect(graph.value(of: reader) == 36)
+        let ids = graph.inputs(of: reader.id).map { $0.index }
+        #expect(ids == ids.sorted() && ids.count == 9)
+
+        useAll = false
+        graph.setValue(100, for: inputs[3])
+        #expect(graph.value(of: reader) == 0 + 2 + 4 + 6 + 8)
+        #expect(graph.inputs(of: reader.id).count == 5)
+        graph.setValue(50, for: inputs[3])                  // pruned: no rerun
+        #expect(graph.value(of: reader) == 20 && runs == 2)
+        graph.setValue(10, for: inputs[4])
+        #expect(graph.value(of: reader) == 26 && runs == 3)
+    }
 }

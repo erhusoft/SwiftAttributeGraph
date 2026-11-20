@@ -766,9 +766,8 @@ extension Graph {
         // native probe of its own.
         table.outputs[Int(source)].append(consumerNode)
         let position = UInt32(table.outputs[Int(source)].count - 1)
-        table.inputs[consumer].insert(InputEdge(source: source, seenVersion: version, read: true,
-                                                keepForNextPrune: keepForNextPrune, changed: true,
-                                                positionInOutputs: position), at: low)
+        table.addInput(InputEdge(source: source, seenVersion: version, read: true, keepForNextPrune: keepForNextPrune,
+                                 changed: true, positionInOutputs: position), at: low, of: consumer)
     }
 
     /// Removes the edges that the rule did not read in its last run (mark-and-sweep preserving ascending `source` order).
