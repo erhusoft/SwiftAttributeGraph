@@ -134,6 +134,9 @@ SCENARIOS = [
     "value-state",
     "attribute-subgraph",
     "cancel-update-inside",
+    "deadline-if-needed",
+    "deadline-no-auto-cancel",
+    "deadline-nesting",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

@@ -2887,3 +2887,48 @@ func cancelUpdateInsideScenario() {
     let v = d.read(r)
     print("cancel-update-inside|wasCancelled=\(wasCancelled)|v=\(v)")
 }
+
+/// A deadline that has passed or one that is far in the future. Native maps them to mach ticks 1 and `UInt64.max`;
+/// the engine maps them to instants an hour before and after now.
+enum DeadlineKind { case past, future }
+
+/// `AGGraphCancelUpdateIfNeeded` under a passed deadline, a future one, and none: only the passed one cancels.
+func deadlineIfNeededScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var pastWas = false
+    var futureWas = false
+    var noneWas = false
+    let rPast: Handle<Int64> = d.rule { d.cancelUpdateIfNeeded(); pastWas = d.updateWasCancelled(); return 4 }
+    let rFuture: Handle<Int64> = d.rule { d.cancelUpdateIfNeeded(); futureWas = d.updateWasCancelled(); return 5 }
+    let rNone: Handle<Int64> = d.rule { d.cancelUpdateIfNeeded(); noneWas = d.updateWasCancelled(); return 6 }
+    _ = d.withDeadline(.past) { d.read(rPast) }
+    _ = d.withDeadline(.future) { d.read(rFuture) }
+    _ = d.read(rNone)
+    print("deadline-if-needed|past=\(pastWas)|future=\(futureWas)|none=\(noneWas)")
+}
+
+/// A passed deadline does not cancel a rule that never calls `AGGraphCancelUpdateIfNeeded`.
+func deadlineNoAutoCancelScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var was = true
+    let r: Handle<Int64> = d.rule { was = d.updateWasCancelled(); return 4 }
+    _ = d.withDeadline(.past) { d.read(r) }
+    print("deadline-no-auto-cancel|was=\(was)")
+}
+
+/// The innermost deadline decides, and the outer one is restored when the inner block returns.
+func deadlineNestingScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var innerPastOuterFuture = false
+    var innerFutureOuterPast = false
+    var restoredOuterPast = false
+    let rA: Handle<Int64> = d.rule { d.cancelUpdateIfNeeded(); innerPastOuterFuture = d.updateWasCancelled(); return 10 }
+    let rB: Handle<Int64> = d.rule { d.cancelUpdateIfNeeded(); innerFutureOuterPast = d.updateWasCancelled(); return 11 }
+    let rC: Handle<Int64> = d.rule { d.cancelUpdateIfNeeded(); restoredOuterPast = d.updateWasCancelled(); return 12 }
+    _ = d.withDeadline(.future) { d.withDeadline(.past) { d.read(rA) } }
+    _ = d.withDeadline(.past) { d.withDeadline(.future) { d.read(rB) }; d.read(rC) }
+    print("deadline-nesting|innerPastOuterFuture=\(innerPastOuterFuture)|innerFutureOuterPast=\(innerFutureOuterPast)|restoredOuterPast=\(restoredOuterPast)")
+}

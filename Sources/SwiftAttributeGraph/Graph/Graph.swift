@@ -154,6 +154,9 @@ public final class Graph {
     /// Number of live attributes.
     public var nodeCount: Int { table.liveCount }
 
+    /// The deadline in effect (set by ``withDeadline(_:_:)``), or `nil` when none is.
+    public internal(set) var deadline: ContinuousClock.Instant?
+
     /// Creates an empty graph with a root subgraph.
     public init() {
         let tag = GraphRegistry.reserveTag()
