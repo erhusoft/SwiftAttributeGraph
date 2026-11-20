@@ -10,14 +10,25 @@ enum ValueComparator {
             let policy: Comparison
         }
         private var types: [Key: AnyObject] = [:]
+        /// The last descriptor handed out and its key. Graphs create long runs of attributes of one type, and hashing
+        /// the key on every creation was 4 % of the `fan-out` profile [O].
+        private var lastKey: Key?
+        private var lastType: AnyObject?
 
         /// The node descriptor of `Value` under `policy`, created on first use.
         mutating func nodeType<Value>(_ policy: Comparison, for type: Value.Type) -> NodeType<Value> {
             let key = Key(type: ObjectIdentifier(Value.self), policy: policy)
-            if let found = types[key] { return unsafeDowncast(found, to: NodeType<Value>.self) }
-            let created = NodeType(isEqual: ValueComparator.make(policy, for: Value.self))
-            types[key] = created
-            return created
+            if key == lastKey, let last = lastType { return unsafeDowncast(last, to: NodeType<Value>.self) }
+            let found: AnyObject
+            if let existing = types[key] {
+                found = existing
+            } else {
+                found = NodeType(isEqual: ValueComparator.make(policy, for: Value.self))
+                types[key] = found
+            }
+            lastKey = key
+            lastType = found
+            return unsafeDowncast(found, to: NodeType<Value>.self)
         }
     }
 

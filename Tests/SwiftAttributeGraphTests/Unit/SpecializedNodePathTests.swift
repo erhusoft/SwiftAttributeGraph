@@ -103,6 +103,25 @@ import Testing
         }
     }
 
+    @Test func alternatingTypesAndPoliciesEachKeepTheirOwnComparison() {
+        let graph = Graph()
+        var plain: [Attribute<Int>] = []
+        var always: [Attribute<Int>] = []
+        for i in 0..<3 {
+            plain.append(graph.makeInput(i))
+            _ = graph.makeInput("s\(i)")
+            always.append(graph.makeInput(i, comparison: .alwaysDifferent))
+            _ = graph.makeInput(Double(i))
+        }
+        var runs = 0
+        let reader = graph.makeRule { runs += 1; return graph.value(of: plain[1]) + graph.value(of: always[1]) }
+        _ = graph.value(of: reader)
+        graph.setValue(1, for: plain[1])                    // equal under the default policy: cut
+        #expect(graph.value(of: reader) == 2 && runs == 1)
+        graph.setValue(1, for: always[1])                   // equal, but always different: reruns
+        #expect(graph.value(of: reader) == 2 && runs == 2)
+    }
+
     @Test func anUnspecializedGenericCallerBuildsTheSameNodes() {
         @inline(never)
         func build<V>(_ graph: Graph, _ value: V, _ transform: @escaping (V) -> V) -> (Attribute<V>, Attribute<V>) {
