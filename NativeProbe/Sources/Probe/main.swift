@@ -701,6 +701,7 @@ sharedContextNeedsUpdate()
 sharedContextUpdateCallback()
 sharedContextSubgraphs()
 sharedContextUpdateCallbackInputRead()
+sharedContextInvalidationCallback()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
 coldChainDepth()
 writeInRuleInvalidateValueWithoutUpdate()

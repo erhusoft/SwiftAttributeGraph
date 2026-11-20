@@ -108,6 +108,7 @@ SCENARIOS = [
     "shared-context-update-callback",
     "shared-context-subgraphs",
     "shared-context-input-read",
+    "shared-context-invalidation-callback",
     "cold-chain-depth",
     "write-in-rule-invalidate-value-without-update",
     "write-in-rule-mutate-body-invalidating",
