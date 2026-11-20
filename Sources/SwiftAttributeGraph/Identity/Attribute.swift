@@ -13,7 +13,7 @@ public struct Attribute<Value>: Hashable, Sendable {
 
     /// The value of the attribute read from the graph whose rule is running on this thread (for `@Attribute` property
     /// wrapper usage inside a ``Rule`` or ``StatefulRule``).
-    public var wrappedValue: Value { value }
+    @inlinable public var wrappedValue: Value { value }
 
     /// The attribute handle itself (`$property` when used as `@Attribute`).
     public var projectedValue: Attribute<Value> {

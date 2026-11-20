@@ -17,7 +17,7 @@ extension Graph {
         let previousGraph = ThreadLocalGraph.install(self)
         evaluatingNode = node
         let owner = table.owner(at: node)
-        if currentSubgraph.index != owner || subgraphs.isFalling(index: owner) {
+        if !subgraphs.isLive(currentSubgraph) || subgraphs.isFalling(index: currentSubgraph.index) {
             currentSubgraph = subgraphForCreating(in: owner)
         }
         if frames[top].waiting != Graph.noNode { recordRead(of: frames[top].waiting) }
@@ -28,6 +28,12 @@ extension Graph {
         evaluatingNode = previousNode
         currentSubgraph = previousSubgraph
         _ = ThreadLocalGraph.install(previousGraph)
+
+        if frames[top].isCancelled {
+            table.state[n] = (table.state[n] & ~NodeState.evaluating) | NodeState.dirty | NodeState.pending
+            frames.removeLast()
+            return
+        }
 
         switch outcome.step {
         case .needsInput(let attribute):
@@ -45,6 +51,7 @@ extension Graph {
                 | NodeState.hasValue
             if outcome.changed {
                 globalVersion &+= 1
+                changeCount &+= 1
                 table.versions[n] &+= 1
             } else {
                 for dependent in table.outputs[n] {
@@ -58,6 +65,7 @@ extension Graph {
                     }
                 }
             }
+            settleStaysDirty(node)
             frames.removeLast()
         }
     }

@@ -496,4 +496,205 @@ import SwiftAttributeGraph
         g.setValue(12, for: b)
         #expect((g.value(of: h), g.value(of: r), s.rExec, s.hExec, s.branch) == (112, 12, 3, 2, "B"))
     }
+
+    @Test func oracle1_indirect_set_redirect_reset() {
+        let g = Graph()
+        let a = g.makeInput(10)
+        let bSame = g.makeInput(10)
+        let cDiff = g.makeInput(20)
+        let ind = g.makeIndirect(a)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return ind.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setSource(bSame, for: ind)
+        #expect((g.value(of: consumer), runs) == (10, 2))
+        g.setSource(cDiff, for: ind)
+        #expect((g.value(of: consumer), runs) == (20, 3))
+        g.resetSource(for: ind)
+        #expect((g.value(of: consumer), runs) == (10, 4))
+    }
+
+    @Test func oracle2_indirect_a_to_b_to_a() {
+        let g = Graph()
+        let a = g.makeInput(10)
+        let b = g.makeInput(20)
+        let ind = g.makeIndirect(a)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return ind.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setSource(b, for: ind)
+        g.resetSource(for: ind)
+        #expect((g.value(of: consumer), runs) == (10, 2))
+    }
+
+    @Test func oracle3_indirect_chain_two() {
+        let g = Graph()
+        let a = g.makeInput(10)
+        let b = g.makeInput(30)
+        let i1 = g.makeIndirect(a)
+        let i2 = g.makeIndirect(i1)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return i2.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setSource(b, for: i1)
+        #expect((g.value(of: consumer), runs) == (30, 2))
+        g.resetSource(for: i1)
+        #expect((g.value(of: consumer), runs) == (10, 3))
+    }
+
+    @Test func oracle4_offset_range_inside_outside() {
+        struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+        let g = Graph()
+        let src = g.makeInput(Pair(x: 1, y: 10))
+        let yOff = MemoryLayout<Pair>.offset(of: \Pair.y)!
+        let off = g.makeOffsetIndirect(of: src, offset: yOff, size: MemoryLayout<Int64>.size)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return off.value.y }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setValue(Pair(x: 99, y: 10), for: src)
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setValue(Pair(x: 99, y: 25), for: src)
+        #expect((g.value(of: consumer), runs) == (25, 2))
+    }
+
+    @Test func oracle5_subgraph_dag_add_child() {
+        let g = Graph()
+        let p1 = g.makeSubgraph()
+        let ctx2 = g.makeSubgraphContext()
+        let p2 = g.makeSubgraph(context: ctx2)
+        let sameChild = g.makeSubgraph(parent: p1)
+        let diffChild = g.makeSubgraph(parent: p2)
+        g.addChild(diffChild, to: p1)
+
+        g.invalidate(p1)
+        #expect(!g.isValid(sameChild))
+        #expect(g.isValid(diffChild))
+    }
+
+    @Test func oracle6_cooperative_cancellation() {
+        let g = Graph()
+        let src = g.makeInput(1)
+        var cancel = false
+        let r = g.makeRule {
+            let v = src.value
+            if cancel { g.cancelUpdate() }
+            return v + 10
+        }
+        #expect(g.value(of: r) == 11)
+        cancel = true
+        g.setValue(2, for: src)
+        // NativeProbe `cooperative-cancel` measured that a cancelled rule writes its returned value (12) while staying dirty.
+        #expect(g.value(of: r) == 12)
+        cancel = false
+        #expect(g.value(of: r) == 12)
+    }
+
+    @Test func oracle7_context_update_callback() {
+        let g = Graph()
+        let ctx = g.makeContext()
+        var coalescedCalls = 0
+        ctx.setUpdateCallback { coalescedCalls += 1 }
+        g.withBatch {
+            ctx.setNeedsUpdate()
+            ctx.setNeedsUpdate()
+        }
+        #expect(coalescedCalls == 1)
+
+        // NativeProbe `context-update-callback` measured `before=0|after=1|reentrant=3`:
+        // `setNeedsUpdate` defers and coalesces until a read/update drains callbacks.
+        let dummy = g.makeRule { 0 }   // a rule: reading an input drains nothing (shared-context-input-read [O])
+        var samePassDrain = 0
+        ctx.setUpdateCallback {
+            samePassDrain += 1
+            if samePassDrain == 1 { ctx.setNeedsUpdate() }
+        }
+        ctx.setNeedsUpdate()
+        #expect(samePassDrain == 0)
+        _ = g.value(of: dummy)
+        #expect(samePassDrain == 2)
+    }
+
+    @Test func oracle8_offset_zero_full_and_size_zero() {
+        struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+        let g = Graph()
+        let src = g.makeInput(Pair(x: 1, y: 2))
+        let full = g.makeOffsetIndirect(of: src, offset: 0, size: MemoryLayout<Pair>.size)
+        let zero = g.makeOffsetIndirect(of: src, offset: 0, size: 0)
+
+        var fullRuns = 0
+        let fullC = g.makeRule { fullRuns += 1; return full.value.x }
+        var zeroRuns = 0
+        let zeroC = g.makeRule { zeroRuns += 1; return zero.value.x }
+
+        #expect((g.value(of: fullC), fullRuns) == (1, 1))
+        #expect((g.value(of: zeroC), zeroRuns) == (1, 1))
+
+        g.setValue(Pair(x: 3, y: 4), for: src)
+        #expect((g.value(of: fullC), fullRuns) == (3, 2))
+        #expect((g.value(of: zeroC), zeroRuns) == (1, 1))
+    }
+
+    @Test func oracle9_offset_sticky_inside_then_outside() {
+        struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+        let g = Graph()
+        let src = g.makeInput(Pair(x: 1, y: 10))
+        let yOff = MemoryLayout<Pair>.offset(of: \Pair.y)!
+        let off = g.makeOffsetIndirect(of: src, offset: yOff, size: MemoryLayout<Int64>.size)
+
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return off.value.y }
+        #expect((g.value(of: consumer), runs) == (10, 1))
+
+        // Inside range (`y: 20`), then back to `y: 10` before evaluating consumer -> sticky changed.
+        g.setValue(Pair(x: 1, y: 20), for: src)
+        g.setValue(Pair(x: 1, y: 10), for: src)
+        #expect((g.value(of: consumer), runs) == (10, 2))
+    }
+
+    @Test func oracle10_mixed_chain_source_offset_indirect_consumer() {
+        struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+        let g = Graph()
+        let src = g.makeInput(Pair(x: 1, y: 10))
+        let yOff = MemoryLayout<Pair>.offset(of: \Pair.y)!
+        let off = g.makeOffsetIndirect(of: src, offset: yOff, size: MemoryLayout<Int64>.size)
+        let ind = g.makeIndirect(off)
+
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return ind.value.y }
+        #expect((g.value(of: consumer), runs) == (10, 1))
+
+        g.setValue(Pair(x: 99, y: 10), for: src)
+        #expect((g.value(of: consumer), runs) == (10, 1))
+
+        g.setValue(Pair(x: 99, y: 25), for: src)
+        #expect((g.value(of: consumer), runs) == (25, 2))
+    }
+
+    @Test func oracle11_direct_edge_without_offset() {
+        let g = Graph()
+        let src = g.makeInput(10)
+        var runs = 0
+        let consumer = g.makeRule { runs += 1; return src.value }
+
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setValue(10, for: src)
+        #expect((g.value(of: consumer), runs) == (10, 1))
+        g.setValue(20, for: src)
+        #expect((g.value(of: consumer), runs) == (20, 2))
+    }
+
+    @Test func oracle12_weak_attribute_alive_and_after_invalidate() {
+        let g = Graph()
+        let sg = g.makeSubgraph()
+        let attr = g.withCurrent(sg) { g.makeInput(42) }
+        let weak = WeakAttribute(attr)
+
+        #expect(g.value(of: weak) == 42)
+        g.invalidate(sg)
+        #expect(g.value(of: weak) == nil)
+    }
 }

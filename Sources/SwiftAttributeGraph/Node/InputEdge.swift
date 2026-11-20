@@ -6,6 +6,8 @@ struct InputEdge {
     var seenVersion: UInt32
     /// Set while the rule runs when the edge has been read in the current run; the rest are pruned afterwards.
     var read: Bool = false
+    /// Set by `Graph.inputValue(of:for:)` so an edge recorded outside a rule survives one evaluation before pruning.
+    var keepForNextPrune: Bool = false
     /// For stateful rules: whether the source's version differed from `seenVersion` when the rule's run began.
     /// A new edge counts as changed.
     var changed: Bool = true

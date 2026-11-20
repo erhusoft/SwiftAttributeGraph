@@ -31,6 +31,9 @@ extension Graph {
             table.inputs[n].append(
                 InputEdge(source: src, seenVersion: seenVersion, read: true, positionInOutputs: position)
             )
+            if subgraphs.context(of: table.owner(at: indirect)) != subgraphs.context(of: table.owner(at: src)) {
+                table.state[n] |= NodeState.hasCrossContextInput
+            }
         }
     }
 
@@ -42,7 +45,9 @@ extension Graph {
         return inputChanged(of: node, source: source.id.index) ?? false
     }
 
-    /// Resolves a chain of indirect attributes iteratively to its terminal non-indirect source.
+    /// Resolves a chain of indirect attributes iteratively to its terminal non-indirect source
+    /// (or to an offset-field attribute, which is terminal for typed resolution because its underlying
+    /// `IndirectNode` stores `Source` rather than `Value`).
     @usableFromInline
     func resolveIndirect<Value>(_ attribute: Attribute<Value>) -> Attribute<Value> {
         var current = attribute
@@ -50,7 +55,10 @@ extension Graph {
             precondition(table.isLive(current.id), "the indirect attribute or its source is dead")
             let index = current.id.index
             if table.state[Int(index)] & NodeState.indirect == 0 { return current }
-            let box = table.box(at: index) as! IndirectNode<Value>
+            if offsetFieldReaders[index] != nil { return current }
+            guard let box = table.box(at: index) as? IndirectNode<Value> else {
+                preconditionFailure("resolveIndirect: type mismatch at indirect node \(index)")
+            }
             current = Attribute(id: box.source)
         }
     }

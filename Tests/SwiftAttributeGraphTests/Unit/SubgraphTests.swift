@@ -252,24 +252,147 @@ import Testing
 
     // MARK: The current subgraph while a rule runs
 
-    @Test func whatARuleCreatesBelongsToTheSubgraphOfTheRule() {
+    /// Native parity (`NativeProbe` `cc-create-placement-caller-scope`, `cc-caller-invalidated-after-*`): evaluating a
+    /// rule does not change the current subgraph, so what it creates belongs to the caller's current subgraph, not to
+    /// the subgraph that owns the rule; invalidating the caller frees it, invalidating the owner does not.
+    @Test func whatARuleCreatesBelongsToTheCallersCurrentSubgraph() {
         let graph = Graph()
-        let sub = graph.makeSubgraph()
+        let owner = graph.makeSubgraph()
+        let caller = graph.makeSubgraph()
         let made = Log()
-        let rule = graph.withCurrent(sub) {
+        var direct: Attribute<Int>? = nil
+        let rule = graph.withCurrent(owner) {
             graph.makeRule { () -> Int in
                 let child = graph.makeSubgraph()
                 let state = graph.withCurrent(child) { graph.makeInput(1) }
-                let direct = graph.makeInput(2)
-                made.events.append("\(graph.parent(of: child) == sub) \(graph.subgraph(of: direct.id) == sub) \(graph.subgraph(of: state.id) == child)")
+                direct = graph.makeInput(2)
+                made.events.append("\(graph.parent(of: child) == caller) \(graph.subgraph(of: direct!.id) == caller) \(graph.subgraph(of: state.id) == child)")
                 return 0
             }
         }
-        _ = graph.value(of: rule)
+        _ = graph.withCurrent(caller) { graph.value(of: rule) }
         #expect(made.events == ["true true true"])
         #expect(graph.nodeCount == 3)
-        graph.invalidate(sub)
-        #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
+        graph.invalidate(owner)
+        #expect(graph.contains(direct!.id) && graph.nodeCount == 2)
+        graph.invalidate(caller)
+        #expect(!graph.contains(direct!.id) && graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
+    }
+
+    /// Design decision, not native parity: native AttributeGraph stops the program when a rule creates an attribute and
+    /// no subgraph is current (`attempting to create attribute with no subgraph`); here the root subgraph is always
+    /// current at top level, so a rule read from top level creates in the root.
+    @Test func aRuleReadFromTopLevelCreatesInTheRootSubgraph() {
+        let graph = Graph()
+        let owner = graph.makeSubgraph()
+        var direct: Attribute<Int>? = nil
+        let rule = graph.withCurrent(owner) {
+            graph.makeRule { () -> Int in
+                direct = graph.makeInput(2)
+                return direct!.value
+            }
+        }
+        #expect(graph.value(of: rule) == 2)
+        #expect(graph.subgraph(of: direct!.id) == graph.rootSubgraph)
+        graph.invalidate(owner)
+        #expect(graph.contains(direct!.id))
+    }
+
+    /// The created attribute is an ordinary dependency of its creator: writing its input runs the created rule and then
+    /// the creator again (native parity, `cc-caller-invalidated-after-rule`).
+    @Test func attributesCreatedByARuleAreTrackedLikeAnyOther() {
+        let graph = Graph()
+        let owner = graph.makeSubgraph()
+        let caller = graph.makeSubgraph()
+        let y = graph.makeInput(5)
+        let log = Log()
+        var created: Attribute<Int>? = nil
+        let r = graph.withCurrent(owner) {
+            graph.makeRule { () -> Int in
+                log.events.append("r")
+                if created == nil {
+                    created = graph.makeRule { () -> Int in log.events.append("created"); return y.value * 10 }
+                }
+                return created!.value + 1
+            }
+        }
+        let outer = graph.makeRule { () -> Int in log.events.append("outer"); return r.value + 100 }
+        #expect(graph.withCurrent(caller) { graph.value(of: outer) } == 151)
+        #expect(log.events == ["outer", "r", "created"])
+        log.events.removeAll()
+        graph.setValue(6, for: y)
+        #expect(graph.value(of: outer) == 161)
+        #expect(log.events == ["created", "r", "outer"])
+        graph.invalidate(caller)
+        #expect(!graph.contains(created!.id))
+        log.events.removeAll()
+        #expect(graph.value(of: outer) == 161 && log.events == [])
+    }
+
+    /// Native parity (`cc-caller-falling-input`, `cc-caller-falling-rule`, values and lifetime only): when the caller's
+    /// subgraph is being invalidated in the same update, the running rule creates in its own subgraph, so the created
+    /// attribute survives the caller and is freed with the rule's owner.
+    @Test(arguments: [false, true])
+    func creatingWhileTheCallersSubgraphIsFallingUsesTheRulesOwner(createRule: Bool) {
+        let graph = Graph()
+        let caller = graph.makeSubgraph()
+        let owner = graph.makeSubgraph()
+        let y = graph.makeInput(5)
+        var created: Attribute<Int>? = nil
+        var callerValidAtCreation = true
+        let r = graph.withCurrent(owner) {
+            graph.makeRule { () -> Int in
+                if created == nil {
+                    callerValidAtCreation = graph.isValid(caller)
+                    created = createRule ? graph.makeRule { y.value * 10 } : graph.makeInput(10)
+                }
+                return created!.value + 1
+            }
+        }
+        var armed = true
+        let outer = graph.makeRule { () -> Int in
+            if armed {
+                armed = false
+                graph.invalidate(caller)
+            }
+            return r.value + 100
+        }
+        #expect(graph.withCurrent(caller) { graph.value(of: outer) } == (createRule ? 151 : 111))
+        #expect(!callerValidAtCreation)
+        #expect(graph.subgraph(of: created!.id) == owner)
+        #expect(!graph.isValid(caller) && graph.contains(created!.id))
+        if createRule {
+            graph.setValue(6, for: y)
+            #expect(graph.value(of: outer) == 161)
+        }
+        graph.invalidate(owner)
+        #expect(!graph.contains(created!.id))
+    }
+
+    private final class CreatedBox { var attribute: Attribute<Int>? }
+
+    private struct CreatingResumableRule: ResumableRule {
+        let box: CreatedBox
+        mutating func resume(_ context: inout ResumableRuleContext<Int>) -> RuleStep {
+            if box.attribute == nil { box.attribute = ThreadLocalGraph.current()!.makeInput(4) }
+            switch context.poll(box.attribute!) {
+            case .pending: return .needsInput(box.attribute!.erased)
+            case .ready(let value): context.value = value; return .finished
+            }
+        }
+    }
+
+    /// The resumable path follows the same rule. No native counterpart: resumable rules exist only in this engine.
+    @Test func aResumableRuleCreatesInTheCallersCurrentSubgraph() {
+        let graph = Graph()
+        let owner = graph.makeSubgraph()
+        let caller = graph.makeSubgraph()
+        let box = CreatedBox()
+        let rule = graph.withCurrent(owner) { graph.makeResumableRule(CreatingResumableRule(box: box)) }
+        #expect(graph.withCurrent(caller) { graph.value(of: rule) } == 4)
+        #expect(graph.subgraph(of: box.attribute!.id) == caller)
+        graph.invalidate(caller)
+        #expect(!graph.contains(box.attribute!.id))
     }
 
     @Test func theCurrentSubgraphIsRestoredAfterARuleRuns() {
@@ -284,7 +407,8 @@ import Testing
     }
 
     @Test func aRuleThatIsRunningFromAFallingSubgraphDoesNotCreateInsideIt() {
-        // The rule of a falling subgraph can still run in the same update; what it creates goes to a live ancestor.
+        // The rule of a falling subgraph can still run in the same update; it is read from top level, so what it creates
+        // goes to the caller's current subgraph (the root), never into the falling owner.
         let graph = Graph()
         let branch = graph.makeSubgraph()
         let tick = graph.makeInput(0)
@@ -378,6 +502,25 @@ import Testing
         graph.update(root, flags: flag1)
         #expect(log.events == ["a2", "a1", "d1", "b2", "b1", "d2"])
         #expect(!graph.isDirty(root, flags: .all))
+    }
+
+    @Test func isDirtyRemainsSetAfterReadUntilSubgraphUpdate() {
+        let graph = Graph()
+        let sg = graph.makeSubgraph()
+        let node = graph.withCurrent(sg) { graph.makeRule { 10 } }
+        graph.setFlags(AttributeFlags(rawValue: 1), for: node)
+        let consumer = graph.withCurrent(sg) { graph.makeRule { node.value + 1 } }
+
+        #expect(graph.value(of: consumer) == 11)
+        #expect(graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+
+        graph.invalidateValue(of: node)
+        #expect(graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+        #expect(graph.value(of: consumer) == 11)
+        #expect(graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
+
+        graph.update(sg, flags: AttributeFlags(rawValue: 1))
+        #expect(!graph.isDirty(sg, flags: AttributeFlags(rawValue: 1)))
     }
 
     // MARK: C30 — withoutSubgraphInvalidation and isAncestor

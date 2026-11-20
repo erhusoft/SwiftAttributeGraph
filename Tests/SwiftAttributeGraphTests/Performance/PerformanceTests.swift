@@ -337,4 +337,31 @@ import Testing
         Self.report("M7 remove half of 100k outputs (edge removal O(1))", ms)
         #expect(ms < 5_000)
     }
+
+    @Test
+    func oneThousandRulesWithTenInputsOneHundredWrites() {
+        let graph = Graph()
+        let inputs = (0..<10).map { graph.makeInput($0) }
+        let rules = (0..<1_000).map { idx in
+            graph.makeRule {
+                var sum = idx
+                for input in inputs {
+                    sum &+= input.value
+                }
+                return sum
+            }
+        }
+        for rule in rules { _ = graph.value(of: rule) }
+
+        let ms = Self.median(runs: 5) {
+            for w in 0..<100 {
+                graph.setValue(w, for: inputs[w % inputs.count])
+                for rule in rules {
+                    _ = graph.value(of: rule)
+                }
+            }
+        }
+        Self.report("1,000 rules x 10 inputs x 100 writes", ms)
+        #expect(ms < 5_000)
+    }
 }

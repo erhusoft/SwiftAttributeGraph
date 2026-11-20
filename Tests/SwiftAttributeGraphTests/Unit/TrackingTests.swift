@@ -87,4 +87,191 @@ import Testing
         #expect(handoff.fromOtherThread == false)
     }
     #endif
+
+    @Test func anyInputsChangedMatchesNativeExcludingAndInvalidateValue() {
+        let graph = Graph()
+        let a = graph.makeInput(Int64(1))
+        let b = graph.makeInput(Int64(10))
+        var results: [Bool] = []
+        var checkBeforeReads = false
+
+        let r = graph.makeRule {
+            if checkBeforeReads {
+                results.append(graph.anyInputsChanged())
+                results.append(graph.anyInputsChanged())
+            }
+            let va = a.value
+            let vb = b.value
+            if !checkBeforeReads {
+                results.append(graph.anyInputsChanged())
+                results.append(graph.anyInputsChanged(excluding: [AnyAttribute(id: a.id)]))
+            }
+            return va + vb
+        }
+
+        _ = graph.value(of: r)
+        graph.setValue(2, for: a)
+        _ = graph.value(of: r)
+
+        checkBeforeReads = true
+        graph.setValue(3, for: a)
+        _ = graph.value(of: r)
+
+        checkBeforeReads = false
+        graph.invalidateValue(of: r)
+        _ = graph.value(of: r)
+
+        #expect(results == [true, true, true, false, true, true, false, false])
+    }
+
+    @Test func anyInputsChangedBeforeReadOnFirstEvaluationIsFalse() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        var firstBefore = true
+        var firstAfter = false
+        let r = graph.makeRule {
+            firstBefore = graph.anyInputsChanged()
+            let va = a.value
+            firstAfter = graph.anyInputsChanged()
+            return va
+        }
+        _ = graph.value(of: r)
+        #expect(firstBefore == false)
+        #expect(firstAfter == true)
+    }
+
+    @Test func clearAndSetUpdateMatchesNative() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        let b = graph.makeInput(10)
+        var token1NonNil = false
+        var token2NonNil = false
+        var runs = 0
+
+        let r = graph.makeRule {
+            runs += 1
+            let t1 = Graph.clearUpdate()
+            token1NonNil = (t1 != nil)
+            let t2 = Graph.clearUpdate()
+            token2NonNil = (t2 != nil)
+            let vb = b.value
+            Graph.setUpdate(t2)
+            Graph.setUpdate(t1)
+            let va = a.value
+            return va + vb
+        }
+
+        let v1 = graph.value(of: r)
+        graph.setValue(20, for: b)
+        let v2 = graph.value(of: r)
+        graph.setValue(2, for: a)
+        let v3 = graph.value(of: r)
+
+        #expect(token1NonNil == true)
+        #expect(token2NonNil == true)
+        #expect(v1 == 11 && v2 == 11 && v3 == 22)
+        #expect(runs == 2)
+    }
+
+    @Test func creatingAttributeBetweenClearAndSetUpdateSucceedsInOwnEngine() {
+        let graph = Graph()
+        var created: Attribute<Int>?
+        let maker = graph.makeRule {
+            let token = Graph.clearUpdate()
+            created = graph.makeInput(42)
+            Graph.setUpdate(token)
+            return 1
+        }
+        _ = graph.value(of: maker)
+        #expect(created != nil)
+        #expect(graph.value(of: created!) == 42)
+    }
+
+    @Test func explicitInputValueRecordsDependencyForReader() {
+        let graph = Graph()
+        let src = graph.makeInput(5)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return 1
+        }
+        _ = graph.value(of: reader)
+        let v1 = graph.inputValue(of: src, for: reader.erased)
+        graph.setValue(6, for: src)
+        let v2 = graph.value(of: reader)
+        #expect(v1 == 5)
+        #expect(v2 == 1)
+        #expect(runs == 2)
+    }
+
+    @Test func explicitInputValueSurvivesOneEvaluationBeforePruning() {
+        let graph = Graph()
+        let src = graph.makeInput(5)
+        var runs = 0
+        let reader = graph.makeRule {
+            runs += 1
+            return 1
+        }
+        _ = graph.value(of: reader)
+        let v1 = graph.inputValue(of: src, for: reader.erased)
+        let v2 = graph.inputValue(of: src, for: reader.erased)
+        graph.setValue(6, for: src)
+        _ = graph.value(of: reader)
+        graph.setValue(7, for: src)
+        _ = graph.value(of: reader)
+        #expect(v1 == 5 && v2 == 5)
+        #expect(runs == 3)
+    }
+
+    @Test func explicitInputValueWithNonRuleReaderDoesNotTrap() {
+        let graph = Graph()
+        let src = graph.makeInput(10)
+        let nonRuleReader = graph.makeInput(99)
+        let v = graph.inputValue(of: src, for: nonRuleReader.erased)
+        graph.setValue(11, for: src)
+        #expect(v == 10)
+        #expect(graph.value(of: nonRuleReader) == 99)
+    }
+
+    @Test func currentAttributeWasModifiedTracksInvalidateValue() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        var mods: [Bool] = []
+        let r = graph.makeRule {
+            mods.append(Graph.currentAttributeWasModified)
+            return a.value + 1
+        }
+        _ = graph.value(of: r)
+        graph.setValue(2, for: a)
+        _ = graph.value(of: r)
+        graph.invalidateValue(of: r)
+        _ = graph.value(of: r)
+        graph.setValue(3, for: a)
+        _ = graph.value(of: r)
+        #expect(mods == [false, false, true, false])
+    }
+
+    /// The thread-local slot is swapped only when a run finds another graph (or none) in it: nested runs of the same
+    /// graph and runs of a second graph started from a rule must still see their own graph through `Attribute.value`.
+    @Test func nestedRunsAndRunsOfAnotherGraphSeeTheirOwnGraph() {
+        let outerGraph = Graph()
+        let innerGraph = Graph()
+        let innerInput = innerGraph.makeInput(5)
+        let innerRule = innerGraph.makeRule { innerInput.value * 2 }
+        let a = outerGraph.makeInput(1)
+        let b = outerGraph.makeRule { a.value + 1 }                       // nested run when `c` first reads it
+        let c = outerGraph.makeRule {
+            let first = b.value
+            innerGraph.updateValue(of: innerRule)                         // runs a rule of another graph
+            return first + a.value
+        }
+        #expect(outerGraph.value(of: c) == 2 + 1)
+        #expect(!innerGraph.isDirty(innerRule.id))
+        #expect(Graph.currentAttribute == nil)
+        outerGraph.setValue(3, for: a)
+        innerGraph.setValue(6, for: innerInput)
+        #expect(outerGraph.value(of: c) == 4 + 3)
+        #expect(!innerGraph.isDirty(innerRule.id))
+        #expect(innerGraph.value(of: innerRule) == 12)
+    }
 }

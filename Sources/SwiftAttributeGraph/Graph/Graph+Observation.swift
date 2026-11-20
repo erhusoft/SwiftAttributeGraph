@@ -53,7 +53,10 @@ extension Graph {
         batchDepth += 1
         defer {
             batchDepth -= 1
-            if batchDepth == 0 { flushNotifications() }
+            if batchDepth == 0 {
+                flushNotifications()
+                flushUpdateCallbackIfReady()
+            }
         }
         return body()
     }

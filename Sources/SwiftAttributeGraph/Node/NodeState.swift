@@ -20,4 +20,14 @@ enum NodeState {
     static let resumable: UInt16 = 1 << 8
     /// The node is an indirect attribute: it redirects to another attribute and has no value of its own.
     static let indirect: UInt16 = 1 << 9
+    /// The node is managed by a subgraph's ``SubgraphNodeCache`` and can be parked/collected when unreferenced.
+    static let cached: UInt16 = 1 << 10
+    /// Set by `invalidateValue(of:)` and cleared after the rule's evaluation finishes (`AGValueState.selfModified`).
+    static let selfModified: UInt16 = 1 << 11
+    /// The node was on the update stack when the body of one of its inputs was mutated with invalidation: it stays
+    /// dirty when its frame ends (native parity, `NativeProbe` scenario `write-in-rule-mutate-body-invalidating`).
+    static let staysDirty: UInt16 = 1 << 12
+    /// The node has at least one input edge from an attribute belonging to another `GraphContext` (`Node+7` bit 2 in
+    /// native AttributeGraph [O]).
+    static let hasCrossContextInput: UInt16 = 1 << 13
 }

@@ -1458,3 +1458,1223 @@ func multiObserverTreeOrderAndCancel() {
     precondition(events == ["parent-obs1", "parent-obs2", "child2-obs1", "child1-obs1", "child1-obs2", "grand1-obs1"])
     print("multi-observer-tree-order-and-cancel|events=\(events)")
 }
+
+func offsetRangeInsideAndOutside() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    var runs = 0
+    let consumer = graph.rule {
+        runs += 1
+        return graph.read(field) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    graph.write(Pair(x: 99, y: 25), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    print("offset-range-inside-outside|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}
+
+func offsetStickyInsideThenOutside() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    var runs = 0
+    let consumer = graph.rule {
+        runs += 1
+        return graph.read(field) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.write(Pair(x: 1, y: 20), to: source)
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    print("offset-sticky-inside-then-outside|values=\([v1, v2])|runs=\([r1, r2])")
+}
+
+func offsetMixedChain() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    let ind = graph.indirect(field)
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(ind.projectedValue) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    // Outside range
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    // Inside range
+    graph.write(Pair(x: 99, y: 20), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    // Sticky: inside then back to original before reading
+    graph.write(Pair(x: 99, y: 30), to: source)
+    graph.write(Pair(x: 99, y: 20), to: source)
+    let v4 = graph.read(consumer)
+    let r4 = runs
+    print("offset-mixed-chain|values=\([v1, v2, v3, v4])|runs=\([r1, r2, r3, r4])")
+}
+
+func indirectSetSameValue() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    let b = graph.input(Int64(10))
+    let ind = graph.indirect(a)
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(ind.projectedValue) + 1
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.setSource(b, for: ind)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    print("indirect-set-same-value|values=\([v1, v2])|runs=\([r1, r2])")
+}
+
+func directEdgeEqualAndDifferentWrite() {
+    let graph = Driver()
+    let source = graph.input(Int64(10))
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(source) * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    graph.write(Int64(10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    graph.write(Int64(25), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    print("direct-edge-equal-and-different-write|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}
+
+func offsetWholeValue() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let whole = graph.offsetIndirect(source, keyPath: \Pair.self)
+    var runs = 0
+    let consumer: Handle<Int64> = graph.rule {
+        runs += 1
+        return graph.read(whole).y * 2
+    }
+    let v1 = graph.read(consumer)
+    let r1 = runs
+    // Different x, same y: since whole covers the entire struct, it must re-evaluate
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v2 = graph.read(consumer)
+    let r2 = runs
+    // Same whole value: should cut
+    graph.write(Pair(x: 99, y: 10), to: source)
+    let v3 = graph.read(consumer)
+    let r3 = runs
+    print("offset-whole-value|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}
+
+func subgraphDagAddChild() {
+    let graph = Driver()
+    // Case A: same context (parent1 -> child, then parent2 -> child; invalidate parent1)
+    let p1 = graph.makeSubgraph()
+    let p2 = graph.makeSubgraph()
+    let childSame = graph.withSubgraph(p1) { graph.makeSubgraph() }
+    graph.addChild(childSame, to: p2)
+    graph.invalidate(p1)
+    let sameValidAfterP1 = graph.isValid(childSame)
+    graph.invalidate(p2)
+    let sameValidAfterP2 = graph.isValid(childSame)
+
+    print("subgraph-dag-add-child|same=[\(sameValidAfterP1), \(sameValidAfterP2)]")
+}
+
+func contextUpdateCallback() {
+    let graph = Driver()
+    var calls = 0
+    var drainExtra = false
+    graph.setUpdateCallback {
+        calls += 1
+        if drainExtra {
+            drainExtra = false
+            graph.setNeedsUpdate()
+        }
+    }
+    let a = graph.input(Int64(1))
+    let r: Handle<Int64> = graph.rule { graph.read(a) + 1 }
+    _ = graph.read(r)
+    // Two setNeedsUpdate calls before any read: coalesced
+    graph.setNeedsUpdate()
+    graph.setNeedsUpdate()
+    let callsBeforeRead = calls
+    _ = graph.read(r)
+    let callsAfterRead = calls
+
+    // Request another update from inside the callback (same-pass drain)
+    drainExtra = true
+    graph.setNeedsUpdate()
+    _ = graph.read(r)
+    let callsAfterReentrant = calls
+    print("context-update-callback|before=\(callsBeforeRead)|after=\(callsAfterRead)|reentrant=\(callsAfterReentrant)")
+}
+
+func cooperativeCancel() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = false
+    var runs = 0
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let v1 = graph.read(r)
+    let r1 = runs
+
+    graph.write(Int64(50), to: a)
+    shouldCancel = true
+    let v2 = graph.read(r)
+    let r2 = runs
+
+    shouldCancel = false
+    let v3 = graph.read(r)
+    let r3 = runs
+    print("cooperative-cancel|values=\([v1, v2, v3])|runs=\([r1, r2, r3])")
+}
+
+func contextUpdateCallbackOnWrite() {
+    let graph = Driver()
+    var calls = 0
+    graph.setUpdateCallback {
+        calls += 1
+    }
+    let a = graph.input(Int64(10))
+    let r: Handle<Int64> = graph.rule { graph.read(a) * 2 }
+    _ = graph.read(r)
+    let callsInitial = calls
+
+    graph.write(Int64(20), to: a)
+    let callsAfterWrite = calls
+
+    let v = graph.read(r)
+    let callsAfterRead = calls
+    print("context-update-callback-on-write|value=\(v)|calls=[\(callsInitial), \(callsAfterWrite), \(callsAfterRead)]")
+}
+
+func cooperativeCancelConsumer() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = false
+    var innerRuns = 0
+    var consumerRuns = 0
+    let inner: Handle<Int64> = graph.rule {
+        innerRuns += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let consumer: Handle<Int64> = graph.rule {
+        consumerRuns += 1
+        return graph.read(inner) + 1
+    }
+    let v1 = graph.read(consumer); let ir1 = innerRuns; let cr1 = consumerRuns
+    graph.write(Int64(50), to: a)
+    shouldCancel = true
+    let v2 = graph.read(consumer); let ir2 = innerRuns; let cr2 = consumerRuns
+    shouldCancel = false
+    let v3 = graph.read(consumer); let ir3 = innerRuns; let cr3 = consumerRuns
+    print("cooperative-cancel-consumer|values=\([v1, v2, v3])|innerRuns=\([ir1, ir2, ir3])|consumerRuns=\([cr1, cr2, cr3])")
+}
+
+func cooperativeCancelNested() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = false
+    var innerRuns = 0
+    var outerRuns = 0
+    let inner: Handle<Int64> = graph.rule {
+        innerRuns += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let outer: Handle<Int64> = graph.rule {
+        outerRuns += 1
+        return graph.read(inner) * 10
+    }
+    let v1 = graph.read(outer); let ir1 = innerRuns; let or1 = outerRuns
+    graph.write(Int64(50), to: a)
+    shouldCancel = true
+    let v2 = graph.read(outer); let ir2 = innerRuns; let or2 = outerRuns
+    shouldCancel = false
+    let v3 = graph.read(outer); let ir3 = innerRuns; let or3 = outerRuns
+    print("cooperative-cancel-nested|values=\([v1, v2, v3])|innerRuns=\([ir1, ir2, ir3])|outerRuns=\([or1, or2, or3])")
+}
+
+func cooperativeCancelFirstEval() {
+    let graph = Driver()
+    let a = graph.input(Int64(10))
+    var shouldCancel = true
+    var runs = 0
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let v = graph.read(a) * 2
+        if shouldCancel {
+            graph.cancelUpdate()
+            return 999
+        }
+        return v
+    }
+    let v1 = graph.read(r); let r1 = runs
+    shouldCancel = false
+    let v2 = graph.read(r); let r2 = runs
+    print("cooperative-cancel-first-eval|values=\([v1, v2])|runs=\([r1, r2])")
+}
+
+func invalidateValueAndSubgraphDirty() {
+    let graph = Driver()
+    let sg = graph.makeSubgraph()
+    var mult: Int64 = 1
+    var nodeRuns = 0
+    var consumerRuns = 0
+
+    let (node, consumer, uninit) = graph.withSubgraph(sg) {
+        let n: Handle<Int64> = graph.rule {
+            nodeRuns += 1
+            return 10 * mult
+        }
+        graph.setFlags(1, for: n)
+        let c: Handle<Int64> = graph.rule {
+            consumerRuns += 1
+            return graph.read(n) + 1
+        }
+        let u: Handle<Int64> = graph.rule { 42 }
+        return (n, c, u)
+    }
+
+    // (iii) invalidateValue on node without value yet
+    graph.invalidateValue(of: uninit)
+    let uninitVal = graph.read(uninit)
+
+    // Initial read
+    let v1 = graph.read(consumer)
+    let dirtyBefore = graph.isDirty(sg, flags: 1)
+
+    // (i) & (ii) invalidateValue with same value (mult stays 1)
+    graph.invalidateValue(of: node)
+    let dirtyAfterInv = graph.isDirty(sg, flags: 1)
+    // (iii) invalidateValue on already-invalidated node
+    graph.invalidateValue(of: node)
+    let v2 = graph.read(consumer)
+    let dirtyAfterRead = graph.isDirty(sg, flags: 1)
+
+    // Now change mult and invalidateValue -> consumer should re-evaluate
+    mult = 2
+    graph.invalidateValue(of: node)
+    let v3 = graph.read(consumer)
+
+    print("invalidate-value-and-subgraph-dirty|values=\([uninitVal, v1, v2, v3])|runs=\([nodeRuns, consumerRuns])|dirty=[\(dirtyBefore), \(dirtyAfterInv), \(dirtyAfterRead)]")
+}
+
+func anyInputsChangedScenarios() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let b = graph.input(Int64(10))
+    var results: [Bool] = []
+    var checkBeforeReads = false
+
+    let r: Handle<Int64> = graph.rule {
+        if checkBeforeReads {
+            let before1 = graph.anyInputsChanged()
+            let before2 = graph.anyInputsChanged()
+            results.append(before1)
+            results.append(before2)
+        }
+        let va = graph.read(a)
+        let vb = graph.read(b)
+        if !checkBeforeReads {
+            results.append(graph.anyInputsChanged())
+            results.append(graph.anyInputsChanged(excluding: [a]))
+        }
+        return va + vb
+    }
+
+    // Initial evaluation
+    _ = graph.read(r)
+    // (i) & (ii) Only `a` changes
+    graph.write(Int64(2), to: a)
+    _ = graph.read(r)
+
+    // (iii) Call before reading `a` and `b`, and a second call in the same evaluation
+    checkBeforeReads = true
+    graph.write(Int64(3), to: a)
+    _ = graph.read(r)
+
+    // (iv) Evaluation after invalidateValue with no input changes
+    checkBeforeReads = false
+    graph.invalidateValue(of: r)
+    _ = graph.read(r)
+
+    print("any-inputs-changed|results=\(results)")
+}
+
+func anyInputsChangedOffsetEdge() {
+    struct Pair: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+    let graph = Driver()
+    let source = graph.input(Pair(x: 1, y: 10))
+    let field = graph.offsetIndirect(source, keyPath: \Pair.y)
+    var results: [Bool] = []
+    var runs = 0
+
+    let reader: Handle<Int64> = graph.rule {
+        runs += 1
+        let changed = graph.anyInputsChanged()
+        results.append(changed)
+        return graph.read(field)
+    }
+
+    // Initial evaluation
+    _ = graph.read(reader)
+
+    // Write outside field range (only x changes) -> reader should not re-run (runs stays 1)
+    graph.write(Pair(x: 2, y: 10), to: source)
+    _ = graph.read(reader)
+
+    // Write inside field range (y changes), then write outside before evaluating (sticky mark)
+    graph.write(Pair(x: 2, y: 20), to: source)
+    graph.write(Pair(x: 3, y: 20), to: source)
+    _ = graph.read(reader)
+
+    print("any-inputs-changed-offset-edge|results=\(results)|runs=\(runs)")
+}
+
+func anyInputsChangedIsolatedScenarios() {
+    // (a) anyInputsChanged() before reading in first evaluation
+    do {
+        let graph = Driver()
+        let a = graph.input(Int64(1))
+        var firstBefore = false
+        let r: Handle<Int64> = graph.rule {
+            firstBefore = graph.anyInputsChanged()
+            return graph.read(a)
+        }
+        _ = graph.read(r)
+        print("any-inputs-changed-first-eval-before-read|result=\(firstBefore)")
+    }
+
+    // (b) anyInputsChanged() after reading an input in first evaluation
+    do {
+        let graph = Driver()
+        let a = graph.input(Int64(1))
+        var firstAfter = false
+        let r: Handle<Int64> = graph.rule {
+            let va = graph.read(a)
+            firstAfter = graph.anyInputsChanged()
+            return va
+        }
+        _ = graph.read(r)
+        print("any-inputs-changed-first-eval-after-read|result=\(firstAfter)")
+    }
+
+    // (c) second evaluation after a write
+    do {
+        let graph = Driver()
+        let a = graph.input(Int64(1))
+        var results: [Bool] = []
+        let r: Handle<Int64> = graph.rule {
+            let va = graph.read(a)
+            results.append(graph.anyInputsChanged())
+            return va
+        }
+        _ = graph.read(r)
+        graph.write(Int64(2), to: a)
+        _ = graph.read(r)
+        print("any-inputs-changed-second-eval-after-write|results=\(results)")
+    }
+}
+
+func subgraphAddChildSecondaryParent() {
+    let graph = Driver()
+    let p1 = graph.makeSubgraph()
+    let p2 = graph.makeSubgraph()
+    let child = graph.withSubgraph(p1) { graph.makeSubgraph() }
+    graph.addChild(child, to: p2, tag: 1)
+    let validBefore = graph.isValid(child)
+    graph.invalidate(p1)
+    let validAfterP1 = graph.isValid(child)
+    graph.invalidate(p2)
+    let validAfterP2 = graph.isValid(child)
+    print("subgraph-add-child-secondary-parent|valid=[\(validBefore), \(validAfterP1), \(validAfterP2)]")
+}
+
+func subgraphAddChildSecondaryParentReverse() {
+    let graph = Driver()
+    let p1 = graph.makeSubgraph()
+    let p2 = graph.makeSubgraph()
+    let child = graph.withSubgraph(p1) { graph.makeSubgraph() }
+    graph.addChild(child, to: p2, tag: 1)
+    let validBefore = graph.isValid(child)
+    graph.invalidate(p2)
+    let validAfterP2 = graph.isValid(child)
+    graph.invalidate(p1)
+    let validAfterP1 = graph.isValid(child)
+    print("subgraph-add-child-secondary-parent-reverse|valid=[\(validBefore), \(validAfterP2), \(validAfterP1)]")
+}
+
+func subgraphCreate2() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let sg = graph.makeSubgraph(for: a)
+    let validBefore = graph.isValid(sg)
+    graph.invalidate(sg)
+    let validAfter = graph.isValid(sg)
+    print("subgraph-create2|valid=[\(validBefore), \(validAfter)]")
+}
+
+func weakReadAfterChildInvalidate() {
+    let graph = Driver()
+    let childSg = graph.makeSubgraph()
+    let child = graph.withSubgraph(childSg) { graph.input(Int64(42)) }
+    let w = graph.weak(child)
+    var consumerRuns = 0
+    let consumer: Handle<Int64> = graph.rule {
+        consumerRuns += 1
+        return graph.readWeak(w) ?? -1
+    }
+    let v1 = graph.read(consumer)
+    let w1 = graph.readWeak(w)
+    graph.invalidate(childSg)
+    let w2 = graph.readWeak(w)
+    let v2 = graph.read(consumer)
+    print("weak-read-after-child-invalidate|weak=[\(String(describing: w1)), \(String(describing: w2))]|consumer=[\(v1), \(v2)]|runs=\(consumerRuns)")
+}
+
+func weakMultipleOnSameChild() {
+    let graph = Driver()
+    let childSg = graph.makeSubgraph()
+    let child = graph.withSubgraph(childSg) { graph.input(Int64(7)) }
+    let w1 = graph.weak(child)
+    let w2 = graph.weak(child)
+    let before = [graph.readWeak(w1), graph.readWeak(w2)]
+    graph.invalidate(childSg)
+    let after = [graph.readWeak(w1), graph.readWeak(w2)]
+    print("weak-multiple-on-same-child|before=\(before)|after=\(after)")
+}
+
+func weakCombinerThreeChildrenInvalidateMiddle() {
+    let graph = Driver()
+    let sg1 = graph.makeSubgraph()
+    let sg2 = graph.makeSubgraph()
+    let sg3 = graph.makeSubgraph()
+    var order: [String] = []
+    let c1: Handle<Int64> = graph.withSubgraph(sg1) { graph.rule { order.append("c1"); return 1 } }
+    let c2: Handle<Int64> = graph.withSubgraph(sg2) { graph.rule { order.append("c2"); return 2 } }
+    let c3: Handle<Int64> = graph.withSubgraph(sg3) { graph.rule { order.append("c3"); return 3 } }
+    let w1 = graph.weak(c1)
+    let w2 = graph.weak(c2)
+    let w3 = graph.weak(c3)
+    var combinerRuns = 0
+    let combiner: Handle<Int64> = graph.rule {
+        combinerRuns += 1
+        order.append("comb")
+        return (graph.readWeak(w1) ?? 0) + (graph.readWeak(w2) ?? 0) + (graph.readWeak(w3) ?? 0)
+    }
+    let v1 = graph.read(combiner)
+    graph.invalidate(sg2)
+    let v2 = graph.read(combiner)
+    print("weak-combiner-three-children-invalidate-middle|values=[\(v1), \(v2)]|runs=\(combinerRuns)|order=\(order)")
+}
+
+func weakAttributeOutsideRule() {
+    let d1 = Driver()
+    let child1 = d1.makeSubgraph()
+    let src1 = d1.withSubgraph(child1) { d1.input(Int64(5)) }
+    var targetRuns = 0
+    let target1: Handle<Int64> = d1.withSubgraph(child1) {
+        d1.rule {
+            targetRuns += 1
+            return d1.read(src1) + 10
+        }
+    }
+    let w1 = d1.weak(target1)
+
+    // (a) & (c): read dirty/live target outside a rule
+    let attrAliveBefore = d1.attribute(of: w1) != nil
+    let v1 = d1.readWeak(w1)
+    let runs1 = targetRuns
+    d1.write(Int64(20), to: src1)
+    let v2 = d1.readWeak(w1)
+    let runs2 = targetRuns
+    let v3 = d1.readWeak(w1)
+    let runs3 = targetRuns
+
+    // (d): read via AGGraphGetWeakValue with options 0, 2, 4 outside a rule
+    d1.write(Int64(30), to: src1)
+    let opt0 = d1.readWeak(w1, options: 0)
+    d1.write(Int64(40), to: src1)
+    let opt2 = d1.readWeak(w1, options: 2)
+    d1.write(Int64(50), to: src1)
+    let opt4 = d1.readWeak(w1, options: 4)
+    let runsAfterOpts = targetRuns
+
+    // (e): read weak attribute of another graph outside a rule
+    let d2 = Driver()
+    let child2 = d2.makeSubgraph()
+    let src2 = d2.withSubgraph(child2) { d2.input(Int64(7)) }
+    let r2: Handle<Int64> = d2.withSubgraph(child2) { d2.rule { d2.read(src2) * 2 } }
+    let w2 = d2.weak(r2)
+    let cross1 = d1.readWeak(w2)
+    d2.write(Int64(9), to: src2)
+    let cross2 = d1.readWeak(w2)
+
+    // (b): after invalidating target subgraphs
+    d1.invalidate(child1)
+    let attrAliveAfter = d1.attribute(of: w1) != nil
+    let after1 = d1.readWeak(w1)
+    let afterOpt0 = d1.readWeak(w1, options: 0)
+    d2.invalidate(child2)
+    let crossAfter = d1.readWeak(w2)
+
+    print("weak-attribute-outside-rule|attr=[\(attrAliveBefore), \(attrAliveAfter)]|vals=[\(String(describing: v1)), \(String(describing: v2)), \(String(describing: v3))]|runs=[\(runs1), \(runs2), \(runs3), \(runsAfterOpts)]|opts=[\(String(describing: opt0)), \(String(describing: opt2)), \(String(describing: opt4))]|cross=[\(String(describing: cross1)), \(String(describing: cross2)), \(String(describing: crossAfter))]|after=[\(String(describing: after1)), \(String(describing: afterOpt0))]")
+}
+
+func clearAndSetUpdateScenario() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let b = graph.input(Int64(10))
+    var token1NonNil = false
+    var token2Nil = false
+    var runs = 0
+
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let t1 = graph.clearUpdateToken()
+        token1NonNil = (t1 != nil)
+        let t2 = graph.clearUpdateToken()
+        token2Nil = (t2 == nil)
+        let vb = graph.read(b) // read while update is cleared
+        graph.setUpdateToken(t2) // restore nil (nested)
+        graph.setUpdateToken(t1) // restore original token
+        let va = graph.read(a) // read after restore
+        return va + vb
+    }
+
+    let v1 = graph.read(r)
+    // Writing to b should NOT re-run r (no edge created while cleared)
+    graph.write(Int64(20), to: b)
+    let v2 = graph.read(r)
+    // Writing to a SHOULD re-run r (edge created after setUpdate)
+    graph.write(Int64(2), to: a)
+    let v3 = graph.read(r)
+
+    print("clear-set-update|token1NonNil=\(token1NonNil)|token2Nil=\(token2Nil)|values=[\(v1), \(v2), \(v3)]|runs=\(runs)")
+}
+
+func clearSetUpdateNestedReverse() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    let b = graph.input(Int64(10))
+    var tokens: [String] = []
+    var runs = 0
+
+    let r: Handle<Int64> = graph.rule {
+        runs += 1
+        let t1 = graph.clearUpdateToken()
+        let t2 = graph.clearUpdateToken()
+        tokens.append("\(t1 != nil)/\(t2 != nil)")
+        let vb = graph.read(b)
+        graph.setUpdateToken(t2)
+        let vbMid = graph.read(b)
+        graph.setUpdateToken(t1)
+        let va = graph.read(a)
+        return va + vb + vbMid
+    }
+
+    let v1 = graph.read(r)
+    graph.write(Int64(20), to: b)
+    let v2 = graph.read(r)
+    graph.write(Int64(2), to: a)
+    let v3 = graph.read(r)
+
+    print("clear-set-update-nested-reverse|tokens=\(tokens)|values=[\(v1), \(v2), \(v3)]|runs=\(runs)")
+}
+
+func clearSetUpdateOutsideRule() {
+    let graph = Driver()
+    let t = graph.clearUpdateToken()
+    graph.setUpdateToken(t)
+    print("clear-set-update-outside-rule|tokenNonNil=\(t != nil)")
+}
+
+func compareValues302Scenarios() {
+    struct POD { var a: Int64; var b: Int64 }
+    struct CustomEq: Equatable {
+        var a: Int; var tag: Int
+        static func == (lhs: CustomEq, rhs: CustomEq) -> Bool { lhs.a == rhs.a }
+    }
+    final class PlainClass { var x: Int; init(_ x: Int) { self.x = x } }
+    final class EqClass: Equatable {
+        var x: Int; init(_ x: Int) { self.x = x }
+        static func == (lhs: EqClass, rhs: EqClass) -> Bool { lhs.x == rhs.x }
+    }
+
+    let d = Driver()
+    let intEq = d.compareValues302(Int64(1), Int64(1))
+    let intNe = d.compareValues302(Int64(1), Int64(2))
+    let podEq = d.compareValues302(POD(a: 1, b: 2), POD(a: 1, b: 2))
+    let nanEq = d.compareValues302(Double.nan, Double.nan)
+    let neg0Eq = d.compareValues302(0.0, -0.0)
+    print("compare-values-302-scalars|res=[\(intEq), \(intNe), \(podEq), \(nanEq), \(neg0Eq)]")
+
+    let strEq = d.compareValues302("\u{00E9}", "e\u{0301}")
+    let arrEq = d.compareValues302([1, 2], [1, 2])
+    let optSomeNil: Int?? = .some(nil)
+    let optNil: Int?? = nil
+    let optEq = d.compareValues302(optSomeNil, optNil)
+    print("compare-values-302-collections|res=[\(strEq), \(arrEq), \(optEq)]")
+}
+
+func compareValues302Edges() {
+    struct MixedStr { var a: Int; var s: String }
+    final class Box { var x: Int; init(_ x: Int) { self.x = x } }
+    struct MixedCls { var a: Int; var b: Box }
+    struct PaddedPOD { var a: Int8; var b: Int64 }
+    enum PayloadEnum { case a(Int); case b(String) }
+
+    let d = Driver()
+    // (a) non-POD without Equatable
+    let ms1 = MixedStr(a: 1, s: "hello" + " world")
+    let ms2 = MixedStr(a: 1, s: String("hello world"))
+    let mixedStrEq = d.compareValues302(ms1, ms2)
+    let mixedClsEq = d.compareValues302(MixedCls(a: 1, b: Box(2)), MixedCls(a: 1, b: Box(2)))
+
+    // (b) POD with padding (same fields)
+    let p1 = PaddedPOD(a: 1, b: 2)
+    let p2 = PaddedPOD(a: 1, b: 2)
+    let paddedEq = d.compareValues302(p1, p2)
+
+    // (c) same class instance & same closure
+    let box = Box(5)
+    let sameClsEq = d.compareValues302(box, box)
+    let cl: () -> Int = { 42 }
+    let sameClEq = d.compareValues302(cl, cl)
+
+    // (d) tuple, enum with payload, nested Optional
+    let tupleEq = d.compareValues302((1, 2), (1, 2))
+    let enumEq = d.compareValues302(PayloadEnum.a(7), PayloadEnum.a(7))
+    let optNested1: Int?? = .some(.some(3))
+    let optNested2: Int?? = .some(.some(3))
+    let optNestedEq = d.compareValues302(optNested1, optNested2)
+
+    print("compare-values-302-edges|res=[\(mixedStrEq), \(mixedClsEq), \(paddedEq), \(sameClsEq), \(sameClEq), \(tupleEq), \(enumEq), \(optNestedEq)]")
+}
+
+func getInputValueExplicitReaderScenario() {
+    let graph = Driver()
+    let src = graph.input(Int64(5))
+    var runs = 0
+    let reader: Handle<Int64> = graph.rule {
+        runs += 1
+        return 1
+    }
+    _ = graph.read(reader)
+    let v1 = graph.inputValue(src, for: reader)
+    graph.write(Int64(6), to: src)
+    let v2 = graph.read(reader)
+    print("get-input-value-explicit-reader|v1=\(v1)|v2=\(v2)|runs=\(runs)")
+}
+
+func currentAttributeWasModifiedInvalidateScenario() {
+    let graph = Driver()
+    let a = graph.input(Int64(1))
+    var mods: [Bool] = []
+    var innerMods: [Bool] = []
+
+    let inner: Handle<Int64> = graph.rule {
+        innerMods.append(graph.currentAttributeWasModified())
+        return graph.read(a) * 10
+    }
+    let outer: Handle<Int64> = graph.rule {
+        mods.append(graph.currentAttributeWasModified())
+        return graph.read(inner) + 1
+    }
+
+    _ = graph.read(outer)                 // initial
+    graph.write(Int64(2), to: a)          // input change
+    _ = graph.read(outer)
+    graph.invalidateValue(of: outer)      // self invalidateValue
+    _ = graph.read(outer)
+    graph.write(Int64(3), to: a)          // second eval without invalidate
+    _ = graph.read(outer)
+    graph.invalidateValue(of: inner)      // invalidate inner (another rule)
+    _ = graph.read(outer)
+
+    print("current-attribute-was-modified-invalidate|outer=\(mods)|inner=\(innerMods)")
+}
+
+func subgraphAddChildOwnerScenario() {
+    let graph = Driver()
+
+    // (a) no initial parent, added to p1 then p2 (tag 0 & tag 1)
+    var aRes: [[Bool]] = []
+    for tag: UInt8 in [0, 1] {
+        for p1First in [true, false] {
+            let p1 = graph.makeSubgraph(); let p2 = graph.makeSubgraph()
+            let child = graph.makeSubgraph()
+            graph.addChild(child, to: p1, tag: tag)
+            graph.addChild(child, to: p2, tag: tag)
+            let v0 = graph.isValid(child)
+            if p1First {
+                graph.invalidate(p1); let v1 = graph.isValid(child)
+                graph.invalidate(p2); let v2 = graph.isValid(child)
+                aRes.append([v0, v1, v2])
+            } else {
+                graph.invalidate(p2); let v1 = graph.isValid(child)
+                graph.invalidate(p1); let v2 = graph.isValid(child)
+                aRes.append([v0, v1, v2])
+            }
+        }
+    }
+
+    // (b) created under p1, added to p2 (tag 1)
+    let b1_p1 = graph.makeSubgraph(); let b1_p2 = graph.makeSubgraph()
+    let b1_child = graph.withSubgraph(b1_p1) { graph.makeSubgraph() }
+    graph.addChild(b1_child, to: b1_p2, tag: 1)
+    let b1_0 = graph.isValid(b1_child)
+    graph.invalidate(b1_p1); let b1_1 = graph.isValid(b1_child)
+    graph.invalidate(b1_p2); let b1_2 = graph.isValid(b1_child)
+
+    // (d) 3 parents (p1, p2, p3)
+    let d1 = graph.makeSubgraph(); let d2 = graph.makeSubgraph(); let d3 = graph.makeSubgraph()
+    let dChild = graph.makeSubgraph()
+    graph.addChild(dChild, to: d1, tag: 1)
+    graph.addChild(dChild, to: d2, tag: 1)
+    graph.addChild(dChild, to: d3, tag: 1)
+    let d_0 = graph.isValid(dChild)
+    graph.invalidate(d2); let d_1 = graph.isValid(dChild)
+
+    print("subgraph-add-child-owner|a=\(aRes)|b=\([b1_0, b1_1, b1_2])|d=\([d_0, d_1])")
+}
+
+func getInputValueDupPruneAndNonRuleScenarios() {
+    // 1. Duplicates & pruning
+    do {
+        let graph = Driver()
+        let src = graph.input(Int64(5))
+        var runs = 0
+        let reader: Handle<Int64> = graph.rule {
+            runs += 1
+            return 1
+        }
+        _ = graph.read(reader)
+        let v1 = graph.inputValue(src, for: reader)
+        let v2 = graph.inputValue(src, for: reader)
+        graph.write(Int64(6), to: src)
+        _ = graph.read(reader)
+        graph.write(Int64(7), to: src)
+        _ = graph.read(reader)
+        print("get-input-value-dup-prune|vals=[\(v1), \(v2)]|runs=\(runs)")
+    }
+
+    // 2. Non-rule reader
+    do {
+        let graph = Driver()
+        let src = graph.input(Int64(10))
+        let nonRuleReader = graph.input(Int64(99))
+        let v = graph.inputValue(src, for: nonRuleReader)
+        graph.write(Int64(11), to: src)
+        print("get-input-value-non-rule-reader|v=\(v)|readerVal=\(graph.read(nonRuleReader))")
+    }
+}
+
+/// `AGGraphGetValue` with an option mask: outside a rule, inside a rule, with an edge from an earlier run, and with a
+/// normal read earlier in the same run.
+func getValueOptionScenario(name: String, options: UInt32) {
+    var parts: [String] = []
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        let outside = d.read(src, options: options)
+        d.write(Int64(11), to: src)
+        parts.append("outside=[\(outside), \(d.read(src, options: options))]")
+    }
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        var runs = 0
+        let rule: Handle<Int64> = d.rule { runs += 1; return d.read(src, options: options) }
+        let v1 = d.read(rule)
+        d.write(Int64(20), to: src)
+        parts.append("inside=[\(v1), \(d.read(rule))]|runs=\(runs)")
+    }
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        let trigger = d.input(Int64(0))
+        var runs = 0
+        let rule: Handle<Int64> = d.rule {
+            runs += 1
+            let t = d.read(trigger)
+            return t == 0 ? d.read(src) : d.read(src, options: options) + t
+        }
+        let v1 = d.read(rule)
+        d.write(Int64(100), to: trigger)
+        let v2 = d.read(rule)
+        let afterTrigger = runs
+        d.write(Int64(20), to: src)
+        let v3 = d.read(rule)
+        parts.append("priorEdge=[\(v1), \(v2), \(v3)]|runs=[\(afterTrigger), \(runs)]")
+    }
+    do {
+        let d = Driver()
+        let src = d.input(Int64(10))
+        var runs = 0
+        let rule: Handle<Int64> = d.rule {
+            runs += 1
+            let a = d.read(src)
+            return a + d.read(src, options: options)
+        }
+        let v1 = d.read(rule)
+        d.write(Int64(20), to: src)
+        parts.append("sameRun=[\(v1), \(d.read(rule))]|runs=\(runs)")
+    }
+    print("\(name)|\(parts.joined(separator: "|"))")
+}
+
+/// `AGGraphGetCurrentAttribute`: outside a rule, inside, on a rerun, nested, and with the update state cleared.
+func getCurrentAttributeScenario() {
+    let d = Driver()
+    let outside = d.currentAttributeState(is: nil as Handle<Int64>?)
+
+    let src = d.input(Int64(1))
+    var simpleLog: [String] = []
+    var simple: Handle<Int64>?
+    simple = d.rule { simpleLog.append(d.currentAttributeState(is: simple)); return d.read(src) }
+    _ = d.read(simple!)
+    d.write(Int64(2), to: src)
+    _ = d.read(simple!)
+
+    var nestedLog: [String] = []
+    var inner: Handle<Int64>?
+    var outer: Handle<Int64>?
+    inner = d.rule { nestedLog.append("inner=" + d.currentAttributeState(is: inner)); return 7 }
+    outer = d.rule {
+        nestedLog.append("outerBefore=" + d.currentAttributeState(is: outer))
+        let v = d.read(inner!)
+        nestedLog.append("outerAfter=" + d.currentAttributeState(is: outer))
+        let token = d.clearUpdateToken()
+        nestedLog.append("cleared=" + d.currentAttributeState(is: outer))
+        d.setUpdateToken(token)
+        nestedLog.append("restored=" + d.currentAttributeState(is: outer))
+        return v
+    }
+    _ = d.read(outer!)
+
+    var stateLog: [String] = []
+    var stateful: Handle<Int64>?
+    stateful = d.statefulRule(initialValue: Int64(0)) { context in
+        stateLog.append(d.currentAttributeState(is: stateful))
+        context.value = d.read(src)
+    }
+    _ = d.read(stateful!)
+    print("get-current-attribute|outside=\(outside)|simple=\(simpleLog)|nested=\(nestedLog)|stateful=\(stateLog)|after=\(d.currentAttributeState(is: nil as Handle<Int64>?))")
+}
+
+/// `AGGraphCurrentAttributeWasModified` in stateful rules that write or not, in plain rules and in an outer rule.
+func currentAttributeWasModifiedScenario() {
+    let d = Driver()
+    let src = d.input(Int64(1))
+    var log: [String] = []
+    let outside = d.currentAttributeWasModified()
+    let writer: Handle<Int64> = d.statefulRule(initialValue: Int64(0)) { context in
+        let s = d.read(src)
+        let before = d.currentAttributeWasModified()
+        context.value = 10 + s
+        log.append("writer=\(before),\(d.currentAttributeWasModified())")
+    }
+    let silent: Handle<Int64> = d.statefulRule(initialValue: Int64(0)) { _ in
+        _ = d.read(src)
+        log.append("silent=\(d.currentAttributeWasModified())")
+    }
+    let sameValue: Handle<Int64> = d.statefulRule(initialValue: Int64(5)) { context in
+        _ = d.read(src)
+        context.value = 5
+        log.append("same=\(d.currentAttributeWasModified())")
+    }
+    let plain: Handle<Int64> = d.rule { log.append("plain=\(d.currentAttributeWasModified())"); return 1 }
+    let outer: Handle<Int64> = d.rule {
+        let before = d.currentAttributeWasModified()
+        let v = d.read(writer)
+        log.append("outer=\(before),\(d.currentAttributeWasModified())")
+        return v
+    }
+    for handle in [writer, silent, sameValue, plain, outer] { _ = d.read(handle) }
+    d.write(Int64(2), to: src)
+    for handle in [writer, silent, sameValue] { _ = d.read(handle) }
+    print("current-attribute-was-modified|outside=\(outside)|\(log)")
+}
+
+/// `AGGraphGetCounter`: the selectors both engines reproduce (nodes, transactions, updates, changes, createdNodes,
+/// subgraphs, createdSubgraphs) as `N,T,U,C,CN,S,CS` at each step. `contextID`, `graphID`, `threadUpdating`,
+/// `needsUpdate` and `mainThreadUpdates` are not printed: the engine does not reproduce them.
+func getCounterScenario() {
+    let d = Driver()
+    var log: [String] = []
+    func snap(_ label: String) { log.append("\(label)=\(d.counters())") }
+    snap("new")
+    let a = d.input(Int64(1))
+    for _ in 0..<4 { _ = d.input(Int64(0)) }
+    snap("5inputs")
+    let b: Handle<Int64> = d.rule { d.read(a) + 1 }
+    let c: Handle<Int64> = d.rule { d.read(b) + 1 }
+    snap("2rules")
+    _ = d.read(a); _ = d.read(a); d.write(Int64(1), to: a)
+    snap("readsAndSameWrite")
+    d.write(Int64(5), to: a); d.write(Int64(6), to: a)
+    snap("writes")
+    _ = d.read(c)
+    snap("firstReadChain")
+    _ = d.read(c); _ = d.read(c)
+    snap("cleanReads")
+    d.write(Int64(7), to: a); d.write(Int64(8), to: a)
+    _ = d.read(c)
+    snap("reevaluate")
+    // A rule that gives the same value again: the write is a change, the rule's result is not.
+    let x = d.input(Int64(1))
+    let y: Handle<Int64> = d.rule { _ = d.read(x); return 0 }
+    _ = d.read(y)
+    d.write(Int64(2), to: x)
+    _ = d.read(y)
+    snap("cut")
+    // Diamond, first evaluation.
+    let d1: Handle<Int64> = d.rule { d.read(a) }
+    let d2: Handle<Int64> = d.rule { d.read(a) }
+    let top: Handle<Int64> = d.rule { d.read(d1) + d.read(d2) }
+    _ = d.read(top)
+    snap("diamond")
+    d.write(Int64(9), to: a)
+    _ = d.read(top)
+    snap("diamondReevaluate")
+    // A rule whose result is skipped: mid gives the same value and tail does not run.
+    let mid: Handle<Int64> = d.rule { _ = d.read(a); return 0 }
+    let tail: Handle<Int64> = d.rule { d.read(mid) }
+    _ = d.read(tail)
+    d.write(Int64(10), to: a)
+    let before = d.counters()
+    _ = d.read(tail)
+    log.append("skipped=\(before)->\(d.counters())")
+    // A child subgraph: counters of subgraphs and nodes.
+    let child = d.makeSubgraph()
+    _ = d.withSubgraph(child) { d.input(Int64(1)) }
+    snap("child")
+    d.invalidate(child)
+    snap("childInvalidated")
+    // Reads through an indirect attribute. Neither engine counts indirect attributes in `nodes` and `createdNodes`.
+    let rule: Handle<Int64> = d.rule { 3 }
+    let ind = d.indirect(rule)
+    _ = d.read(d.attribute(of: ind))
+    snap("indirectFirst")
+    _ = d.read(d.attribute(of: ind))
+    snap("indirectClean")
+    // An indirect attribute over an input, over another indirect attribute, and in an invalidated child subgraph.
+    let input = d.input(Int64(1))
+    let overInput = d.indirect(input)
+    _ = d.indirect(d.attribute(of: ind))
+    snap("indirectOverInputAndIndirect")
+    _ = d.read(d.attribute(of: overInput))
+    let child2 = d.makeSubgraph()
+    _ = d.withSubgraph(child2) { d.indirect(rule) }
+    snap("indirectInChild")
+    d.invalidate(child2)
+    snap("indirectChildInvalidated")
+    print("get-counter|\(log)")
+}
+
+/// `AGGraphGetCounter`, the context and state selectors: `graphID` and `contextID` of graphs created in sequence
+/// (relative to the first one, since the absolute numbers depend on how many graphs the process made before),
+/// `threadUpdating` and `contextThreadUpdating` outside, inside and inside a nested rule, `needsUpdate` and
+/// `contextNeedsUpdate` around `setNeedsUpdate`, and `mainThreadUpdates` next to `updates`.
+func getCounterContextScenario() {
+    var log: [String] = []
+    let first = Driver()
+    let base = first.stateCounters()[0]
+    func rel(_ d: Driver) -> String {
+        let s = d.stateCounters()
+        return "\(Int(s[0]) - Int(base)),\(Int(s[1]) - Int(base))"
+    }
+    var ids = [rel(first)]
+    var kept = [first]
+    for _ in 0..<3 { let d = Driver(); kept.append(d); ids.append(rel(d)) }
+    kept.removeAll()
+    for _ in 0..<2 { let d = Driver(); ids.append(rel(d)) }
+    let k1 = Driver(); ids.append(rel(k1))
+    do { let t = Driver(); ids.append(rel(t)) }
+    let k2 = Driver(); ids.append(rel(k2))
+    // Subgraphs and attributes do not consume numbers.
+    _ = k2.input(Int64(1))
+    _ = k2.makeSubgraph()
+    let k3 = Driver(); ids.append(rel(k3))
+    log.append("ids=\(ids)")
+    // threadUpdating and contextThreadUpdating: [tu, ctu] outside, in a rule, in a nested rule.
+    let d = Driver()
+    func tu() -> String { let s = d.stateCounters(); return "\(s[2])\(s[3])" }
+    var seen: [String] = []
+    let a = d.input(Int64(1))
+    let mid: Handle<Int64> = d.rule { seen.append("mid=\(tu())"); return d.read(a) }
+    let tail: Handle<Int64> = d.rule { seen.append("tailPre=\(tu())"); let v = d.read(mid); seen.append("tailPost=\(tu())"); return v }
+    seen.append("outside=\(tu())")
+    _ = d.read(tail)
+    seen.append("after=\(tu())")
+    d.withoutUpdate { seen.append("withoutUpdate=\(tu())") }
+    let other = Driver()
+    let probeRule: Handle<Int64> = d.rule { seen.append("otherGraphInRule=\(other.stateCounters()[2])"); return 1 }
+    _ = d.read(probeRule)
+    log.append("updating=\(seen)")
+    // needsUpdate and contextNeedsUpdate: [nu, cnu].
+    var flags: [String] = []
+    func nu() -> String { let s = d.stateCounters(); return "\(s[4])\(s[5])" }
+    flags.append("start=\(nu())")
+    d.setNeedsUpdate(); flags.append("set=\(nu())")
+    d.setNeedsUpdate(); flags.append("setTwice=\(nu())")
+    _ = d.read(a); flags.append("readInput=\(nu())")
+    d.write(Int64(5), to: a); flags.append("write=\(nu())")
+    _ = d.read(tail); flags.append("readRule=\(nu())")
+    d.setNeedsUpdate(); _ = d.read(tail); flags.append("setThenCleanRule=\(nu())")
+    let ind = d.indirect(tail)
+    d.setNeedsUpdate(); _ = d.read(d.attribute(of: ind)); flags.append("setThenIndirectRule=\(nu())")
+    d.write(Int64(6), to: a); flags.append("writeOnly=\(nu())")
+    let outer: Handle<Int64> = d.rule { d.setNeedsUpdate(); flags.append("inRule=\(nu())"); return d.read(tail) }
+    _ = d.read(outer); flags.append("afterRuleSet=\(nu())")
+    _ = d.read(outer); flags.append("readAgain=\(nu())")
+    log.append("needsUpdate=\(flags)")
+    // mainThreadUpdates next to updates.
+    let s = d.stateCounters()
+    log.append("mainThreadUpdates=\(s[6] == d.graphUpdates())")
+    print("get-counter-context|\(log)")
+}
+
+/// `AGGraphGetAttributeGraph` and `AGSubgraphGetGraph`: the graph of an attribute and of a subgraph, compared by
+/// object identity, with two graphs alive in the process and the same slot index in both.
+func getAttributeGraphScenario() {
+    let d1 = Driver()
+    let d2 = Driver()
+    let a1 = d1.input(Int64(1))
+    let a2 = d2.input(Int64(2))
+    let child1 = d1.makeSubgraph()
+    let child1b = d1.makeSubgraph()
+    let child2 = d2.makeSubgraph()
+    let c1 = d1.withSubgraph(child1) { d1.input(Int64(3)) }
+    let r1: Handle<Int64> = d1.withSubgraph(child1b) { d1.rule { d1.read(a1) + 1 } }
+    _ = d1.read(r1)
+    let attributes = [d1.owns(a1), d2.owns(a2), d1.owns(a2), d2.owns(a1), d1.owns(c1), d1.owns(r1), d2.owns(r1)]
+    let erased = [d1.ownsErased(a1), d2.ownsErased(a2), d1.ownsErased(a2)]
+    let subgraphs = [d1.owns(d1.scope), d2.owns(d2.scope), d1.owns(child1), d1.owns(child1b), d2.owns(child2),
+                     d2.owns(child1), d1.owns(child2)]
+    let same = [d1.sameGraph(a1, c1), d1.sameGraph(a1, a2), d1.sameGraph(child1, child1b),
+                d1.sameGraph(child1, child2), d1.sameGraph(a1, r1)]
+    d1.close()
+    d2.close()
+    print("get-attribute-graph|attributes=\(attributes)|erased=\(erased)|subgraphs=\(subgraphs)|same=\(same)")
+}
+
+/// `AGSubgraphGetCurrent` and `AGSubgraphSetCurrent`: the current subgraph outside any, inside `apply`, nested across two
+/// graphs, after restoring, after `setCurrent`, after invalidating the current subgraph, and inside a rule. The own
+/// driver calls `Graph.withCurrent` for `apply` and `Subgraph.current` for the getter and the setter.
+func getSubgraphCurrentScenario() {
+    let d1 = Driver()
+    let d2 = Driver()
+    let s1 = d1.makeSubgraph()
+    let s1b = d1.makeSubgraph()
+    let s2 = d2.makeSubgraph()
+    let names: [(String, SubgraphHandle)] = [("s1", s1), ("s1b", s1b), ("s2", s2), ("scope1", d1.scope), ("scope2", d2.scope)]
+    func cur() -> String {
+        guard let current = d1.currentSubgraphHandle else { return "nil" }
+        return names.first { $0.1 == current }?.0 ?? "other"
+    }
+    var log: [String] = []
+    log.append("outside=\(cur())")
+    d1.apply(s1) {
+        log.append("apply=\(cur())")
+        d2.apply(s2) {
+            log.append("otherGraph=\(cur())")
+            d1.apply(s1b) { log.append("nested=\(cur())") }
+            log.append("restored2=\(cur())")
+        }
+        log.append("restored1=\(cur())")
+    }
+    log.append("after=\(cur())")
+
+    d1.setCurrentSubgraph(s1b)
+    log.append("set=\(cur())")
+    d2.apply(s2) { log.append("applyInsideSet=\(cur())") }
+    log.append("afterApplyInsideSet=\(cur())")
+    d1.setCurrentSubgraph(nil)
+    log.append("setNil=\(cur())")
+
+    d1.setCurrentSubgraph(s1b)
+    d1.invalidate(s1b)
+    log.append("invalidatedCurrent=\(cur())")
+    d1.setCurrentSubgraph(nil)
+
+    let s3 = d1.makeSubgraph()
+    d1.apply(s3) {
+        d1.invalidate(s3)
+        log.append("invalidatedInApply=\(cur())")
+    }
+    log.append("afterInvalidatedApply=\(cur())")
+
+    let s4 = d1.makeSubgraph()
+    let s5 = d1.makeSubgraph()
+    d1.apply(s4) {
+        d1.apply(s5) {
+            d1.invalidate(s5)
+            log.append("nestedInvalidated=\(cur())")
+        }
+        log.append("outerAfterInnerInvalidated=\(cur())")
+    }
+
+    var rule: Handle<Int64>?
+    var ruleLog: [String] = []
+    rule = d1.withSubgraph(s1) {
+        d1.rule {
+            ruleLog.append("inRule=\(cur())")
+            d1.apply(s4) { ruleLog.append("applyInRule=\(cur())") }
+            ruleLog.append("afterApplyInRule=\(cur())")
+            return 1
+        }
+    }
+    d2.apply(s2) {
+        _ = d1.read(rule!)
+        log.append("afterRuleRead=\(cur())")
+    }
+    log.append("rule=\(ruleLog)")
+    log.append("end=\(cur())")
+    d1.setCurrentSubgraph(nil)
+    d1.close()
+    d2.close()
+    print("get-subgraph-current|\(log)")
+}

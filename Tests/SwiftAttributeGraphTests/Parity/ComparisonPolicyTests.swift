@@ -186,4 +186,24 @@ import Foundation
         graph.setValue(Self.long(), for: a)      // another buffer: viewValue compares String with ==
         #expect(graph.version(of: a.id) == before)
     }
+
+    @Test func equatableUnlessPODIgnoresPaddingInPODStructs() {
+        struct PaddedPOD { var a: Int8; var b: Int64 }
+        struct NestedPOD { var head: Int8; var inner: PaddedPOD }
+
+        var p1 = PaddedPOD(a: 1, b: 2)
+        var p2 = PaddedPOD(a: 1, b: 2)
+        withUnsafeMutableBytes(of: &p1) { $0[1] = 0xAA }
+        withUnsafeMutableBytes(of: &p2) { $0[1] = 0x55 }
+        #expect(!changes(.equatableUnlessPOD, p1, p2))
+
+        let p3 = PaddedPOD(a: 1, b: 3)
+        #expect(changes(.equatableUnlessPOD, p1, p3))
+
+        var n1 = NestedPOD(head: 7, inner: p1)
+        var n2 = NestedPOD(head: 7, inner: p2)
+        withUnsafeMutableBytes(of: &n1) { $0[1] = 0x11 }
+        withUnsafeMutableBytes(of: &n2) { $0[1] = 0x22 }
+        #expect(!changes(.equatableUnlessPOD, n1, n2))
+    }
 }

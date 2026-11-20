@@ -20,19 +20,43 @@ public struct WeakAttribute<Value>: Hashable, Sendable {
         self.id = attribute?.id
     }
 
-    /// The value of the referenced attribute read from the graph whose rule is running on this thread, or `nil` if the
-    /// attribute is no longer alive.
-    ///
-    /// Reading inside a rule while the target attribute is alive records a dependency on that target attribute.
-    public var value: Value? {
-        guard let graph = ThreadLocalGraph.current() else {
-            preconditionFailure("WeakAttribute.value can only be read inside a rule; use Graph.value(of:) elsewhere")
+    /// Returns the strong `Attribute` handle if the referenced attribute is still alive in its graph, or `nil` if its
+    /// subgraph was invalidated and freed (`AGWeakAttributeGetAttribute` in native AttributeGraph [O]).
+    public var attribute: Attribute<Value>? {
+        get {
+            guard let id, let graph = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+            return graph.attribute(of: self)
         }
+        set {
+            id = newValue?.id
+        }
+    }
+
+    /// The value of the referenced attribute, bringing it up to date first if needed, or `nil` if the attribute is no
+    /// longer alive (`AGGraphGetWeakValue` in native AttributeGraph [O]).
+    ///
+    /// Reading inside a rule while the target attribute is alive records a dependency on that target attribute; reading
+    /// outside a rule updates the target if dirty and returns its value without recording any dependency [O].
+    public var value: Value? {
+        if let graph = ThreadLocalGraph.current() {
+            return graph.value(of: self)
+        }
+        guard let id, let graph = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
         return graph.value(of: self)
     }
 
-    /// The value of the referenced attribute when used as `@WeakAttribute` inside a rule, or `nil` if the target was
-    /// invalidated and freed.
+    /// Reads the value of the referenced attribute with `options` and reports whether it changed (`WeakAttribute.changedValue`
+    /// in native AttributeGraph [O]), or returns `nil` if the target was freed.
+    public func changedValue(options: Graph.ReadOptions = []) -> (value: Value, changed: Bool)? {
+        if let graph = ThreadLocalGraph.current() {
+            return graph.changedValue(of: self, options: options)
+        }
+        guard let id, let graph = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+        return graph.changedValue(of: self, options: options)
+    }
+
+    /// The value of the referenced attribute when used as `@WeakAttribute`, or `nil` if the target was invalidated and
+    /// freed.
     public var wrappedValue: Value? { value }
 
     /// The weak attribute wrapper itself (`$property` when used as `@WeakAttribute`).
@@ -43,33 +67,66 @@ public struct WeakAttribute<Value>: Hashable, Sendable {
 }
 
 extension Graph {
-    /// Returns the strong `Attribute` handle if the referenced attribute is still alive in the graph, or `nil` if its
-    /// subgraph was invalidated and freed.
+    /// Returns the strong `Attribute` handle if the referenced attribute is still alive, or `nil` if its subgraph was
+    /// invalidated and freed.
     public func attribute<Value>(of weakAttribute: WeakAttribute<Value>) -> Attribute<Value>? {
         assertOwnThread()
-        guard let id = weakAttribute.id, table.isLive(id) else { return nil }
-        return Attribute(id: id)
+        guard let id = weakAttribute.id else { return nil }
+        if id.graphTag == graphTag {
+            guard table.isLive(id) else { return nil }
+            return Attribute(id: id)
+        }
+        guard let owner = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+        return owner.attribute(of: weakAttribute)
     }
 
     /// Reads the value of `weakAttribute` if its target attribute is still alive, bringing it up to date first if
     /// needed (and recording a dependency when called inside a rule), or returns `nil` if the target was freed.
     public func value<Value>(of weakAttribute: WeakAttribute<Value>) -> Value? {
         assertOwnThread()
+        guard let id = weakAttribute.id else { return nil }
         if let running = ThreadLocalGraph.current() {
-            precondition(running === self, "a rule cannot read an attribute of another graph")
+            precondition(running === self && id.graphTag == graphTag, "a rule cannot read an attribute of another graph")
+            guard table.isLive(id) else { return nil }
+            return value(of: Attribute<Value>(id: id))
         }
-        guard let id = weakAttribute.id, table.isLive(id) else { return nil }
-        return read(Attribute<Value>(id: id))
+        if id.graphTag == graphTag {
+            guard table.isLive(id) else { return nil }
+            return value(of: Attribute<Value>(id: id))
+        }
+        guard let owner = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+        return owner.value(of: weakAttribute)
+    }
+
+    /// Reads the value of `weakAttribute` with `options` if its target attribute is still alive, bringing it up to date
+    /// first if needed, or returns `nil` if the target was freed (`AGGraphGetWeakValue` in native AttributeGraph [O]).
+    public func value<Value>(of weakAttribute: WeakAttribute<Value>, options: ReadOptions) -> Value? {
+        if options.contains(.noDependency) {
+            return withoutUpdate { value(of: weakAttribute) }
+        }
+        return value(of: weakAttribute)
     }
 
     /// Reads the value of `weakAttribute` and reports whether it changed since the running rule's previous evaluation
     /// (or since the attribute was last verified when called outside a rule), or returns `nil` if the target was freed.
-    public func changedValue<Value>(of weakAttribute: WeakAttribute<Value>) -> (value: Value, changed: Bool)? {
+    public func changedValue<Value>(of weakAttribute: WeakAttribute<Value>, options: ReadOptions = []) -> (value: Value, changed: Bool)? {
         assertOwnThread()
-        guard let id = weakAttribute.id, table.isLive(id) else { return nil }
+        if options.contains(.noDependency) {
+            return withoutUpdate {
+                guard let val = value(of: weakAttribute) else { return nil }
+                return (val, false)
+            }
+        }
+        guard let id = weakAttribute.id else { return nil }
+        if id.graphTag != graphTag {
+            precondition(ThreadLocalGraph.current() == nil, "a rule cannot read an attribute of another graph")
+            guard let owner = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+            return owner.changedValue(of: weakAttribute, options: options)
+        }
+        guard table.isLive(id) else { return nil }
         let attr = Attribute<Value>(id: id)
         let node = evaluatingNode
-        let val = read(attr)
+        let val = value(of: attr)
         if node != Graph.noNode {
             return (val, inputChanged(of: node, attribute: attr))
         }

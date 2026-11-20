@@ -2,9 +2,9 @@ final class ResumableRuleNode<R: ResumableRule>: TypedNode<R.Value> {
     var rule: R
     var evaluation: ResumableEvaluation<R.Value>?
 
-    init(rule: R, isEqual: @escaping (R.Value, R.Value) -> Bool) {
+    init(rule: R, type: NodeType<R.Value>) {
         self.rule = rule
-        super.init(value: nil, isEqual: isEqual)
+        super.init(value: nil, type: type)
     }
 
     override func resume(in graph: Graph, node: AttributeID, firstStep: Bool) -> (step: RuleStep, changed: Bool) {
@@ -31,6 +31,9 @@ final class ResumableRuleNode<R: ResumableRule>: TypedNode<R.Value> {
             defer { evaluation.proposed = nil }
             guard let result = evaluation.proposed else {
                 preconditionFailure("a resumable rule must produce a value before finishing its first evaluation")
+            }
+            if graph.isCurrentFrameCancelled && graph.table.state[Int(node.index)] & NodeState.hasValue != 0 {
+                return (.finished, false)
             }
             return (.finished, evaluation.written ? store(result) : false)
         }

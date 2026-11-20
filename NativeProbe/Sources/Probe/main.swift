@@ -1,8 +1,39 @@
 #if NATIVE_ATTRIBUTE_GRAPH
 import AttributeGraph
 
+@_silgen_name("AGCompareValues")
+private func c_AGCompareValues(_ lhs: UnsafeRawPointer, _ rhs: UnsafeRawPointer, _ type: Metadata, _ options: UInt32) -> Bool
+
+struct ProbeAGValuePair {
+    var value: UnsafeRawPointer
+    var changed: Bool
+}
+
+@_silgen_name("AGGraphGetInputValue")
+private func c_AGGraphGetInputValue(_ attribute: AnyAttribute, _ input: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
+
+@_silgen_name("AGGraphGetValue")
+private func c_AGGraphGetValue(_ attribute: AnyAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGValuePair
+
+struct ProbeAGWeakValuePair {
+    var value: UnsafeRawPointer?
+    var changed: Bool
+}
+
+@_silgen_name("AGGraphGetWeakValue")
+private func c_AGGraphGetWeakValue(_ weakAttribute: AnyWeakAttribute, _ options: UInt32, _ type: Metadata) -> ProbeAGWeakValuePair
+
+@_silgen_name("AGGraphGetCurrentAttribute")
+private func c_AGGraphGetCurrentAttribute() -> UInt32
+
+@_silgen_name("AGGraphCurrentAttributeWasModified")
+private func c_AGGraphCurrentAttributeWasModified() -> Bool
+
 @_silgen_name("AGGraphResetIndirectAttribute")
 private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
+
+@_silgen_name("AGGraphCancelUpdate")
+private func AGGraphCancelUpdate()
 
 final class SubgraphObserverHandle {
     private let onCancel: () -> Void
@@ -76,6 +107,51 @@ final class Driver {
     }
     func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
     func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child, tag: tag) }
+    func makeSubgraph(for attribute: Handle<Int64>) -> SubgraphHandle { Subgraph(graph: graph, attribute: attribute.identifier) }
+    func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
+    func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
+
+    func compareValues302<T>(_ a: T, _ b: T) -> Bool {
+        withUnsafePointer(to: a) { pa in
+            withUnsafePointer(to: b) { pb in
+                let meta = Metadata(T.self)
+                _ = c_AGCompareValues(pa, pb, meta, 0x302)
+                usleep(20_000)
+                _ = c_AGCompareValues(pa, pb, meta, 0x302)
+                usleep(20_000)
+                return c_AGCompareValues(pa, pb, meta, 0x302)
+            }
+        }
+    }
+
+    func compareValues303<T>(_ a: T, _ b: T) -> Bool {
+        withUnsafePointer(to: a) { pa in
+            withUnsafePointer(to: b) { pb in
+                c_AGCompareValues(pa, pb, Metadata(T.self), 0x303)
+            }
+        }
+    }
+
+    func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
+        c_AGGraphGetInputValue(reader.identifier, input.identifier, 0, Metadata(V.self))
+            .value.assumingMemoryBound(to: V.self).pointee
+    }
+    /// "nil" when there is no current attribute, "self" when it is `handle`, otherwise "other".
+    func currentAttributeState<V>(is handle: Handle<V>?) -> String {
+        let raw = c_AGGraphGetCurrentAttribute()
+        if raw == 2 /* AGAttributeNil, measured as 2 */ { return "nil" }
+        return raw == handle?.identifier.rawValue ? "self" : "other"
+    }
+    func currentAttributeWasModified() -> Bool { c_AGGraphCurrentAttributeWasModified() }
+    func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
+        c_AGGraphGetValue(attribute.identifier, options, Metadata(V.self))
+            .value.assumingMemoryBound(to: V.self).pointee
+    }
+    func makeSubgraphInNewContext() -> SubgraphHandle {
+        Subgraph(graph: Graph())
+    }
     @discardableResult
     func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> SubgraphObserverHandle {
         let id = subgraph.addObserver(body)
@@ -84,10 +160,40 @@ final class Driver {
         }
     }
     var nodeCount: Int { Int(graph.counter(for: .nodes)) }
+    func apply<T>(_ subgraph: SubgraphHandle, _ body: () -> T) -> T { subgraph.apply(body) }
+    var currentSubgraphHandle: SubgraphHandle? { SubgraphHandle.current }
+    func setCurrentSubgraph(_ subgraph: SubgraphHandle?) { SubgraphHandle.current = subgraph }
+    func owns<V>(_ handle: Handle<V>) -> Bool { handle.graph === graph }
+    func ownsErased<V>(_ handle: Handle<V>) -> Bool { handle.identifier.graph === graph }
+    func owns(_ subgraph: SubgraphHandle) -> Bool { subgraph.graph === graph }
+    func sameGraph<V, W>(_ a: Handle<V>, _ b: Handle<W>) -> Bool { a.graph === b.graph }
+    func sameGraph(_ a: SubgraphHandle, _ b: SubgraphHandle) -> Bool { a.graph === b.graph }
+    /// The counters that both engines reproduce: nodes, transactions, updates, changes, createdNodes, subgraphs,
+    /// createdSubgraphs.
+    func counters() -> String {
+        [graph.counter(for: .nodes), graph.counter(for: .transactions), graph.counter(for: .updates),
+         graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
+         graph.counter(for: .createdSubgraphs)].map(String.init).joined(separator: ",")
+    }
+    /// The context and state selectors: graphID, contextID, threadUpdating, contextThreadUpdating, needsUpdate,
+    /// contextNeedsUpdate and mainThreadUpdates.
+    func stateCounters() -> [UInt64] {
+        [graph.counter(for: .graphID), graph.counter(for: .contextID), graph.counter(for: .threadUpdating),
+         graph.counter(for: .contextThreadUpdating), graph.counter(for: .needsUpdate),
+         graph.counter(for: .contextNeedsUpdate), graph.counter(for: .mainThreadUpdates)]
+    }
+    func graphUpdates() -> UInt64 { graph.counter(for: .updates) }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakHandle(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { weakAttribute.attribute }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { weakAttribute.value }
+    func readWeak<V>(_ weakAttribute: WeakHandle<V>, options: UInt32) -> V? {
+        c_AGGraphGetWeakValue(weakAttribute.base, options, Metadata(V.self))
+            .value?.assumingMemoryBound(to: V.self).pointee
+    }
     func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { currentSubgraph.apply { IndirectHandle(source: source) } }
+    func offsetIndirect<V: BitwiseCopyable, Field>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
+        currentSubgraph.apply { source[keyPath: keyPath] }
+    }
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.projectedValue }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.source }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { indirect.source = newSource }
@@ -140,6 +246,13 @@ final class Driver {
     func validate<V>(_ attribute: Handle<V>) { attribute.validate() }
     func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { subgraph.isAncestor(of: other) }
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
+    func setUpdateCallback(_ body: @escaping () -> Void) { graph.onUpdate(body) }
+    func setNeedsUpdate() { graph.setNeedsUpdate() }
+    func cancelUpdate() { AGGraphCancelUpdate() }
+    func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
+        let ids = excluded.map { $0.identifier }
+        return __AGGraphAnyInputsChanged(ids, ids.count)
+    }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = attribute.breadthFirstSearch(options: .searchInputs) { _ in
@@ -234,16 +347,85 @@ final class Driver {
     }
     func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
     func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { graph.addChild(child, to: parent) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { graph.addChild(child, to: parent) }
+    func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
+    func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
+    func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
+
+    func compareValues302<T>(_ a: T, _ b: T) -> Bool {
+        let g = Graph()
+        let attr = g.makeInput(a, comparison: .equatableUnlessPOD)
+        var runs = 0
+        let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
+        _ = g.value(of: r)
+        g.setValue(b, for: attr)
+        _ = g.value(of: r)
+        return runs == 1
+    }
+
+    func compareValues303<T>(_ a: T, _ b: T) -> Bool {
+        let g = Graph()
+        let attr = g.makeInput(a, comparison: .viewValue)
+        var runs = 0
+        let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
+        _ = g.value(of: r)
+        g.setValue(b, for: attr)
+        _ = g.value(of: r)
+        return runs == 1
+    }
+
+    func inputValue<V>(_ input: Handle<V>, for reader: Handle<Int64>) -> V {
+        graph.inputValue(of: input, for: reader.erased)
+    }
+    func currentAttributeState<V>(is handle: Handle<V>?) -> String {
+        guard let current = Graph.currentAttribute else { return "nil" }
+        return current == handle?.erased ? "self" : "other"
+    }
+    func currentAttributeWasModified() -> Bool { Graph.currentAttributeWasModified }
+    func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
+        graph.value(of: attribute, options: Graph.ReadOptions(rawValue: options))
+    }
+    func makeSubgraphInNewContext() -> SubgraphHandle {
+        Graph().makeSubgraph()
+    }
     @discardableResult
     func observeSubgraph(_ subgraph: SubgraphHandle, _ body: @escaping () -> Void) -> SubgraphObserverHandle {
         let token = graph.observe(subgraph, onInvalidate: body)
         return SubgraphObserverHandle { token.cancel() }
     }
     var nodeCount: Int { graph.nodeCount }
+    func apply<T>(_ subgraph: SubgraphHandle, _ body: () -> T) -> T { subgraph.graph.withCurrent(subgraph, body) }
+    var currentSubgraphHandle: SubgraphHandle? { SubgraphHandle.current }
+    func setCurrentSubgraph(_ subgraph: SubgraphHandle?) { SubgraphHandle.current = subgraph }
+    func owns<V>(_ handle: Handle<V>) -> Bool { handle.graph === graph }
+    func ownsErased<V>(_ handle: Handle<V>) -> Bool { handle.erased.graph === graph }
+    func owns(_ subgraph: SubgraphHandle) -> Bool { subgraph.graph === graph }
+    func sameGraph<V, W>(_ a: Handle<V>, _ b: Handle<W>) -> Bool { a.graph === b.graph }
+    func sameGraph(_ a: SubgraphHandle, _ b: SubgraphHandle) -> Bool { a.graph === b.graph }
+    func counters() -> String {
+        [graph.counter(for: .nodes), graph.counter(for: .transactions), graph.counter(for: .updates),
+         graph.counter(for: .changes), graph.counter(for: .createdNodes), graph.counter(for: .subgraphs),
+         graph.counter(for: .createdSubgraphs)].map(String.init).joined(separator: ",")
+    }
+    /// The context and state selectors: graphID, contextID, threadUpdating, contextThreadUpdating, needsUpdate,
+    /// contextNeedsUpdate and mainThreadUpdates.
+    func stateCounters() -> [UInt64] {
+        [graph.counter(for: .graphID), graph.counter(for: .contextID), graph.counter(for: .threadUpdating),
+         graph.counter(for: .contextThreadUpdating), graph.counter(for: .needsUpdate),
+         graph.counter(for: .contextNeedsUpdate), graph.counter(for: .mainThreadUpdates)]
+    }
+    func graphUpdates() -> UInt64 { graph.counter(for: .updates) }
     func weak<V>(_ attribute: Handle<V>) -> WeakHandle<V> { WeakAttribute(attribute) }
     func attribute<V>(of weakAttribute: WeakHandle<V>) -> Handle<V>? { graph.attribute(of: weakAttribute) }
     func readWeak<V>(_ weakAttribute: WeakHandle<V>) -> V? { graph.value(of: weakAttribute) }
-    func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(scope) { graph.makeIndirect(source) } }
+    func readWeak<V>(_ weakAttribute: WeakHandle<V>, options: UInt32) -> V? {
+        graph.value(of: weakAttribute, options: Graph.ReadOptions(rawValue: options))
+    }
+    func indirect<V>(_ source: Handle<V>) -> IndirectHandle<V> { graph.withCurrent(currentSubgraph) { graph.makeIndirect(source) } }
+    func offsetIndirect<V: BitwiseCopyable, Field: BitwiseCopyable>(_ source: Handle<V>, keyPath: KeyPath<V, Field>) -> Handle<Field> {
+        graph.withCurrent(scope) { graph.makeOffsetFieldAttribute(of: source, keyPath: keyPath) }
+    }
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect }
     func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { graph.source(of: indirect) }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
@@ -294,6 +476,12 @@ final class Driver {
     func validate<V>(_ attribute: Handle<V>) { graph.validate(attribute) }
     func isAncestor(_ subgraph: SubgraphHandle, of other: SubgraphHandle) -> Bool { graph.isAncestor(subgraph, of: other) }
     func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T { graph.withoutSubgraphInvalidation(body) }
+    func setUpdateCallback(_ body: @escaping () -> Void) { graph.setUpdateCallback(body) }
+    func setNeedsUpdate() { graph.setNeedsUpdate() }
+    func cancelUpdate() { graph.cancelUpdate() }
+    func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
+        graph.anyInputsChanged(excluding: excluded.map { AnyAttribute(id: $0.id) })
+    }
     func breadthFirstCountInputs<V>(from attribute: Handle<V>) -> Int {
         var count = 0
         _ = graph.breadthFirstSearch(from: attribute, options: .searchInputs) { _ in
@@ -411,6 +599,9 @@ func ownedLifetime() {
     print("lifetime|payloadReleased=true|scopeInvalidated=true|nodesReturnedToBaseline=true")
 }
 
+runCreateAndClosureScenariosIfRequested()
+runIsolatedScenarioIfRequested()
+runIsDirtyScenariosIfRequested()
 dynamicDependencies()
 equalityCut()
 coalescedWrites()
@@ -453,3 +644,66 @@ indirectResetSourceAfterMultipleRedirects()
 indirectChainAndIntermediateDeath()
 changedValueAfterSkippedReadsAndIndirect()
 multiObserverTreeOrderAndCancel()
+// Creation and closure scenarios whose native trace matches; the others run only in isolation (`Probe cc <name>`).
+// `double-cut` is excluded: natively, writing `NaN` over `NaN` to an input is cut in a fresh process but not after
+// earlier scenarios used `Double` (the comparison's cold and warm states), so its line depends on process history.
+for name in ["create-input-in-rule-scoped", "create-rule-in-rule-scoped", "create-rule-every-run-scoped",
+             "create-rule-during-update-flags-scoped", "caller-invalidated-after-input", "caller-invalidated-after-rule",
+             "caller-falling-input", "create-placement-caller-scope", "create-placement-explicit-owner",
+             "closure-recreated-plain", "closure-stable-plain", "closure-captured-state-plain", "closure-thin-plain",
+             "closure-stable-equatable", "closure-captured-state-equatable"] {
+    ccScopedReads = false
+    ccScenarios.first { $0.0 == name }!.1()
+}
+offsetRangeInsideAndOutside()
+offsetStickyInsideThenOutside()
+offsetMixedChain()
+indirectSetSameValue()
+directEdgeEqualAndDifferentWrite()
+offsetWholeValue()
+subgraphDagAddChild()
+contextUpdateCallback()
+cooperativeCancel()
+cooperativeCancelConsumer()
+cooperativeCancelNested()
+cooperativeCancelFirstEval()
+contextUpdateCallbackOnWrite()
+invalidateValueAndSubgraphDirty()
+anyInputsChangedScenarios()
+anyInputsChangedOffsetEdge()
+anyInputsChangedIsolatedScenarios()
+subgraphAddChildSecondaryParent()
+subgraphCreate2()
+weakReadAfterChildInvalidate()
+weakMultipleOnSameChild()
+weakCombinerThreeChildrenInvalidateMiddle()
+weakAttributeOutsideRule()
+subgraphAddChildSecondaryParentReverse()
+clearAndSetUpdateScenario()
+clearSetUpdateNestedReverse()
+compareValues302Scenarios()
+compareValues302Edges()
+getInputValueExplicitReaderScenario()
+getInputValueDupPruneAndNonRuleScenarios()
+currentAttributeWasModifiedInvalidateScenario()
+subgraphAddChildOwnerScenario()
+getValueOptionScenario(name: "get-value-opt4", options: 4)
+getValueOptionScenario(name: "get-value-opt2", options: 2)
+getValueOptionScenario(name: "get-value-opt6", options: 6)
+getCurrentAttributeScenario()
+currentAttributeWasModifiedScenario()
+getCounterScenario()
+getCounterContextScenario()
+getAttributeGraphScenario()
+getSubgraphCurrentScenario()
+sharedContextIds()
+sharedContextNeedsUpdate()
+sharedContextUpdateCallback()
+sharedContextSubgraphs()
+sharedContextUpdateCallbackInputRead()
+sharedContextInvalidationCallback()
+// clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
+coldChainDepth()
+writeInRuleInvalidateValueWithoutUpdate()
+writeInRuleMutateBodyInvalidating()
+for (_, run) in isDirtyScenarios { run() }

@@ -1,25 +1,34 @@
 /// Resolves a ``Comparison`` policy into a function for one value type. Called once per attribute, when it is created;
 /// writing a value only calls the function that came out of here.
 enum ValueComparator {
-    /// The comparators already resolved by one graph, one per (value type, policy). Resolving a type walks its layout,
+    /// The comparators already resolved by one graph, one per (value type, policy), each in the ``NodeType`` that the
+    /// nodes of that type and policy share. Resolving a type walks its layout,
     /// which costs far more than creating an attribute, so a graph does it once per type.
     struct Cache {
         private struct Key: Hashable {
             let type: ObjectIdentifier
             let policy: Comparison
         }
-        private final class Box<Value> {
-            let isEqual: (Value, Value) -> Bool
-            init(_ isEqual: @escaping (Value, Value) -> Bool) { self.isEqual = isEqual }
-        }
-        private var boxes: [Key: AnyObject] = [:]
+        private var types: [Key: AnyObject] = [:]
+        /// The last descriptor handed out and its key. Graphs create long runs of attributes of one type, and hashing
+        /// the key on every creation was 4 % of the `fan-out` profile [O].
+        private var lastKey: Key?
+        private var lastType: AnyObject?
 
-        mutating func comparator<Value>(_ policy: Comparison, for type: Value.Type) -> (Value, Value) -> Bool {
+        /// The node descriptor of `Value` under `policy`, created on first use.
+        mutating func nodeType<Value>(_ policy: Comparison, for type: Value.Type) -> NodeType<Value> {
             let key = Key(type: ObjectIdentifier(Value.self), policy: policy)
-            if let box = boxes[key] { return unsafeDowncast(box, to: Box<Value>.self).isEqual }
-            let isEqual = ValueComparator.make(policy, for: Value.self)
-            boxes[key] = Box(isEqual)
-            return isEqual
+            if key == lastKey, let last = lastType { return unsafeDowncast(last, to: NodeType<Value>.self) }
+            let found: AnyObject
+            if let existing = types[key] {
+                found = existing
+            } else {
+                found = NodeType(isEqual: ValueComparator.make(policy, for: Value.self))
+                types[key] = found
+            }
+            lastKey = key
+            lastType = found
+            return unsafeDowncast(found, to: NodeType<Value>.self)
         }
     }
 
@@ -28,6 +37,10 @@ enum ValueComparator {
         case .alwaysDifferent:
             return { _, _ in false }
         case .bits:
+            return { bitwiseEqual($0, $1) }
+        case .equatableUnlessPOD:
+            if TypeLayout.isPOD(Value.self) { return planned(Value.self, mode: .view) }
+            if let equal = equatableComparator(Value.self) { return equal }
             return { bitwiseEqual($0, $1) }
         case .viewValue:
             return planned(Value.self, mode: .view)
@@ -51,5 +64,21 @@ enum ValueComparator {
                 withUnsafeBytes(of: right) { r in plan.equal(l.baseAddress!, r.baseAddress!) }
             }
         }
+    }
+
+    /// `==` of `Value` if it is `Equatable`; `nil` otherwise.
+    private static func equatableComparator<Value>(_: Value.Type) -> ((Value, Value) -> Bool)? {
+        guard let type = Value.self as? any Equatable.Type else { return nil }
+        func open<E: Equatable>(_: E.Type) -> (Value, Value) -> Bool {
+            { left, right in
+                withUnsafePointer(to: left) { l in
+                    withUnsafePointer(to: right) { r in
+                        UnsafeRawPointer(l).assumingMemoryBound(to: E.self).pointee
+                            == UnsafeRawPointer(r).assumingMemoryBound(to: E.self).pointee
+                    }
+                }
+            }
+        }
+        return open(type)
     }
 }
