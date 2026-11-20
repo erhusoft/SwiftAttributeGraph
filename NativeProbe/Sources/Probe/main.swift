@@ -38,6 +38,10 @@ private func AGGraphCancelUpdate()
 private func AGGraphUpdateWasCancelled() -> Bool
 @_silgen_name("AGMakeUniqueID")
 private func AGMakeUniqueID() -> UInt
+@_silgen_name("AGGraphBeginDeferringSubgraphInvalidation")
+private func c_AGGraphBegin(_ graph: UnsafeRawPointer) -> Bool
+@_silgen_name("AGGraphEndDeferringSubgraphInvalidation")
+private func c_AGGraphEnd(_ graph: UnsafeRawPointer, _ wasDeferring: Bool)
 @_silgen_name("AGGraphAddInput")
 private func AGGraphAddInput(_ attribute1: AnyAttribute, _ attribute2: AnyAttribute, _ options: UInt32, _ token: Int)
 @_silgen_name("AGGraphRegisterDependency")
@@ -295,6 +299,8 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func beginDeferring() -> Bool { c_AGGraphBegin(Unmanaged.passUnretained(graph).toOpaque()) }
+    func endDeferring(_ wasDeferring: Bool) { c_AGGraphEnd(Unmanaged.passUnretained(graph).toOpaque(), wasDeferring) }
     func addInput<V, W>(_ attribute1: Handle<V>, _ attribute2: Handle<W>, options: UInt32 = 0) { AGGraphAddInput(attribute1.identifier, attribute2.identifier, options, 0) }
     func registerDependency<W>(on attribute: Handle<W>, options: UInt32 = 0) { AGGraphRegisterDependency(attribute.identifier, options) }
     func cancelUpdateIfNeeded() { AGGraphCancelUpdateIfNeeded() }
@@ -563,6 +569,8 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func beginDeferring() -> Bool { graph.beginDeferringSubgraphInvalidation() }
+    func endDeferring(_ wasDeferring: Bool) { graph.endDeferringSubgraphInvalidation(wasDeferring: wasDeferring) }
     func addInput<V, W>(_ attribute1: Handle<V>, _ attribute2: Handle<W>, options: UInt32 = 0) { precondition(options == 0); graph.addInput(attribute1, attribute2) }
     func registerDependency<W>(on attribute: Handle<W>, options: UInt32 = 0) { precondition(options == 0); graph.registerDependency(on: attribute) }
     func cancelUpdateIfNeeded() { graph.cancelUpdateIfNeeded() }
@@ -816,3 +824,4 @@ uniqueIDScenario()
 addInputScenario()
 registerDependencyInRuleScenario()
 anyWeakAttributeScenario()
+deferringScenario()

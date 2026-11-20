@@ -70,15 +70,28 @@ extension Graph {
     /// readable by `WeakAttribute` until `body` returns (matching `Subgraph.withoutSubgraphInvalidation` in native
     /// AttributeGraph).
     public func withoutSubgraphInvalidation<T>(_ body: () -> T) -> T {
-        assertOwnThread()
-        deferringSubgraphInvalidationDepth += 1
-        defer {
-            deferringSubgraphInvalidationDepth -= 1
-            if deferringSubgraphInvalidationDepth == 0 && evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty {
-                flushDeferredInvalidations()
-            }
-        }
+        _ = beginDeferringSubgraphInvalidation()
+        defer { endDeferringSubgraphInvalidation(wasDeferring: false) }
         return body()
+    }
+
+    /// Starts a deferral and returns whether one was already open (`AGGraphBeginDeferringSubgraphInvalidation` in native
+    /// AttributeGraph). Pair it with ``endDeferringSubgraphInvalidation(wasDeferring:)``, passing the value returned here.
+    public func beginDeferringSubgraphInvalidation() -> Bool {
+        assertOwnThread()
+        let wasDeferring = deferringSubgraphInvalidationDepth > 0
+        deferringSubgraphInvalidationDepth += 1
+        return wasDeferring
+    }
+
+    /// Ends a deferral begun with ``beginDeferringSubgraphInvalidation()``. The deferred work runs when the outermost
+    /// deferral ends and no rule is running (`AGGraphEndDeferringSubgraphInvalidation` in native AttributeGraph).
+    public func endDeferringSubgraphInvalidation(wasDeferring: Bool) {
+        assertOwnThread()
+        deferringSubgraphInvalidationDepth -= 1
+        if !wasDeferring && deferringSubgraphInvalidationDepth == 0 && evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty {
+            flushDeferredInvalidations()
+        }
     }
 
     /// Runs the invalidations that were asked for while a rule was running. Called when the outermost update ends.

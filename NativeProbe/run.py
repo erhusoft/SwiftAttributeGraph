@@ -141,6 +141,7 @@ SCENARIOS = [
     "add-input",
     "register-dependency-in-rule",
     "any-weak",
+    "deferring",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

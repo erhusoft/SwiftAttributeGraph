@@ -2998,3 +2998,20 @@ func anyWeakAttributeScenario() {
     let liveAfter = d.anyWeakHasAttribute(live)
     print("any-weak|emptyHas=\(emptyHas)|liveBefore=\(liveBefore)|equal=\(equal)|liveAfter=\(liveAfter)")
 }
+
+/// `AGGraphBegin/EndDeferringSubgraphInvalidation`: invalidation is deferred while a deferral is open; nested begins
+/// report that they were already deferring, and end restores the state they were given.
+func deferringScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let sub = d.makeSubgraph()
+    let outer = d.beginDeferring()
+    sub.invalidate()
+    let validDuring = sub.isValid
+    let inner = d.beginDeferring()
+    d.endDeferring(inner)
+    let validAfterInner = sub.isValid
+    d.endDeferring(outer)
+    let validAfterOuter = sub.isValid
+    print("deferring|outer=\(outer)|inner=\(inner)|validDuring=\(validDuring)|validAfterInner=\(validAfterInner)|validAfterOuter=\(validAfterOuter)")
+}
