@@ -2,7 +2,7 @@
 
 - **Escenarios medidos contra Apple (`NativeProbe/run.py`):** **132** trazas directas coinciden en las 6 pasadas (`debug` 1..3 y `release` 1..3, `EXIT=0`).
 - **Cobertura SwiftUICore (`SWIFTUICORE_CRUCE_CORE_MOTOR_V2.md`):** de **116** funciones importadas de `AttributeGraph` (**66** aplican al motor), quedan cerradas además `GetCounter`, `GetAttributeGraph`, `SubgraphGetCurrent`, `GetCurrentAttribute` y `CurrentAttributeWasModified`.
-- **Referencia de rendimiento actual:** `633e3de` / `7991c61` (sustituye a `678abb0`).
+- **Referencia de rendimiento actual:** `7f488a2` (rama `codex/native-adaptations-integration`; sustituye a `9497f00`). Frente a `2262174`, en `release`, razón propio/nativo: `diamond-layers` 1,23x/0,85x (N=1.000/10.000; antes 1,80x/1,36x), `fan-out` 1,13x/0,63x (antes 1,72x/0,98x), `equal-write-cut` 1,09x/0,55x (antes 1,67x/0,87x), `create-inputs-rules` 0,69x/0,28x (antes 1,33x/0,60x), `batch-writes` 0,90x/0,67x; todas las cargas del banco mejoran (−7 % a −52 %); `PerformanceTests`+`IndirectPerformanceTests` razón mediana 0,59, máxima 1,03 (`cut stops at rule 1 of 20,000`, 0,63 → 0,65 ms). Detalle: `OPTIMIZACION_MOTOR_2.md` (primer ciclo: `OPTIMIZACION_MOTOR.md`).
 - **Nota `[?]`:** las 41 pruebas de `AGProbeParityTests` se marcan como `[?]` (origen no verificado en esta tanda).
 - **Abiertos:** contextos completos (dependencias y callback de invalidación), `WithMainThreadHandler` y `WithUpdate`, duplicado y `tag` de `AddChild2`, `Create2` con atributo, Windows.
 
