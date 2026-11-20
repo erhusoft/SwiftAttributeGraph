@@ -30,3 +30,22 @@ extension Subgraph {
         return graph
     }
 }
+
+/// Subgraph flag methods with Apple's names: `AGSubgraphRef.intersects(self:flags:)`, `isDirty(self:flags:)` and
+/// `update(self:flags:)` [O, native headers AGSubgraph.h].
+extension Subgraph {
+    /// Whether any attribute of this subgraph has flags in common with `flags`.
+    public func intersects(flags: AttributeFlags) -> Bool {
+        owningGraph().intersects(self, flags: flags)
+    }
+
+    /// Whether any dirty attribute of this subgraph has flags in common with `flags`.
+    public func isDirty(flags: AttributeFlags) -> Bool {
+        owningGraph().isDirty(self, flags: flags)
+    }
+
+    /// Updates the attributes of this subgraph that have flags in common with `flags`.
+    public func update(flags: AttributeFlags = .all) {
+        owningGraph().update(self, flags: flags)
+    }
+}
