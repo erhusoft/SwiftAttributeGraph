@@ -2719,3 +2719,16 @@ func getSubgraphCurrentScenario() {
     d2.close()
     print("get-subgraph-current|\(log)")
 }
+
+func subgraphRemoveChildScenario() {
+    let graph = Driver()
+    let parent = graph.makeSubgraph()
+    let child = graph.makeSubgraph()
+    graph.addChild(child, to: parent)
+    let v0 = graph.isValid(child)
+    graph.removeChild(child, from: parent)
+    let v1 = graph.isValid(child)
+    graph.invalidate(parent)
+    let v2 = graph.isValid(child)
+    print("subgraph-remove-child|v0=\(v0)|v1=\(v1)|v2=\(v2)")
+}

@@ -109,6 +109,7 @@ final class Driver {
     func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child, tag: tag) }
+    func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { parent.removeChild(child) }
     func makeSubgraph(for attribute: Handle<Int64>) -> SubgraphHandle { Subgraph(graph: graph, attribute: attribute.identifier) }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -375,6 +376,7 @@ final class Driver {
     func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { graph.addChild(child, to: parent) }
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { graph.addChild(child, to: parent) }
+    func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { graph.removeChild(child, from: parent) }
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -732,6 +734,7 @@ clearSetUpdateNestedReverse()
 compareValues302Scenarios()
 compareValues302Edges()
 compareValues103102Scenario()
+subgraphRemoveChildScenario()
 getInputValueExplicitReaderScenario()
 getInputValueDupPruneAndNonRuleScenarios()
 currentAttributeWasModifiedInvalidateScenario()
