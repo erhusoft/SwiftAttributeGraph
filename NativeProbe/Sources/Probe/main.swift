@@ -407,7 +407,7 @@ final class Driver {
 
     func compareValues103<T>(_ a: T, _ b: T) -> Bool? {
         let g = Graph()
-        let attr = g.makeInput(a, comparison: .equatableAlways)
+        let attr = g.makeInput(a, comparison: .comparison(.equatableAlways))
         var runs = 0
         let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
         _ = g.value(of: r)
@@ -418,7 +418,7 @@ final class Driver {
 
     func compareValues102<T>(_ a: T, _ b: T) -> Bool? {
         let g = Graph()
-        let attr = g.makeInput(a, comparison: .equatableUnlessPOD)
+        let attr = g.makeInput(a, comparison: .comparison(.equatableUnlessPOD))
         var runs = 0
         let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
         _ = g.value(of: r)
@@ -429,7 +429,7 @@ final class Driver {
 
     func compareValues302<T>(_ a: T, _ b: T) -> Bool {
         let g = Graph()
-        let attr = g.makeInput(a, comparison: .equatableUnlessPOD)
+        let attr = g.makeInput(a, comparison: .comparison(.equatableUnlessPOD))
         var runs = 0
         let r = g.makeRule { runs += 1; _ = g.value(of: attr); return runs }
         _ = g.value(of: r)

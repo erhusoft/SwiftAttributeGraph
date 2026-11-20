@@ -32,7 +32,7 @@ extension Graph {
     /// Changes to `root` that leave `root[keyPath: keyPath]` equal under `comparison` do not raise the projected
     /// attribute's version, cutting downstream dependents.
     public func makeFocus<Root, Value>(_ root: Attribute<Root>, keyPath: KeyPath<Root, Value>,
-                                       comparison: Comparison = .viewValue) -> Attribute<Value> {
+                                       comparison: ValuePolicy = .viewValue) -> Attribute<Value> {
         assertOwnThread()
         precondition(table.isLive(root.id), "makeFocus: the root attribute is dead")
         return makeRule(Focus(root: root, keyPath: keyPath), comparison: comparison)

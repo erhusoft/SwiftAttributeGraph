@@ -192,7 +192,7 @@ import Testing
 
     /// One million writes of a value that alternates between two values (so each write is a change), per policy. A
     /// policy costs a function call and, for the plan, a walk over its operations.
-    private static func writes<V>(_ name: String, _ a: V, _ b: V, policies: [(String, Comparison)]) {
+    private static func writes<V>(_ name: String, _ a: V, _ b: V, policies: [(String, ValuePolicy)]) {
         for (label, policy) in policies {
             let ms = median(runs: 5) {
                 let graph = Graph()
@@ -205,7 +205,7 @@ import Testing
     }
 
     @Test func writesUnderEachPolicy() {
-        let all: [(String, Comparison)] = [("bits", .bits), ("viewValue", .viewValue), ("environment", .environment), ("stateWrite", .stateWrite)]
+        let all: [(String, ValuePolicy)] = [("bits", .bits), ("viewValue", .viewValue), ("environment", .environment), ("stateWrite", .stateWrite)]
         Self.writes("Int", 1, 2, policies: all)
         Self.writes("Double", 1.0, 2.0, policies: all)
         Self.writes("String short", "abc", "abd", policies: all)
@@ -217,7 +217,7 @@ import Testing
 
     /// The same writes where the value does not change (the common case: nothing to do).
     @Test func unchangedWritesUnderEachPolicy() {
-        for (label, policy) in [("bits", Comparison.bits), ("viewValue", .viewValue), ("stateWrite", .stateWrite)] {
+        for (label, policy) in [("bits", ValuePolicy.bits), ("viewValue", .viewValue), ("stateWrite", .stateWrite)] {
             let long = String(repeating: "abcdefghij", count: 5)
             let ms = Self.median(runs: 5) {
                 let graph = Graph()

@@ -71,7 +71,7 @@ import Testing
         #expect(arrayRuns(comparison: .bits) == (2, 1))
     }
 
-    private func arrayRuns(comparison: Comparison) -> (Int, Int) {
+    private func arrayRuns(comparison: ValuePolicy) -> (Int, Int) {
         let graph = Graph()
         let tick = graph.makeInput(0)
         let stored = [Int](repeating: 7, count: 16)

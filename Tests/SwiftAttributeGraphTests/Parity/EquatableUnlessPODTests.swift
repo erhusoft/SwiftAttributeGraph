@@ -15,7 +15,7 @@ import Testing
     /// `true` when the two values compare equal under the policy (the version does not rise).
     private func equal<V>(_ a: V, _ b: V) -> Bool {
         let graph = Graph()
-        let attribute = graph.makeInput(a, comparison: .equatableUnlessPOD)
+        let attribute = graph.makeInput(a, comparison: .comparison(.equatableUnlessPOD))
         let before = graph.version(of: attribute.id)
         graph.setValue(b, for: attribute)
         return graph.version(of: attribute.id) == before

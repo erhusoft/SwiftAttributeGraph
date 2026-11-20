@@ -31,7 +31,7 @@ extension Graph {
     ///
     /// Changes to `arg` whose transformed result remains equal under `comparison` do not raise the mapped attribute's
     /// version, cutting downstream dependents.
-    public func makeMap<Source, Value>(_ arg: Attribute<Source>, comparison: Comparison = .viewValue,
+    public func makeMap<Source, Value>(_ arg: Attribute<Source>, comparison: ValuePolicy = .viewValue,
                                        _ body: @escaping (Source) -> Value) -> Attribute<Value> {
         assertOwnThread()
         precondition(table.isLive(arg.id), "makeMap: the source attribute is dead")

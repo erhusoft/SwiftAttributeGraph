@@ -62,13 +62,13 @@ import Testing
             let graph = self.graph
             global = graph.makeSubgraph(parent: graph.rootSubgraph)
             let made = HostPatternTests.inScope(graph, global) {
-                (graph.makeInput(0), graph.makeInput(Env(), comparison: .equatableUnlessPOD), graph.makeInput(0),
+                (graph.makeInput(0), graph.makeInput(Env(), comparison: .comparison(.equatableUnlessPOD)), graph.makeInput(0),
                  graph.makeInput(0), graph.makeInput(0), graph.makeInput(0), graph.makeInput(0))
             }
             (time, environment, transaction, viewSeed, propertySeed, preferenceSeed, size) = made
             let (t, e, x, s) = (made.0, made.1, made.2, made.3)
             output = HostPatternTests.inScope(graph, global) {
-                graph.makeRule({ "t\(t.value)s\(e.value.scale)x\(x.value)v\(s.value)" }, comparison: .equatableUnlessPOD)
+                graph.makeRule({ "t\(t.value)s\(e.value.scale)x\(x.value)v\(s.value)" }, comparison: .comparison(.equatableUnlessPOD))
             }
             let calls = self.calls
             graph.setUpdateCallback { calls.n += 1 }
@@ -126,7 +126,7 @@ import Testing
     @Test func environmentReadersRerunTheirRuleButOnlyTheBodyOfTheKeyThatChangedCutsDownstream() {
         let graph = Graph()
         let scope = graph.makeSubgraph(parent: graph.rootSubgraph)
-        let env = HostPatternTests.inScope(graph, scope) { graph.makeInput(Env(), comparison: .equatableUnlessPOD) }
+        let env = HostPatternTests.inScope(graph, scope) { graph.makeInput(Env(), comparison: .comparison(.equatableUnlessPOD)) }
 
         final class Counts { var rule = 0, body = 0, consumer = 0 }
         final class Memo<K> { var last: K?; var cached = 0 }
@@ -143,13 +143,13 @@ import Testing
                     memo.last = used
                     memo.cached = transform(used)
                     return memo.cached
-                }, comparison: .equatableUnlessPOD)
+                }, comparison: .comparison(.equatableUnlessPOD))
                 return output
             }
         }
         func consumer(_ source: Attribute<Int>, _ counts: Counts) -> Attribute<Int> {
             HostPatternTests.inScope(graph, scope) {
-                graph.makeRule({ counts.consumer += 1; return source.value + 1 }, comparison: .equatableUnlessPOD)
+                graph.makeRule({ counts.consumer += 1; return source.value + 1 }, comparison: .comparison(.equatableUnlessPOD))
             }
         }
 
@@ -276,7 +276,7 @@ import Testing
         }
         let runs = Counter()
         let combiner = HostPatternTests.inScope(graph, parent) {
-            graph.makeRule(Combiner(children: weaks, runs: runs, order: nil), comparison: .equatableUnlessPOD)
+            graph.makeRule(Combiner(children: weaks, runs: runs, order: nil), comparison: .comparison(.equatableUnlessPOD))
         }
         #expect(graph.value(of: combiner) == [10, 20, 30])
         #expect(runs.n == 1)
@@ -294,7 +294,7 @@ import Testing
 
         // Even without removing the dead weak, an explicit invalidation recomputes it in order, skipping the nil.
         let stale = HostPatternTests.inScope(graph, parent) {
-            graph.makeRule(Combiner(children: weaks, runs: runs, order: nil), comparison: .equatableUnlessPOD)
+            graph.makeRule(Combiner(children: weaks, runs: runs, order: nil), comparison: .comparison(.equatableUnlessPOD))
         }
         #expect(graph.value(of: stale) == [10, 30])
 
@@ -314,12 +314,12 @@ import Testing
         let scope = graph.makeSubgraph(parent: graph.rootSubgraph)
         let seeds = Counter(), layoutBuilds = Counter()
         let (position, container, view, unrelated) = HostPatternTests.inScope(graph, scope) {
-            (graph.makeInput(Point(), comparison: .equatableUnlessPOD), graph.makeInput(Point(), comparison: .equatableUnlessPOD),
+            (graph.makeInput(Point(), comparison: .comparison(.equatableUnlessPOD)), graph.makeInput(Point(), comparison: .comparison(.equatableUnlessPOD)),
              graph.makeInput(1), graph.makeInput(0))
         }
         // The LayoutComputer: a stateful rule that makes a new object only when the view changes; compared by identity.
         let layout = HostPatternTests.inScope(graph, scope) {
-            graph.makeStatefulRule(comparison: .equatableUnlessPOD) { (ctx: inout RuleContext<LayoutComputer>) in
+            graph.makeStatefulRule(comparison: .comparison(.equatableUnlessPOD)) { (ctx: inout RuleContext<LayoutComputer>) in
                 _ = unrelated.value                                   // reruns when the unrelated input changes
                 let (v, changed) = ctx.changedValue(of: view)
                 if changed || !ctx.hasValue {
@@ -335,7 +335,7 @@ import Testing
         // created after the layout rule so that its edge is appended at the end (the correct branch).
         let size = HostPatternTests.inScope(graph, scope) { graph.makeInput(100) }
         let item = HostPatternTests.inScope(graph, scope) {
-            graph.makeStatefulRule(comparison: .equatableUnlessPOD) { (ctx: inout RuleContext<Item>) in
+            graph.makeStatefulRule(comparison: .comparison(.equatableUnlessPOD)) { (ctx: inout RuleContext<Item>) in
                 let p = position.value
                 _ = container.value
                 let l = layout.value

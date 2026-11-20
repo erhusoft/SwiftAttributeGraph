@@ -172,7 +172,7 @@ import Testing
     }
 
     @Test func theWrittenValuePassesThroughTheComparisonPolicy() {
-        for (policy, expectedChange) in [(Comparison.stateWrite, false), (.viewValue, true)] {
+        for (policy, expectedChange) in [(ValuePolicy.stateWrite, false), (.viewValue, true)] {
             let graph = Graph()
             let input = graph.makeInput(0.0)
             let rule = graph.makeStatefulRule(initialValue: 0.0, comparison: policy) { (c: inout RuleContext<Double>) in

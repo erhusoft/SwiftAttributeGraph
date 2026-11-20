@@ -1,4 +1,4 @@
-/// Resolves a ``Comparison`` policy into a function for one value type. Called once per attribute, when it is created;
+/// Resolves a ``ValuePolicy`` policy into a function for one value type. Called once per attribute, when it is created;
 /// writing a value only calls the function that came out of here.
 enum ValueComparator {
     /// The comparators already resolved by one graph, one per (value type, policy), each in the ``NodeType`` that the
@@ -7,7 +7,7 @@ enum ValueComparator {
     struct Cache {
         private struct Key: Hashable {
             let type: ObjectIdentifier
-            let policy: Comparison
+            let policy: ValuePolicy
         }
         private var types: [Key: AnyObject] = [:]
         /// The last descriptor handed out and its key. Graphs create long runs of attributes of one type, and hashing
@@ -16,7 +16,7 @@ enum ValueComparator {
         private var lastType: AnyObject?
 
         /// The node descriptor of `Value` under `policy`, created on first use.
-        mutating func nodeType<Value>(_ policy: Comparison, for type: Value.Type) -> NodeType<Value> {
+        mutating func nodeType<Value>(_ policy: ValuePolicy, for type: Value.Type) -> NodeType<Value> {
             let key = Key(type: ObjectIdentifier(Value.self), policy: policy)
             if key == lastKey, let last = lastType { return unsafeDowncast(last, to: NodeType<Value>.self) }
             let found: AnyObject
@@ -32,17 +32,17 @@ enum ValueComparator {
         }
     }
 
-    static func make<Value>(_ policy: Comparison, for type: Value.Type) -> (Value, Value) -> Bool {
+    static func make<Value>(_ policy: ValuePolicy, for type: Value.Type) -> (Value, Value) -> Bool {
         switch policy {
         case .alwaysDifferent:
             return { _, _ in false }
         case .bits:
             return { bitwiseEqual($0, $1) }
-        case .equatableUnlessPOD:
+        case .comparison(.equatableUnlessPOD):
             if TypeLayout.isPOD(Value.self) { return planned(Value.self, mode: .view) }
             if let equal = equatableComparator(Value.self) { return equal }
             return { bitwiseEqual($0, $1) }
-        case .equatableAlways:
+        case .comparison(.equatableAlways):
             if let equal = equatableComparator(Value.self) { return equal }
             return { bitwiseEqual($0, $1) }
         case .viewValue:

@@ -404,7 +404,7 @@ public final class Graph {
     ///
     /// `@inlinable` so the node is built in the caller's specialization, with static types (see the closure form of `makeRule`).
     @inlinable
-    public func makeInput<Value>(_ value: Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
+    public func makeInput<Value>(_ value: Value, comparison: ValuePolicy = .viewValue) -> Attribute<Value> {
         assertOwnThread()
         let node = InputNode(value: value, type: nodeType(comparison, for: Value.self))
         return Attribute(id: allocateInput(node))
@@ -412,7 +412,7 @@ public final class Graph {
 
     /// What the nodes of `Value` under `comparison` share, resolved once per type by the graph's cache.
     @usableFromInline
-    func nodeType<Value>(_ comparison: Comparison, for type: Value.Type) -> NodeType<Value> {
+    func nodeType<Value>(_ comparison: ValuePolicy, for type: Value.Type) -> NodeType<Value> {
         comparators.nodeType(comparison, for: Value.self)
     }
 
@@ -609,7 +609,7 @@ public final class Graph {
     }
 
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
-    public func makeRule<R: Rule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
+    public func makeRule<R: Rule>(_ rule: R, comparison: ValuePolicy = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()
         let id = allocate(TypeRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self)),
                          state: NodeState.isRule | NodeState.dirty)
@@ -622,7 +622,7 @@ public final class Graph {
     /// specialization: compiled once here, generic, they asked the runtime for type metadata on every rule created and
     /// on every run (13 % of the `fan-out` profile) [O].
     @inlinable
-    public func makeRule<Value>(_ body: @escaping () -> Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
+    public func makeRule<Value>(_ body: @escaping () -> Value, comparison: ValuePolicy = .viewValue) -> Attribute<Value> {
         assertOwnThread()
         let type = nodeType(comparison, for: Value.self)
         if type.runClosureRule == nil {
@@ -636,7 +636,7 @@ public final class Graph {
     }
 
     /// Creates a stateful rule from a type that conforms to ``StatefulRule``, in the current subgraph.
-    public func makeStatefulRule<R: StatefulRule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
+    public func makeStatefulRule<R: StatefulRule>(_ rule: R, comparison: ValuePolicy = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()
         let id = allocate(StatefulRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self)),
                           state: NodeState.isRule | NodeState.dirty | NodeState.stateful)
@@ -644,7 +644,7 @@ public final class Graph {
     }
 
     /// Creates a stateful rule from a closure, in the current subgraph. `initialValue` is the value before the first run.
-    public func makeStatefulRule<Value>(initialValue: Value? = nil, comparison: Comparison = .viewValue,
+    public func makeStatefulRule<Value>(initialValue: Value? = nil, comparison: ValuePolicy = .viewValue,
                                         _ body: @escaping (inout RuleContext<Value>) -> Void) -> Attribute<Value> {
         assertOwnThread()
         let id = allocate(ClosureStatefulRuleNode(initialValue: initialValue, body: body,

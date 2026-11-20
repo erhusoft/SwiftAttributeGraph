@@ -32,7 +32,7 @@ import Foundation
     private enum PayloadDouble { case a(Double), b(Int) }
 
     /// Whether writing `b` over `a` raises the version under `policy`.
-    private func changes<V>(_ policy: Comparison, _ a: V, _ b: V) -> Bool {
+    private func changes<V>(_ policy: ValuePolicy, _ a: V, _ b: V) -> Bool {
         let graph = Graph()
         let attribute = graph.makeInput(a, comparison: policy)
         let before = graph.version(of: attribute.id)
@@ -195,15 +195,15 @@ import Foundation
         var p2 = PaddedPOD(a: 1, b: 2)
         withUnsafeMutableBytes(of: &p1) { $0[1] = 0xAA }
         withUnsafeMutableBytes(of: &p2) { $0[1] = 0x55 }
-        #expect(!changes(.equatableUnlessPOD, p1, p2))
+        #expect(!changes(.comparison(.equatableUnlessPOD), p1, p2))
 
         let p3 = PaddedPOD(a: 1, b: 3)
-        #expect(changes(.equatableUnlessPOD, p1, p3))
+        #expect(changes(.comparison(.equatableUnlessPOD), p1, p3))
 
         var n1 = NestedPOD(head: 7, inner: p1)
         var n2 = NestedPOD(head: 7, inner: p2)
         withUnsafeMutableBytes(of: &n1) { $0[1] = 0x11 }
         withUnsafeMutableBytes(of: &n2) { $0[1] = 0x22 }
-        #expect(!changes(.equatableUnlessPOD, n1, n2))
+        #expect(!changes(.comparison(.equatableUnlessPOD), n1, n2))
     }
 }

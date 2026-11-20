@@ -10,7 +10,7 @@ extension Graph {
     /// Other rule APIs keep their existing behavior. Only a chain whose dirty dynamic reads use resumable rules
     /// avoids native recursion throughout; a legacy synchronous dependency still has its documented depth limit.
     public func makeResumableRule<R: ResumableRule>(_ rule: R,
-                                                  comparison: Comparison = .viewValue) -> Attribute<R.Value> {
+                                                  comparison: ValuePolicy = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()
         let box = ResumableRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self))
         let id = allocate(box, state: NodeState.isRule | NodeState.dirty | NodeState.stateful | NodeState.resumable)

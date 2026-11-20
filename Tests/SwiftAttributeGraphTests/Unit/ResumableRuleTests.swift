@@ -115,7 +115,7 @@ import Testing
     }
 
     @Test func comparisonPoliciesApplyToInitialAndSubsequentWrites() {
-        for (policy, changes) in [(Comparison.stateWrite, false), (.viewValue, true),
+        for (policy, changes) in [(ValuePolicy.stateWrite, false), (.viewValue, true),
                                   (.environment, false), (.bits, true), (.alwaysDifferent, true)] {
             let graph = Graph()
             let source = graph.makeInput(0.0)
@@ -126,7 +126,7 @@ import Testing
             _ = graph.value(of: result)
             #expect((graph.version(of: result.id) != version) == changes)
         }
-        for (policy, changes) in [(Comparison.stateWrite, true), (.viewValue, false),
+        for (policy, changes) in [(ValuePolicy.stateWrite, true), (.viewValue, false),
                                   (.environment, false), (.bits, false), (.alwaysDifferent, true)] {
             let graph = Graph()
             let source = graph.makeInput(Double.nan, comparison: .alwaysDifferent)
