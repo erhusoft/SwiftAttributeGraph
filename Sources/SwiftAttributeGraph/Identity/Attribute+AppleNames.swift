@@ -21,3 +21,15 @@ extension Attribute {
         }
     }
 }
+
+/// Apple's offset attribute `AGAttribute.create(self:offset:size:)`, on the handle [O, native headers AGAttribute.h].
+/// It resolves the owning graph from the tag and delegates to `Graph.makeOffsetIndirect(of:offset:size:)`.
+extension Attribute where Value: BitwiseCopyable {
+    /// An indirect attribute that depends on the bytes `[offset, offset + size)` of this attribute only.
+    public func create(offset: Int, size: Int) -> Attribute<Value> {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("create(offset:size:) after the graph was released")
+        }
+        return graph.makeOffsetIndirect(of: self, offset: offset, size: size)
+    }
+}
