@@ -28,7 +28,9 @@ private final class BenchDriver {
     func write<V>(_ value: V, to attr: Attribute<V>) { attr.value = value }
 
     func offset<V: BitwiseCopyable, F: BitwiseCopyable>(_ source: Attribute<V>, keyPath: KeyPath<V, F>) -> Attribute<F> {
-        source.unsafeOffset(at: MemoryLayout<V>.offset(of: keyPath)!, as: F.self)
+        rootSubgraph.apply {
+            source.unsafeOffset(at: MemoryLayout<V>.offset(of: keyPath)!, as: F.self)
+        }
     }
 
     func weak<V>(_ attr: Attribute<V>) -> WeakAttribute<V> { WeakAttribute(attr) }
