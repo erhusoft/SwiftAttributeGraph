@@ -108,6 +108,19 @@ SCENARIOS = [
     "shared-context-subgraphs",
     "shared-context-input-read",
     "cold-chain-depth",
+    "write-in-rule-invalidate-value-without-update",
+    "write-in-rule-mutate-body-invalidating",
+    "is-dirty-dirtied-during-update-b-first",
+    "is-dirty-dirtied-during-update-b-last",
+    "is-dirty-invalidated-subgraph-with-marks",
+    "is-dirty-flags-before-and-after-read",
+    "is-dirty-child-versus-parent-update",
+    "is-dirty-write-then-read",
+    "is-dirty-invalidate-value-then-read",
+    "is-dirty-same-and-different-value",
+    "is-dirty-partial-and-full-update",
+    "is-dirty-flags-changed-while-dirty",
+    "is-dirty-descendant-subgraph",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

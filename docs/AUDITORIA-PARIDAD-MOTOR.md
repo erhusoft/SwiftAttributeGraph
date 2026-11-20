@@ -1,6 +1,6 @@
 ## Estado al 2026-11-19
 
-- **Escenarios medidos contra Apple (`NativeProbe/run.py`):** **119** trazas directas coinciden en las 6 pasadas (`debug` 1..3 y `release` 1..3, `EXIT=0`).
+- **Escenarios medidos contra Apple (`NativeProbe/run.py`):** **132** trazas directas coinciden en las 6 pasadas (`debug` 1..3 y `release` 1..3, `EXIT=0`).
 - **Cobertura SwiftUICore (`SWIFTUICORE_CRUCE_CORE_MOTOR_V2.md`):** de **116** funciones importadas de `AttributeGraph` (**66** aplican al motor), quedan cerradas además `GetCounter`, `GetAttributeGraph`, `SubgraphGetCurrent`, `GetCurrentAttribute` y `CurrentAttributeWasModified`.
 - **Referencia de rendimiento actual:** `633e3de` / `7991c61` (sustituye a `678abb0`).
 - **Nota `[?]`:** las 41 pruebas de `AGProbeParityTests` se marcan como `[?]` (origen no verificado en esta tanda).
@@ -9,8 +9,8 @@
 # Auditoría de Paridad del Motor (`SwiftAttributeGraph` vs `AttributeGraph.framework`)
 
 - **Rama auditada:** `codex/native-adaptations-integration` en `/Users/erhusoft/NativeAttributeGraphBackendProbe/sag_integration_worktree`
-- **Oráculo vivo:** `NativeProbe/run.py` (**119/119** escenarios coinciden en `debug` y `release` (3 repeticiones por configuración, debug y release)).
-- **Nota sobre `AGProbeParityTests`:** Los 41 tests iniciales introducidos en `109b947` (`test(Parity): add 41 AGProbe parity scenarios against Apple AttributeGraph`) no conservan en el repositorio el binario o registro nativo original que los generó (`[?]`); en cambio, los escenarios `oracle1..oracle12` y las **119 trazas** de `NativeProbe` (`fab8eda`, `68e6eb3` y posteriores) sí se ejecutan directamente contra `AttributeGraph.framework` mediante `NativeProbe/run.py`.
+- **Oráculo vivo:** `NativeProbe/run.py` (**132/132** escenarios coinciden en `debug` y `release` (3 repeticiones por configuración, debug y release)).
+- **Nota sobre `AGProbeParityTests`:** Los 41 tests iniciales introducidos en `109b947` (`test(Parity): add 41 AGProbe parity scenarios against Apple AttributeGraph`) no conservan en el repositorio el binario o registro nativo original que los generó (`[?]`); en cambio, los escenarios `oracle1..oracle12` y las **132 trazas** de `NativeProbe` (`fab8eda`, `68e6eb3` y posteriores) sí se ejecutan directamente contra `AttributeGraph.framework` mediante `NativeProbe/run.py`.
 
 ## Matriz de Paridad
 
@@ -131,9 +131,13 @@
   - Nativo y propio coinciden al evaluar tras cambio de entrada (`false`), `invalidateValue` propio (`true`), segunda evaluación sin invalidar (`false`) e `invalidateValue` de otra regla (`true` en la invalidada, `false` en la lectora).
 - **`subgraph-add-child-owner` (`[O]`, `119/119` trazas coinciden en `debug` y `release`):**
   - Regla medida: un subgrafo con múltiples padres añadidos vía `addChild`/`addChild2` (`tag: 0` o `tag: 1`) muere en cuanto se invalida **cualquiera** de sus padres vivos; `Subgraph(graph:)` sin `parent:` no hereda `Subgraph.current` como padre; duplicar `addChild2` con el mismo padre aborta (`exit 134`).
+- **Escrituras durante la evaluación de una regla (`[O]`, 132/132, rehecho de `c87bef5`):**
+  - `invalidateValue` desde una regla que registra lecturas aborta en nativo (exit 134, sin mensaje en stderr) y en el propio (`precondition` «setting value during update», exit 133); sonda aislada `native-scratch/redo` (`Probe write-in-rule-invalidate-value`), fuera de `SCENARIOS`. Dentro de `withoutUpdate` se acepta: `write-in-rule-invalidate-value-without-update`. `mutateBody(invalidating: true)` desde una regla se acepta y el lector en pila queda sucio (`NodeState.staysDirty`, `1 << 12`): `write-in-rule-mutate-body-invalidating`.
+  - Diferencia `[O]` no corregida: si el objetivo no tiene lectores (ninguna regla lo lee), nativo acepta la invalidación directa dentro de una regla y el propio aborta.
+- **`isDirty(flags:)` acumulado (`[O]`, rehecho de `13155a7`):** `update(flags:)` repite el recorrido hasta que una pasada no actualiza nada y limpia las marcas al final; 11 trazas `is-dirty-*` coinciden con nativo. Las marcas extra en recálculos de indirectos no hicieron falta (ninguna traza las exigió) `[?]`.
 
 
-## Mapa de escenarios (`NativeProbe/run.py`, 119)
+## Mapa de escenarios (`NativeProbe/run.py`, 132)
 
 | Escenario | Mecanismo | Mención en matriz |
 |---|---|---|
@@ -256,3 +260,16 @@
 | `shared-context-subgraphs` | Subgrafos | sí |
 | `shared-context-input-read` | Contexto, contadores y lecturas | sí |
 | `cold-chain-depth` | Profundidad | sí |
+| `write-in-rule-invalidate-value-without-update` | Escrituras en reglas | sí |
+| `write-in-rule-mutate-body-invalidating` | Escrituras en reglas | sí |
+| `is-dirty-dirtied-during-update-b-first` | Subgrafos | sí |
+| `is-dirty-dirtied-during-update-b-last` | Subgrafos | sí |
+| `is-dirty-invalidated-subgraph-with-marks` | Subgrafos | sí |
+| `is-dirty-flags-before-and-after-read` | Subgrafos | sí |
+| `is-dirty-child-versus-parent-update` | Subgrafos | sí |
+| `is-dirty-write-then-read` | Subgrafos | sí |
+| `is-dirty-invalidate-value-then-read` | Subgrafos | sí |
+| `is-dirty-same-and-different-value` | Subgrafos | sí |
+| `is-dirty-partial-and-full-update` | Subgrafos | sí |
+| `is-dirty-flags-changed-while-dirty` | Subgrafos | sí |
+| `is-dirty-descendant-subgraph` | Subgrafos | sí |

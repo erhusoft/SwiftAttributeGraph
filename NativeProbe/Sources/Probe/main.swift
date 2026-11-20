@@ -585,6 +585,8 @@ func ownedLifetime() {
 }
 
 runCreateAndClosureScenariosIfRequested()
+runIsolatedScenarioIfRequested()
+runIsDirtyScenariosIfRequested()
 dynamicDependencies()
 equalityCut()
 coalescedWrites()
@@ -685,3 +687,6 @@ sharedContextSubgraphs()
 sharedContextUpdateCallbackInputRead()
 // clearSetUpdateOutsideRule() // differs: native tokenNonNil=false, own tokenNonNil=true
 coldChainDepth()
+writeInRuleInvalidateValueWithoutUpdate()
+writeInRuleMutateBodyInvalidating()
+for (_, run) in isDirtyScenarios { run() }
