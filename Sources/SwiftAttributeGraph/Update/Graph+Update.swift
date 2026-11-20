@@ -50,21 +50,87 @@ extension Graph {
     /// The value of an attribute, bringing it up to date first if it is dirty.
     ///
     /// Inside a rule the read is recorded as a dependency of that rule.
+    ///
+    /// The generic part is inlined into the caller so it is specialized for `Value`: the rest of the read is the
+    /// non-generic ``beginRead(_:)`` (see there for why).
+    @inlinable
     public func value<Value>(of attribute: Attribute<Value>) -> Value {
+        guard let box = beginRead(attribute.id) else { return readIndirect(attribute) }
+        return finishRead(box, as: Value.self)
+    }
+
+    /// Everything ``value(of:)`` does before taking the value out of the node, for a node that is not indirect:
+    /// returns its box, or `nil` (having done nothing) when the attribute is indirect.
+    ///
+    /// A fully generic `value(of:)` compiled once in this module paid, on every read, for instantiating the metadata of
+    /// `TypedNode<Value>` and `Optional<Value>`, stack probes for their dynamic allocas and value-witness copies: 40 % of
+    /// the `batch-writes` profile [O]. Keeping the generic part tiny and `@inlinable` lets the caller's specialization
+    /// do it with static types.
+    @usableFromInline
+    func beginRead(_ id: AttributeID) -> NodeBox? {
         assertOwnThread()
         if let running = ThreadLocalGraph.current() {
             precondition(running === self, "a rule cannot read an attribute of another graph")
         }
-        // Native drains the update callbacks only when a rule is read, never an input [O]. An indirect attribute counts
-        // as the rule (or input) it resolves to, as `clearNeedsUpdateFlags` does.
-        // The resolution is only needed when a callback could fire, so the common read pays nothing for it
-        // (an extra `resolveIndirect` per read cost +15 % on the 20,000-indirect benchmark, measured since 5466663).
+        if table.isLive(id), table.state[Int(id.index)] & NodeState.indirect != 0 { return nil }
+        // Native drains the update callbacks only when a rule is read, never an input [O].
+        if hasPendingUpdateCallback, table.isLive(id), table.state[Int(id.index)] & NodeState.isRule != 0 {
+            flushUpdateCallbackIfReady()
+        }
+        return beginRuleRead(id)
+    }
+
+    /// The generic slow path of ``value(of:)`` for an indirect attribute (or a dead one, which stops the program).
+    @usableFromInline
+    func readIndirect<Value>(_ attribute: Attribute<Value>) -> Value {
+        // An indirect attribute counts as the rule (or input) it resolves to, as `clearNeedsUpdateFlags` does. The
+        // resolution is only needed when a callback could fire, so the common read pays nothing for it (an extra
+        // `resolveIndirect` per read cost +15 % on the 20,000-indirect benchmark, measured since 5466663).
         if hasPendingUpdateCallback, table.isLive(attribute.id) {
             let node = table.state[Int(attribute.id.index)] & NodeState.indirect != 0
                 ? resolveIndirect(attribute).id.index : attribute.id.index
             if table.state[Int(node)] & NodeState.isRule != 0 { flushUpdateCallbackIfReady() }
         }
         return read(attribute)
+    }
+
+    /// The non-indirect part of ``read(_:)``: brings the node up to date, records the read and returns its box. The
+    /// caller takes the value out and then calls ``endRead()``.
+    @usableFromInline
+    func beginRuleRead(_ id: AttributeID) -> NodeBox? {
+        precondition(table.isLive(id), "reading a dead attribute (its subgraph was invalidated)")
+        let index = id.index
+        let n = Int(index)
+        if table.state[n] & NodeState.indirect != 0 { return nil }
+        if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1; if needsUpdateFlag { clearNeedsUpdateFlags() } }
+        if table.state[n] & NodeState.dirty != 0 {
+            precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
+            update(index)
+        }
+        if evaluatingNode != Graph.noNode { recordRead(of: index) }
+        return table.box(at: index)
+    }
+
+    /// Takes the value out of the box that ``beginRead(_:)`` or ``beginRuleRead(_:)`` returned and ends the read.
+    @inlinable
+    @inline(__always)
+    func finishRead<Value>(_ box: NodeBox, as type: Value.Type) -> Value {
+        #if DEBUG && !SAG_UNCHECKED
+        guard let node = box as? TypedNode<Value> else {
+            preconditionFailure("the attribute does not hold a value of type \(Value.self)")
+        }
+        #else
+        let node = unsafeDowncast(box, to: TypedNode<Value>.self)
+        #endif
+        let value = node.value.unsafelyUnwrapped
+        endRead()
+        return value
+    }
+
+    /// Runs the subgraph invalidations deferred during the read once no rule is running.
+    @usableFromInline
+    func endRead() {
+        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
     }
 
     /// Options for ``value(of:options:)`` (the `options` argument of `AGGraphGetValue` in native AttributeGraph).
@@ -102,6 +168,7 @@ extension Graph {
     /// The read itself, for callers that already know the running graph is this one (`Attribute.value` found it in
     /// the thread-local slot, so it skips the second lookup).
     @inline(__always)
+    @usableFromInline
     func read<Value>(_ attribute: Attribute<Value>) -> Value {
         precondition(table.isLive(attribute.id), "reading a dead attribute (its subgraph was invalidated)")
         let index = attribute.id.index
@@ -139,15 +206,7 @@ extension Graph {
             return value
         }
 
-        if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1; if needsUpdateFlag { clearNeedsUpdateFlags() } }
-        if table.state[n] & NodeState.dirty != 0 {
-            precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
-            update(index)
-        }
-        if evaluatingNode != Graph.noNode { recordRead(of: index) }
-        let value = typedNode(attribute).value.unsafelyUnwrapped
-        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
-        return value
+        return finishRead(beginRuleRead(attribute.id).unsafelyUnwrapped, as: Value.self)
     }
 
     /// Runs `body` without recording dependency edges on the currently evaluating rule (`Graph.withoutUpdate` in

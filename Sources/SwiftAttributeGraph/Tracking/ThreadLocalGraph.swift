@@ -70,9 +70,11 @@ func currentThreadToken() -> UInt64 {
 #endif
 
 /// The graph whose rule is running on this thread, if any.
+@usableFromInline
 enum ThreadLocalGraph {
     /// The graph that is evaluating a rule on this thread, or `nil` outside a rule.
     @inline(__always)
+    @usableFromInline
     static func current() -> Graph? {
         guard let pointer = rawGet() else { return nil }
         return Unmanaged<Graph>.fromOpaque(pointer).takeUnretainedValue()

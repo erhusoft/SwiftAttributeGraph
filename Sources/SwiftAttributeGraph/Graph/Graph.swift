@@ -634,10 +634,12 @@ extension Attribute {
     ///
     /// Reading inside a rule records a dependency. Outside a rule there is no current graph: use
     /// ``Graph/value(of:)``.
+    @inlinable
     public var value: Value {
         guard let graph = ThreadLocalGraph.current() else {
             preconditionFailure("Attribute.value can only be read inside a rule; use Graph.value(of:) elsewhere")
         }
-        return graph.read(self)
+        guard let box = graph.beginRuleRead(id) else { return graph.read(self) }
+        return graph.finishRead(box, as: Value.self)
     }
 }
