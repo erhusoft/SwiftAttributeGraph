@@ -426,7 +426,7 @@ extension Graph {
             return
         }
 
-        let oldValue = typedNode(attribute).value
+        let oldValue = hasPartialEdgeComparison ? typedNode(attribute).value : nil
         guard typedNode(attribute).store(value) else { return }
         globalVersion &+= 1
         changeCount &+= 1

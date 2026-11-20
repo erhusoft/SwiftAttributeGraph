@@ -38,7 +38,13 @@ extension Graph {
         !offsetIndirects.isEmpty && (offsetIndirects[node] != nil || indirectsWithOffsetInChain.contains(node))
     }
 
+    /// Whether some edge of the graph is compared partially (a typed edge comparator or an offset attribute). When not,
+    /// writes skip the partial-compare pass and the old value is not even boxed.
+    var hasPartialEdgeComparison: Bool { !edgeComparators.isEmpty || !offsetIndirects.isEmpty }
+
     func evaluateEdgeComparators(for source: UInt32, oldValue: Any, newValue: Any) {
+        // With no comparator and no offset attribute every step below finds nothing to compare: skip the walk.
+        guard hasPartialEdgeComparison else { return }
         var queue: [(node: UInt32, range: (offset: Int, size: Int)?)] = [(source, offsetIndirects[source])]
         var visited: Set<UInt32> = [source]
         var newlySticky: [UInt32] = []
