@@ -94,6 +94,7 @@ SCENARIOS = [
     "subgraph-remove-child-then-update",
     "map-cut-and-change",
     "subgraph-dynamic-reorder",
+    "set-flags-bit3-and-mask",
     "get-input-value-explicit-reader",
     "get-input-value-dup-prune",
     "get-input-value-non-rule-reader",

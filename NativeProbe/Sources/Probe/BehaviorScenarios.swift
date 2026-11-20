@@ -2786,3 +2786,30 @@ func subgraphDynamicReorderScenario() {
     let afterInvalidate = children.map { graph.isValid($0) }
     print("subgraph-dynamic-reorder|before=\(before)|afterRemove=\(afterRemove)|afterReinsert=\(afterReinsert)|afterInvalidate=\(afterInvalidate)")
 }
+
+func setFlagsBit3AndMaskScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let root = d.scope
+    let sub = d.makeSubgraph()
+    var order: [String] = []
+    func makeFlagged(_ name: String, _ flag: UInt8) -> Handle<Int> {
+        d.withSubgraph(sub) {
+            let r = d.rule { order.append(name); return 1 }
+            d.setFlags(flag, for: r)
+            return r
+        }
+    }
+    _ = makeFlagged("b3", 8)
+    _ = makeFlagged("b0b1", 3)
+    _ = makeFlagged("b1", 2)
+    _ = root
+    let count8 = d.countMatching(sub, flags: 8)
+    let count3 = d.countMatching(sub, flags: 3)
+    let countFF = d.countMatching(sub, flags: 0xFF)
+    d.invalidate(sub)
+    let dirty8 = d.isDirty(sub, flags: 8)
+    let dirty2 = d.isDirty(sub, flags: 2)
+    d.update(sub, flags: 8)
+    print("set-flags-bit3-and-mask|count8=\(count8)|count3=\(count3)|countAll=\(countFF)|dirty8=\(dirty8)|dirty2=\(dirty2)|order=\(order)")
+}
