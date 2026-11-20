@@ -2746,3 +2746,28 @@ func subgraphRemoveChildThenUpdateScenario() {
     let parentDirty = graph.isDirty(parent, flags: 0xFF)
     print("subgraph-remove-child-then-update|before=\(vBeforeUpdate)|after=\(vAfterUpdate)|parentDirty=\(parentDirty)")
 }
+
+func mapCutAndChangeScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let source = d.input(3)
+    let mapped = d.map(source) { "\($0 / 10)" }
+    var runs = 0
+    let reader = d.rule {
+        runs += 1
+        return d.read(mapped).count * 100 + Int(d.read(mapped).utf8.first ?? 0)
+    }
+    var values: [Int] = []
+    values.append(d.read(reader))
+    let r1 = runs
+    d.write(12, to: source)
+    values.append(d.read(reader))
+    let r2 = runs
+    d.write(14, to: source)
+    values.append(d.read(reader))
+    let r3 = runs
+    d.write(25, to: source)
+    values.append(d.read(reader))
+    let r4 = runs
+    print("map-cut-and-change|values=\(values)|runs=[\(r1), \(r2), \(r3), \(r4)]")
+}
