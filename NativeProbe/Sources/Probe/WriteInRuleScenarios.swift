@@ -101,10 +101,45 @@ func writeInRuleMutateBodyInvalidating() {
     print("write-in-rule-mutate-body-invalidating|values=\(values)|runs=\(runs)|log=\(log)")
 }
 
+/// Creates an attribute after `Subgraph.current = nil`, either inside `apply` (`caseName == "inside-apply"`) or outside
+/// any `apply` (`caseName == "outside-apply"`). Natively and in the local engine, creating an attribute with no current
+/// subgraph stops the process with exit code 133 (`attempting to create attribute with no subgraph` [O]).
+/// Only run isolated (`Probe subgraph-create-with-nil-current <inside-apply|outside-apply>`).
+func subgraphCreateWithNilCurrent(caseName: String) {
+    let d = Driver()
+    switch caseName {
+    case "inside-apply":
+        let sg = d.makeSubgraph()
+        d.apply(sg) {
+            d.setCurrentSubgraph(nil)
+            print("subgraph-create-with-nil-current|case=inside-apply|currentIsNil=\(d.currentSubgraphHandle == nil)")
+            fflush(stdout)
+            _ = ccRawInput(d, 42)
+            print("subgraph-create-with-nil-current|case=inside-apply|accepted")
+        }
+    case "outside-apply":
+        d.setCurrentSubgraph(nil)
+        print("subgraph-create-with-nil-current|case=outside-apply|currentIsNil=\(d.currentSubgraphHandle == nil)")
+        fflush(stdout)
+        _ = ccRawInput(d, 42)
+        print("subgraph-create-with-nil-current|case=outside-apply|accepted")
+    default:
+        print("unknown-case|\(caseName)")
+        exit(2)
+    }
+    d.close()
+}
+
 /// When the probe is launched as `Probe <scenario>`, runs only that scenario and exits.
 func runIsolatedScenarioIfRequested() {
     let arguments = CommandLine.arguments
-    guard arguments.count > 1, arguments[1].hasPrefix("write-in-rule-") else { return }
+    guard arguments.count > 1 else { return }
+    if arguments[1] == "subgraph-create-with-nil-current" {
+        let caseName = arguments.count > 2 ? arguments[2] : "inside-apply"
+        subgraphCreateWithNilCurrent(caseName: caseName)
+        exit(0)
+    }
+    guard arguments[1].hasPrefix("write-in-rule-") else { return }
     switch arguments[1] {
     case "write-in-rule-invalidate-value": writeInRuleInvalidateValue()
     case "write-in-rule-invalidate-value-without-update": writeInRuleInvalidateValueWithoutUpdate()
