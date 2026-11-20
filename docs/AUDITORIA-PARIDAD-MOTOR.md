@@ -9,8 +9,8 @@
 # Auditoría de Paridad del Motor (`SwiftAttributeGraph` vs `AttributeGraph.framework`)
 
 - **Rama auditada:** `codex/native-adaptations-integration` en `/Users/erhusoft/NativeAttributeGraphBackendProbe/sag_integration_worktree`
-- **Oráculo vivo:** `NativeProbe/run.py` (**82/82** escenarios coinciden en `debug` y `release`, 3 repeticiones cada uno).
-- **Nota sobre `AGProbeParityTests`:** Los 41 tests iniciales introducidos en `109b947` (`test(Parity): add 41 AGProbe parity scenarios against Apple AttributeGraph`) no conservan en el repositorio el binario o registro nativo original que los generó (`[?]`); en cambio, los escenarios `oracle1..oracle12` y las **82 trazas** de `NativeProbe` (`fab8eda`, `68e6eb3` y posteriores) sí se ejecutan directamente contra `AttributeGraph.framework` mediante `NativeProbe/run.py`.
+- **Oráculo vivo:** `NativeProbe/run.py` (**119/119** escenarios coinciden en `debug` y `release` (3 repeticiones por configuración, debug y release)).
+- **Nota sobre `AGProbeParityTests`:** Los 41 tests iniciales introducidos en `109b947` (`test(Parity): add 41 AGProbe parity scenarios against Apple AttributeGraph`) no conservan en el repositorio el binario o registro nativo original que los generó (`[?]`); en cambio, los escenarios `oracle1..oracle12` y las **119 trazas** de `NativeProbe` (`fab8eda`, `68e6eb3` y posteriores) sí se ejecutan directamente contra `AttributeGraph.framework` mediante `NativeProbe/run.py`.
 
 ## Matriz de Paridad
 
