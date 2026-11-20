@@ -67,6 +67,8 @@ enum GraphRegistry {
         var next: UInt32 = 1
         /// Next value of the process-wide identifier counter behind `graphID` and `contextID`.
         var nextCounterID: UInt64 = 1
+        /// Next value handed out by ``makeUniqueID()``.
+        var nextUniqueID: UInt = 1
     }
 
     private static let lock = RegistryLock()
@@ -137,5 +139,16 @@ enum GraphRegistry {
     static func graph(forTag tag: UInt32) -> Graph? {
         guard tag != 0, tag <= maxTag else { return nil }
         return lock.withLock { Int(tag) < state.slots.count ? state.slots[Int(tag)].graph?.takeUnretainedValue() : nil }
+    }
+}
+
+extension GraphRegistry {
+    /// Hands out the next process-wide unique ID under the registry lock (see ``makeUniqueID()``).
+    static func makeUniqueID() -> UInt {
+        lock.withLock {
+            let id = state.nextUniqueID
+            state.nextUniqueID &+= 1
+            return id
+        }
     }
 }

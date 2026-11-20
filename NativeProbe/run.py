@@ -137,6 +137,7 @@ SCENARIOS = [
     "deadline-if-needed",
     "deadline-no-auto-cancel",
     "deadline-nesting",
+    "unique-id",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

@@ -2932,3 +2932,12 @@ func deadlineNestingScenario() {
     _ = d.withDeadline(.past) { d.withDeadline(.future) { d.read(rB) }; d.read(rC) }
     print("deadline-nesting|innerPastOuterFuture=\(innerPastOuterFuture)|innerFutureOuterPast=\(innerFutureOuterPast)|restoredOuterPast=\(restoredOuterPast)")
 }
+
+/// `AGMakeUniqueID` (`makeUniqueID()`): process-wide IDs, distinct and consecutive, with no graph argument.
+func uniqueIDScenario() {
+    let d = Driver()
+    let a = d.nextUniqueID()
+    let b = d.nextUniqueID()
+    let c = d.nextUniqueID()
+    print("unique-id|distinct=\(a != b && b != c && a != c)|step=\(b &- a)|step2=\(c &- b)|nonZero=\(a != 0)")
+}

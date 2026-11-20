@@ -36,6 +36,8 @@ private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 private func AGGraphCancelUpdate()
 @_silgen_name("AGGraphUpdateWasCancelled")
 private func AGGraphUpdateWasCancelled() -> Bool
+@_silgen_name("AGMakeUniqueID")
+private func AGMakeUniqueID() -> UInt
 @_silgen_name("AGGraphCancelUpdateIfNeeded")
 private func AGGraphCancelUpdateIfNeeded()
 
@@ -284,6 +286,7 @@ final class Driver {
     func setNeedsUpdate() { graph.setNeedsUpdate() }
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
+    func nextUniqueID() -> UInt { AGMakeUniqueID() }
     func cancelUpdateIfNeeded() { AGGraphCancelUpdateIfNeeded() }
     func withDeadline<V>(_ kind: DeadlineKind, _ body: () -> V) -> V { graph.withDeadline(kind == .past ? 1 : UInt64.max, body) }
     func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
@@ -545,6 +548,7 @@ final class Driver {
     func setNeedsUpdate() { graph.setNeedsUpdate() }
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
+    func nextUniqueID() -> UInt { makeUniqueID() }
     func cancelUpdateIfNeeded() { graph.cancelUpdateIfNeeded() }
     func withDeadline<V>(_ kind: DeadlineKind, _ body: () -> V) -> V {
         let now = ContinuousClock.now
@@ -792,3 +796,4 @@ cancelUpdateInsideScenario()
 deadlineIfNeededScenario()
 deadlineNoAutoCancelScenario()
 deadlineNestingScenario()
+uniqueIDScenario()
