@@ -1,25 +1,23 @@
 /// Resolves a ``Comparison`` policy into a function for one value type. Called once per attribute, when it is created;
 /// writing a value only calls the function that came out of here.
 enum ValueComparator {
-    /// The comparators already resolved by one graph, one per (value type, policy). Resolving a type walks its layout,
+    /// The comparators already resolved by one graph, one per (value type, policy), each in the ``NodeType`` that the
+    /// nodes of that type and policy share. Resolving a type walks its layout,
     /// which costs far more than creating an attribute, so a graph does it once per type.
     struct Cache {
         private struct Key: Hashable {
             let type: ObjectIdentifier
             let policy: Comparison
         }
-        private final class Box<Value> {
-            let isEqual: (Value, Value) -> Bool
-            init(_ isEqual: @escaping (Value, Value) -> Bool) { self.isEqual = isEqual }
-        }
-        private var boxes: [Key: AnyObject] = [:]
+        private var types: [Key: AnyObject] = [:]
 
-        mutating func comparator<Value>(_ policy: Comparison, for type: Value.Type) -> (Value, Value) -> Bool {
+        /// The node descriptor of `Value` under `policy`, created on first use.
+        mutating func nodeType<Value>(_ policy: Comparison, for type: Value.Type) -> NodeType<Value> {
             let key = Key(type: ObjectIdentifier(Value.self), policy: policy)
-            if let box = boxes[key] { return unsafeDowncast(box, to: Box<Value>.self).isEqual }
-            let isEqual = ValueComparator.make(policy, for: Value.self)
-            boxes[key] = Box(isEqual)
-            return isEqual
+            if let found = types[key] { return unsafeDowncast(found, to: NodeType<Value>.self) }
+            let created = NodeType(isEqual: ValueComparator.make(policy, for: Value.self))
+            types[key] = created
+            return created
         }
     }
 

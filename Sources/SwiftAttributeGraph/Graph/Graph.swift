@@ -393,11 +393,33 @@ public final class Graph {
     @usableFromInline func contains(_ id: AttributeID) -> Bool { table.isLive(id) }
 
     /// Creates a leaf attribute holding `value`, in the current subgraph.
+    ///
+    /// `@inlinable` so the node is built in the caller's specialization, with static types (see the closure form of `makeRule`).
+    @inlinable
     public func makeInput<Value>(_ value: Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
         assertOwnThread()
-        let id = allocate(InputNode(value: value, isEqual: comparators.comparator(comparison, for: Value.self)), state: NodeState.hasValue)
+        let node = InputNode(value: value, type: nodeType(comparison, for: Value.self))
+        return Attribute(id: allocateInput(node))
+    }
+
+    /// What the nodes of `Value` under `comparison` share, resolved once per type by the graph's cache.
+    @usableFromInline
+    func nodeType<Value>(_ comparison: Comparison, for type: Value.Type) -> NodeType<Value> {
+        comparators.nodeType(comparison, for: Value.self)
+    }
+
+    /// The non-generic end of ``makeInput(_:comparison:)``.
+    @usableFromInline
+    func allocateInput(_ node: NodeBox) -> AttributeID {
+        let id = allocate(node, state: NodeState.hasValue)
         changeCount &+= 1
-        return Attribute(id: id)
+        return id
+    }
+
+    /// The non-generic end of the closure form of `makeRule`.
+    @usableFromInline
+    func allocateRule(_ node: NodeBox) -> AttributeID {
+        allocate(node, state: NodeState.isRule | NodeState.dirty)
     }
 
     /// Creates an indirect attribute that redirects to `source`, in the current subgraph.
@@ -581,23 +603,34 @@ public final class Graph {
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
     public func makeRule<R: Rule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()
-        let id = allocate(TypeRuleNode(rule: rule, isEqual: comparators.comparator(comparison, for: R.Value.self)),
+        let id = allocate(TypeRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self)),
                          state: NodeState.isRule | NodeState.dirty)
         return Attribute(id: id)
     }
 
     /// Creates a rule attribute from a closure, in the current subgraph. The closure runs lazily.
+    ///
+    /// `@inlinable` so the node, and the function that stores each result of the rule, are built in the caller's
+    /// specialization: compiled once here, generic, they asked the runtime for type metadata on every rule created and
+    /// on every run (13 % of the `fan-out` profile) [O].
+    @inlinable
     public func makeRule<Value>(_ body: @escaping () -> Value, comparison: Comparison = .viewValue) -> Attribute<Value> {
         assertOwnThread()
-        let id = allocate(ClosureRuleNode(body: body, isEqual: comparators.comparator(comparison, for: Value.self)),
-                         state: NodeState.isRule | NodeState.dirty)
-        return Attribute(id: id)
+        let type = nodeType(comparison, for: Value.self)
+        if type.runClosureRule == nil {
+            // Built here, in the caller's specialization: a closure without captures, so it costs no allocation.
+            type.runClosureRule = { box in
+                let node = unsafeDowncast(box, to: ClosureRuleNode<Value>.self)
+                return node.store(node.body())
+            }
+        }
+        return Attribute(id: allocateRule(ClosureRuleNode(body: body, type: type)))
     }
 
     /// Creates a stateful rule from a type that conforms to ``StatefulRule``, in the current subgraph.
     public func makeStatefulRule<R: StatefulRule>(_ rule: R, comparison: Comparison = .viewValue) -> Attribute<R.Value> {
         assertOwnThread()
-        let id = allocate(StatefulRuleNode(rule: rule, isEqual: comparators.comparator(comparison, for: R.Value.self)),
+        let id = allocate(StatefulRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self)),
                           state: NodeState.isRule | NodeState.dirty | NodeState.stateful)
         return Attribute(id: id)
     }
@@ -607,7 +640,7 @@ public final class Graph {
                                         _ body: @escaping (inout RuleContext<Value>) -> Void) -> Attribute<Value> {
         assertOwnThread()
         let id = allocate(ClosureStatefulRuleNode(initialValue: initialValue, body: body,
-                                                  isEqual: comparators.comparator(comparison, for: Value.self)),
+                                                  type: comparators.nodeType(comparison, for: Value.self)),
                           state: NodeState.isRule | NodeState.dirty | NodeState.stateful)
         return Attribute(id: id)
     }

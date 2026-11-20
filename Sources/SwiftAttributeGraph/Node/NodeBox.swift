@@ -9,6 +9,8 @@
     }
     /// Mutates the stored rule body in place if its type is `R`, returning `true` when matched.
     func mutateRuleBody<R>(as type: R.Type, _ body: (inout R) -> Void) -> Bool { false }
+
+    @usableFromInline init() {}
 }
 
 /// A box holding a value of a known type.
@@ -20,19 +22,32 @@
     #else
     @exclusivity(unchecked) @usableFromInline final var value: Value?
     #endif
-    /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
-    let isEqual: (Value, Value) -> Bool
+    /// What the node shares with every node of its value type and comparison policy in the graph (the comparison, and
+    /// how a closure rule runs).
+    ///
+    /// Shared rather than stored per node: a function per node for running a closure rule made each node 16 bytes
+    /// larger, and creating 100,000 closure rules 7 % slower [O]; the shared descriptor also takes the place of the
+    /// comparison function the node used to store (16 bytes and a retain of its context).
+    @usableFromInline let type: NodeType<Value>
 
-    init(value: Value?, isEqual: @escaping (Value, Value) -> Bool) {
+    /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
+    @inlinable var isEqual: (Value, Value) -> Bool { type.isEqual }
+
+    // `@inlinable` (like `store(_:)`) so that a caller specialized for `Value` builds and fills the node with static
+    // types: compiled once here, generic, it asked the runtime for the metadata of `Optional<Value>` on every node
+    // created or stored (7 % and 6 % of the `fan-out` profile) [O].
+    @inlinable
+    init(value: Value?, type: NodeType<Value>) {
         self.value = value
-        self.isEqual = isEqual
+        self.type = type
     }
 
     /// Stores `new` and returns whether it counts as a change.
+    @inlinable
     @inline(__always)
     final func store(_ new: Value) -> Bool {
         if let old = value {
-            if isEqual(old, new) { return false }
+            if type.isEqual(old, new) { return false }
         }
         value = new
         return true
@@ -40,20 +55,34 @@
 }
 
 /// A leaf whose value is written from outside.
-final class InputNode<Value>: TypedNode<Value> {}
+@usableFromInline final class InputNode<Value>: TypedNode<Value> {
+    @inlinable
+    override init(value: Value?, type: NodeType<Value>) {
+        super.init(value: value, type: type)
+    }
+}
 
 /// A rule given as a closure.
-final class ClosureRuleNode<Value>: TypedNode<Value> {
-    let body: () -> Value
+@usableFromInline final class ClosureRuleNode<Value>: TypedNode<Value> {
+    @usableFromInline let body: () -> Value
 
-    init(body: @escaping () -> Value, isEqual: @escaping (Value, Value) -> Bool) {
+    /// Creates the node. `type` must already hold ``NodeType/runClosureRule`` (see `Graph.makeRule`).
+    @inlinable
+    init(body: @escaping () -> Value, type: NodeType<Value>) {
         self.body = body
-        super.init(value: nil, isEqual: isEqual)
+        super.init(value: nil, type: type)
     }
 
+    /// Runs the rule through ``NodeType/runClosureRule``, which was compiled where a rule of this type was created,
+    /// specialized for `Value`.
+    ///
+    /// Storing the result here, in a generic class compiled once and unspecialized, asked the runtime for the metadata
+    /// of `Optional<Value>` and copied the value through value witnesses on every run [O].
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
-        let result = body()
-        return store(result)
+        // `if let`, not `unsafelyUnwrapped`: the generic accessor returned the function at its most general
+        // representation, and adapting it back allocated a context on every run [O].
+        guard let run = type.runClosureRule else { preconditionFailure("a closure rule node without its run function") }
+        return run(self)
     }
 }
 
@@ -61,9 +90,9 @@ final class ClosureRuleNode<Value>: TypedNode<Value> {
 final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
     var rule: R
 
-    init(rule: R, isEqual: @escaping (R.Value, R.Value) -> Bool) {
+    init(rule: R, type: NodeType<R.Value>) {
         self.rule = rule
-        super.init(value: nil, isEqual: isEqual)
+        super.init(value: nil, type: type)
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
@@ -86,9 +115,9 @@ final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
 final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     var rule: R
 
-    init(rule: R, isEqual: @escaping (R.Value, R.Value) -> Bool) {
+    init(rule: R, type: NodeType<R.Value>) {
         self.rule = rule
-        super.init(value: nil, isEqual: isEqual)
+        super.init(value: nil, type: type)
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
@@ -139,10 +168,10 @@ final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
     let body: (inout RuleContext<Value>) -> Void
     let initialValue: Value?
 
-    init(initialValue: Value?, body: @escaping (inout RuleContext<Value>) -> Void, isEqual: @escaping (Value, Value) -> Bool) {
+    init(initialValue: Value?, body: @escaping (inout RuleContext<Value>) -> Void, type: NodeType<Value>) {
         self.body = body
         self.initialValue = initialValue
-        super.init(value: nil, isEqual: isEqual)
+        super.init(value: nil, type: type)
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
