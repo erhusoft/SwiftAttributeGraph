@@ -438,13 +438,54 @@ extension Graph {
 
     /// Writes a new value into an input attribute. If it counts as equal under the attribute's comparison policy,
     /// nothing happens; otherwise the version rises, the readers are marked dirty and observers are notified.
+    ///
+    /// The generic part is inlined into the caller so the comparison and the store are specialized for `Value`, the way
+    /// ``value(of:)`` is: compiled once here, generic, every write asked the runtime for the metadata of
+    /// `Optional<Value>` and copied the old and new values through value witnesses [O].
+    @inlinable
     public func setValue<Value>(_ value: Value, for attribute: Attribute<Value>) {
+        guard let box = beginWrite(attribute.id) else { return setValueSlowly(value, for: attribute) }
+        #if DEBUG && !SAG_UNCHECKED
+        guard let node = box as? TypedNode<Value> else {
+            preconditionFailure("the attribute does not hold a value of type \(Value.self)")
+        }
+        #else
+        let node = unsafeDowncast(box, to: TypedNode<Value>.self)
+        #endif
+        if node.store(value) { endWrite(attribute.id.index) }
+    }
+
+    /// The checks of ``setValue(_:for:)``. Returns the box of a plain input when the write can take the fast path (the
+    /// attribute is not indirect and no edge of the graph is compared partially), `nil` otherwise.
+    @usableFromInline
+    func beginWrite(_ id: AttributeID) -> NodeBox? {
         assertOwnThread()
         precondition(evaluatingNode == Graph.noNode, "setValue(_:for:): a rule must not write to the graph")
-        precondition(table.isLive(attribute.id), "setValue(_:for:): the attribute is dead (its subgraph was invalidated)")
-        let index = Int(attribute.id.index)
+        precondition(table.isLive(id), "setValue(_:for:): the attribute is dead (its subgraph was invalidated)")
+        let index = Int(id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
+        if table.state[index] & NodeState.indirect != 0 || hasPartialEdgeComparison { return nil }
+        return table.box(at: id.index)
+    }
 
+    /// What a write that changed the value of input `node` does after storing it: bumps the versions, marks the readers
+    /// dirty and notifies observers.
+    @usableFromInline
+    func endWrite(_ node: UInt32) {
+        let index = Int(node)
+        globalVersion &+= 1
+        changeCount &+= 1
+        table.versions[index] &+= 1
+        if table.state[index] & NodeState.observed != 0 { queueNotification(node) }
+        propagateDirty(from: node)
+        flushNotifications()
+    }
+
+    /// The generic path of ``setValue(_:for:)`` once its checks passed: an indirect attribute, or a graph with partial
+    /// edge comparisons.
+    @usableFromInline
+    func setValueSlowly<Value>(_ value: Value, for attribute: Attribute<Value>) {
+        let index = Int(attribute.id.index)
         // An indirect attribute redirects to another attribute: writing it writes to the terminal source.
         if table.state[index] & NodeState.indirect != 0 {
             precondition(offsetFieldReaders[attribute.id.index] == nil,

@@ -58,6 +58,51 @@ import Testing
         #expect(weakToken == nil)
     }
 
+    @Test func writesThroughTheFastAndTheSlowPathBehaveTheSame() {
+        struct Point: BitwiseCopyable, Equatable { var x: Int64; var y: Int64 }
+        let graph = Graph()
+        let plain = graph.makeInput(Int64(1))
+        let target = graph.makeInput(Int64(10))
+        let indirect = graph.makeIndirect(target)
+        var runs = 0
+        let sum = graph.makeRule { runs += 1; return graph.value(of: plain) + graph.value(of: indirect) }
+        #expect(graph.value(of: sum) == 11)
+
+        graph.setValue(1, for: plain)                       // equal: cut, nothing reruns
+        #expect(graph.value(of: sum) == 11 && runs == 1)
+        graph.setValue(20, for: indirect)                   // through the indirect, to its source
+        #expect(graph.value(of: target) == 20)
+        #expect(graph.value(of: sum) == 21 && runs == 2)
+
+        // An offset attribute switches the graph to the partial-compare path for every later write.
+        let point = graph.makeInput(Point(x: 1, y: 2))
+        let y = graph.makeOffsetFieldAttribute(of: point, keyPath: \Point.y)
+        var yRuns = 0
+        let readsY = graph.makeRule { yRuns += 1; return graph.value(of: y) }
+        #expect(graph.value(of: readsY) == 2)
+        graph.setValue(Point(x: 5, y: 2), for: point)       // only x changed: the reader of y is cut
+        #expect(graph.value(of: readsY) == 2 && yRuns == 1)
+        graph.setValue(3, for: plain)
+        #expect(graph.value(of: sum) == 23 && runs == 3)
+    }
+
+    @Test func aWriteToARuleStillStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let rule = graph.makeRule { Int64(1) }
+            graph.setValue(2, for: rule)
+        }
+    }
+
+    @Test func aWriteFromInsideARuleStillStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let input = graph.makeInput(Int64(1))
+            let rule = graph.makeRule { graph.setValue(2, for: input); return Int64(1) }
+            _ = graph.value(of: rule)
+        }
+    }
+
     @Test func anUnspecializedGenericCallerBuildsTheSameNodes() {
         @inline(never)
         func build<V>(_ graph: Graph, _ value: V, _ transform: @escaping (V) -> V) -> (Attribute<V>, Attribute<V>) {
