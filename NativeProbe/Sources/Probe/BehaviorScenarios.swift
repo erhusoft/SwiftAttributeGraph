@@ -2771,3 +2771,18 @@ func mapCutAndChangeScenario() {
     let r4 = runs
     print("map-cut-and-change|values=\(values)|runs=[\(r1), \(r2), \(r3), \(r4)]")
 }
+
+func subgraphDynamicReorderScenario() {
+    let graph = Driver()
+    let parent = graph.makeSubgraph()
+    let children = (0..<3).map { _ in graph.makeSubgraph() }
+    for child in children { graph.addChild(child, to: parent) }
+    let before = children.map { graph.isValid($0) }
+    graph.removeChild(children[1], from: parent)
+    let afterRemove = children.map { graph.isValid($0) }
+    graph.addChild(children[1], to: parent)
+    let afterReinsert = children.map { graph.isValid($0) }
+    graph.invalidate(parent)
+    let afterInvalidate = children.map { graph.isValid($0) }
+    print("subgraph-dynamic-reorder|before=\(before)|afterRemove=\(afterRemove)|afterReinsert=\(afterReinsert)|afterInvalidate=\(afterInvalidate)")
+}
