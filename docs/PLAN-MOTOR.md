@@ -1,8 +1,10 @@
 # Plan del motor SwiftAttributeGraph
 
-Fecha: 2026-11-14. **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)), M8 ([§15](#15-resultados-de-m8)) y M9 ([§18](#18-resultados-de-m9)). Todas las piezas completadas y validadas con Swift 6.2.4 en Mac M1: **la batería de M9 pasa en Mac**. «Al 100 %» **con las salvedades de [§18](#18-resultados-de-m9)**: las reglas síncronas conservan su límite de profundidad, no hay caso real de UI medido, los motores de referencia no se contrastaron y Windows está aplazado.
+Fecha: 2026-11-14 (nota del 2026-11-20 más abajo). **Fuente de verdad del estado.** Hechas M0 ([§6](#6-resultados-de-m0)), M1 ([§12](#12-resultados-de-m1)), M2 ([§7](#7-resultados-de-m2)), M3 ([§8](#8-resultados-de-m3)), M4 ([§16](#16-resultados-de-m4)), M5 ([§9](#9-resultados-de-m5)), M6 ([§14](#14-resultados-de-m6)), M7 ([§13](#13-resultados-de-m7)), M8 ([§15](#15-resultados-de-m8)) y M9 ([§18](#18-resultados-de-m9)). Todas las piezas completadas y validadas con Swift 6.2.4 en Mac M1: **la batería de M9 pasa en Mac**. «Al 100 %» **con las salvedades de [§18](#18-resultados-de-m9)**: las reglas síncronas conservan su límite de profundidad, no hay caso real de UI medido, los motores de referencia no se contrastaron y Windows está aplazado.
 Hecho antes: fundamentos, preguntas previas ([PREGUNTAS.md](PREGUNTAS.md)), medición de paridad con SwiftUI real
 y las notas de diseño ([DISENO-M0.md](DISENO-M0.md), [DISENO-M2.md](DISENO-M2.md), [DISENO-M3.md](DISENO-M3.md), [DISENO-M4.md](DISENO-M4.md), [DISENO-M5.md](DISENO-M5.md), [DISENO-M6.md](DISENO-M6.md), [DISENO-M7.md](DISENO-M7.md), [DISENO-M8.md](DISENO-M8.md), [DISENO-M9.md](DISENO-M9.md)).
+
+> **Nota 2026-11-20:** `master` (`6f75014`, PR #2) contiene ya todo lo cerrado, incluidas las «Adaptaciones nativas» del final de este plan, hechas en la rama `codex/native-adaptations-integration` (hoy superada y contenida en `master`). Los cambios del motor se hacen sobre `master`. Hay 134 escenarios de oráculo. Estado y deudas: [TRASPASO-2026-11-19.md](TRASPASO-2026-11-19.md) (sección «Actualización 2026-11-20»).
 
 ## 1. Objetivo y criterio de «motor al 100 %»
 
@@ -765,7 +767,7 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
 - **`NativeProbe`:** **54 trazas directas** (3 pares debug + 3 pares release = 12 procesos) coinciden al **100 %**. Para invocar `resetSource` en el `AttributeGraph.framework` nativo desde `NativeProbe/Sources/Probe/main.swift` se usa `AGGraphResetIndirectAttribute(_ attribute: AnyAttribute)` porque `IndirectAttribute.resetSource()` está en `.tbd` pero omitido de `.swiftinterface`.
 - **Tests funcionales:** **257 pruebas en 29 suites** en verde con `swift test` en depuración tras el cambio final. No se reejecutaron las mediciones de rendimiento en `release` (el cambio en `Graph+Invalidation.swift` solo sustituye la iteración `order` por `order.reversed()`, de coste O(1)).
 
-## Adaptaciones nativas (rama aislada `codex/native-adaptations-integration`)
+## Adaptaciones nativas (hechas en la rama `codex/native-adaptations-integration`, hoy fusionada en `master`)
 
 - **Comparación parcial en arista sobre cadenas de indirectos (release):** `PERF 20 writes over 20k indirect chain with partial comparator: 16.19 ms` (`0.016188292 s`).
 - **Indirectos con offset `(offset, size)` en arista (release):** `PERF 20 writes over 20k offset-indirect chain: 16.08 ms` (`0.016078041 s`).
