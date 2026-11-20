@@ -111,6 +111,7 @@ final class Driver {
     func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child, tag: tag) }
     func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { parent.removeChild(child) }
     func invalidateAllValues() { graph.invalidateAllValues() }
+    func valueState<V>(of attribute: Handle<V>) -> UInt8 { UInt8(truncatingIfNeeded: attribute.valueState.rawValue) & 0x0B }
     func makeSubgraph(for attribute: Handle<Int64>) -> SubgraphHandle { Subgraph(graph: graph, attribute: attribute.identifier) }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -380,6 +381,8 @@ final class Driver {
     func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { parent.removeChild(child) }
     /// Own side: the engine method under test.
     func invalidateAllValues() { graph.invalidateAllValues() }
+    /// Own side: engine state bits. Main-thread bits of Apple are not modeled, so the mask 0x0B is compared on both sides.
+    func valueState<V>(of attribute: Handle<V>) -> UInt8 { graph.valueState(of: attribute).rawValue & 0x0B }
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -768,3 +771,4 @@ writeInRuleInvalidateValueWithoutUpdate()
 writeInRuleMutateBodyInvalidating()
 for (_, run) in isDirtyScenarios { run() }
 invalidateAllValuesScenario()
+valueStateScenario()

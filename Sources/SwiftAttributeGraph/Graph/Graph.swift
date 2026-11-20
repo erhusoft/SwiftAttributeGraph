@@ -424,7 +424,7 @@ public final class Graph {
     /// The non-generic end of the closure form of `makeRule`.
     @usableFromInline
     func allocateRule(_ node: NodeBox) -> AttributeID {
-        allocate(node, state: NodeState.isRule | NodeState.dirty)
+        allocate(node, state: NodeState.isRule | NodeState.dirty | NodeState.pending)
     }
 
     /// Creates an indirect attribute that redirects to `source`, in the current subgraph.

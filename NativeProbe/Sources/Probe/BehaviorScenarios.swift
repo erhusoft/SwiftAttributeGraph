@@ -2841,3 +2841,20 @@ func invalidateAllValuesScenario() {
     let v1 = d.read(r)
     print("invalidate-all-values|v0=\(v0)|runsBefore=\(runsBefore)|hasValueAfter=\(hasAfter)|v1=\(v1)|runsAfter=\(runs)")
 }
+
+/// `AGGraphGetValueState` (`AGAttribute.valueState`): the bits of a rule before and after a read, after its input
+/// changes, and after the read that follows. Bits are `AGValueState` (dirty 1, pending 2, valueExists 8, selfModified 128).
+func valueStateScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let input: Handle<Int64> = d.input(1)
+    let r: Handle<Int64> = d.rule { d.read(input) + 1 }
+    let s0 = d.valueState(of: r)
+    _ = d.read(r)
+    let s1 = d.valueState(of: r)
+    d.write(2, to: input)
+    let s2 = d.valueState(of: r)
+    _ = d.read(r)
+    let s3 = d.valueState(of: r)
+    print("value-state|s0=\(s0)|s1=\(s1)|s2=\(s2)|s3=\(s3)")
+}
