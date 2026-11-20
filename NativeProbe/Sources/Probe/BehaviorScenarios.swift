@@ -2941,3 +2941,23 @@ func uniqueIDScenario() {
     let c = d.nextUniqueID()
     print("unique-id|distinct=\(a != b && b != c && a != c)|step=\(b &- a)|step2=\(c &- b)|nonZero=\(a != 0)")
 }
+
+/// `AGGraphAddInput(attribute1, attribute2, options, token)`: whether `attribute1` gains `attribute2` as an input, so that
+/// changing `attribute2` dirties and re-runs `attribute1`.
+func addInputScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let src: Handle<Int64> = d.input(1)
+    var runs = 0
+    let dst: Handle<Int64> = d.rule { runs += 1; return 5 }
+    _ = d.read(dst)
+    d.addInput(dst, src)
+    let dirtyAfterAdd = d.valueState(of: dst) & 0x01
+    d.write(2, to: src)
+    let dirtyAfterWrite = d.valueState(of: dst) & 0x01
+    _ = d.read(dst)
+    let runsAfterFirst = runs
+    d.write(3, to: src)
+    _ = d.read(dst)
+    print("add-input|dirtyAfterAdd=\(dirtyAfterAdd)|dirtyAfterWrite=\(dirtyAfterWrite)|runs=\(runsAfterFirst)|runsAfterSecondWrite=\(runs)")
+}
