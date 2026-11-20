@@ -2870,3 +2870,20 @@ func attributeSubgraphScenario() {
     let outside: Handle<Int64> = d.input(3)
     print("attribute-subgraph|inA=\(d.owns(a, inA))|inB=\(d.owns(b, inA))|outsideIsTop=\(d.owns(d.currentSubgraph, outside))|outsideIsA=\(d.owns(a, outside))")
 }
+
+
+
+/// `AGGraphCancelUpdate` inside a rule, read back with `AGGraphUpdateWasCancelled` in the same rule.
+func cancelUpdateInsideScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let input: Handle<Int64> = d.input(1)
+    var wasCancelled = false
+    let r: Handle<Int64> = d.rule {
+        d.cancelUpdate()
+        wasCancelled = d.updateWasCancelled()
+        return d.read(input) + 1
+    }
+    let v = d.read(r)
+    print("cancel-update-inside|wasCancelled=\(wasCancelled)|v=\(v)")
+}

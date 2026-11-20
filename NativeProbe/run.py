@@ -133,6 +133,7 @@ SCENARIOS = [
     "invalidate-all-values",
     "value-state",
     "attribute-subgraph",
+    "cancel-update-inside",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

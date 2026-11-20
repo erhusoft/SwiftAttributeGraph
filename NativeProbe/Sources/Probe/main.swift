@@ -34,6 +34,8 @@ private func _agResetIndirectAttribute(_ attribute: AnyAttribute)
 
 @_silgen_name("AGGraphCancelUpdate")
 private func AGGraphCancelUpdate()
+@_silgen_name("AGGraphUpdateWasCancelled")
+private func AGGraphUpdateWasCancelled() -> Bool
 
 final class SubgraphObserverHandle {
     private let onCancel: () -> Void
@@ -279,6 +281,7 @@ final class Driver {
     func setUpdateCallback(_ body: @escaping () -> Void) { graph.onUpdate(body) }
     func setNeedsUpdate() { graph.setNeedsUpdate() }
     func cancelUpdate() { AGGraphCancelUpdate() }
+    func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
         let ids = excluded.map { $0.identifier }
         return __AGGraphAnyInputsChanged(ids, ids.count)
@@ -537,6 +540,7 @@ final class Driver {
     func setUpdateCallback(_ body: @escaping () -> Void) { graph.setUpdateCallback(body) }
     func setNeedsUpdate() { graph.setNeedsUpdate() }
     func cancelUpdate() { graph.cancelUpdate() }
+    func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func anyInputsChanged(excluding excluded: [Handle<Int64>] = []) -> Bool {
         graph.anyInputsChanged(excluding: excluded.map { AnyAttribute(id: $0.id) })
     }
@@ -775,3 +779,4 @@ for (_, run) in isDirtyScenarios { run() }
 invalidateAllValuesScenario()
 valueStateScenario()
 attributeSubgraphScenario()
+cancelUpdateInsideScenario()
