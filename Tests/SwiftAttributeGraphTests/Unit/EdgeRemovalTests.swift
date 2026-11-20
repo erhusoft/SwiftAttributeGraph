@@ -107,7 +107,7 @@ import Testing
         }
 
         // `inside` reads `root`: root -> inside edge exists.
-        graph.invalidate(sub)
+        sub.invalidate()
 
         // After invalidation, `inside` is dead and its edge to root is gone.
         #expect(!graph.contains(inside.id))
@@ -132,7 +132,7 @@ import Testing
         let outside = graph.makeRule { inside.value * 2 }
         _ = graph.value(of: outside)
 
-        graph.invalidate(sub)
+        sub.invalidate()
 
         // `outside` lost its input (`inside`) and keeps its cached state until another input changes.
         #expect(!graph.isDirty(outside.id) && graph.inputs(of: outside.id).isEmpty)

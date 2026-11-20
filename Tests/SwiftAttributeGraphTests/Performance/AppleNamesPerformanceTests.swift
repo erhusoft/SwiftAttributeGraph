@@ -12,7 +12,7 @@ struct AppleNamesPerformanceTests {
         var sink = 0
 
         let directStart = Date()
-        for _ in 0..<iterations { for s in subgraphs where graph.isValid(s) { sink += 1 } }
+        for _ in 0..<iterations { for s in subgraphs where s.isValid { sink += 1 } }
         let direct = Date().timeIntervalSince(directStart)
 
         let namedStart = Date()

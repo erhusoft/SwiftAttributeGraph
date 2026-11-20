@@ -113,7 +113,7 @@ import Testing
         let inner = graph.makeSubgraph()
         graph.withCurrent(outer) {
             graph.withCurrent(inner) {
-                graph.invalidate(inner)
+                inner.invalidate()
                 #expect(Subgraph.current == nil)
             }
             #expect(Subgraph.current == outer, "the outer one is restored after the inner one")

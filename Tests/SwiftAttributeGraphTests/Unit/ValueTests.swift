@@ -108,7 +108,7 @@ import Testing
             let graph = Graph()
             let sub = graph.makeSubgraph()
             let a = graph.withCurrent(sub) { graph.makeInput(1) }
-            graph.invalidate(sub)
+            sub.invalidate()
             graph.setValue(2, for: a)
         }
     }

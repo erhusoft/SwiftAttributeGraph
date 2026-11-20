@@ -372,11 +372,11 @@ final class Driver {
         defer { currentSubgraph = previous }
         return graph.withCurrent(subgraph, body)
     }
-    func isValid(_ subgraph: SubgraphHandle) -> Bool { graph.isValid(subgraph) }
-    func invalidate(_ subgraph: SubgraphHandle) { graph.invalidate(subgraph) }
-    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { graph.addChild(child, to: parent) }
-    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { graph.addChild(child, to: parent) }
-    func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { graph.removeChild(child, from: parent) }
+    func isValid(_ subgraph: SubgraphHandle) -> Bool { subgraph.isValid }
+    func invalidate(_ subgraph: SubgraphHandle) { subgraph.invalidate() }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle) { parent.addChild(child) }
+    func addChild(_ child: SubgraphHandle, to parent: SubgraphHandle, tag: UInt8) { parent.addChild(child) }
+    func removeChild(_ child: SubgraphHandle, from parent: SubgraphHandle) { parent.removeChild(child) }
     func makeSubgraph(for _: Handle<Int64>) -> SubgraphHandle { graph.makeSubgraph() }
     func clearUpdateToken() -> UnsafeRawPointer? { Graph.clearUpdate() }
     func setUpdateToken(_ token: UnsafeRawPointer?) { Graph.setUpdate(token) }
@@ -559,8 +559,8 @@ final class Driver {
     func read<V>(_ attribute: Handle<V>) -> V { graph.value(of: attribute) }
     func write<V>(_ value: V, to attribute: Handle<V>) { graph.setValue(value, for: attribute) }
     func close() {
-        graph.invalidate(scope)
-        precondition(!graph.isValid(scope) && graph.nodeCount == 0 && graph.edgeCount == 0 && graph.liveSubgraphCount == 1)
+        scope.invalidate()
+        precondition(!scope.isValid && graph.nodeCount == 0 && graph.edgeCount == 0 && graph.liveSubgraphCount == 1)
     }
 }
 #endif

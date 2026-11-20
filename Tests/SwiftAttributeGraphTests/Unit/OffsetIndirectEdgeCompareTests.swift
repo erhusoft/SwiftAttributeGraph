@@ -104,7 +104,7 @@ struct OffsetIndirectEdgeCompareTests {
         #expect(graph.value(of: consumer) == 10)
         #expect(runs == 1)
 
-        graph.invalidate(sg)
+        sg.invalidate()
         #expect(graph.liveSubgraphCount == baseSubgraphs)
         #expect(graph.offsetIndirects[offsetInd.id.index] == nil)
     }
@@ -405,7 +405,7 @@ struct OffsetIndirectEdgeCompareTests {
         graph.invalidateValue(of: rule)
         #expect(graph.value(of: field) == 30)
 
-        graph.invalidate(sg)
+        sg.invalidate()
         #expect(graph.liveSubgraphCount == baseSubgraphs)
         #expect(graph.offsetIndirects[field.id.index] == nil)
         #expect(graph.offsetFieldReaders[field.id.index] == nil)

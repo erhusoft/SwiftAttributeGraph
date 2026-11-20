@@ -73,7 +73,7 @@ struct NodeCacheAndUpdateCallbackTests {
             graph.makeInput(12)
         }
         #expect(graph.table.isLive(cached.id))
-        graph.invalidate(sg)
+        sg.invalidate()
         #expect(!graph.table.isLive(cached.id))
         #expect(graph.nodeCaches[sg.id.index] == nil)
     }
@@ -245,14 +245,14 @@ struct NodeCacheAndUpdateCallbackTests {
         let a1 = graph.withCurrent(sg1) { graph.makeInput(11) }
         let a2 = graph.withCurrent(sg2) { graph.makeInput(22) }
 
-        #expect(graph.isValid(sg1))
-        #expect(graph.isValid(sg2))
+        #expect(sg1.isValid)
+        #expect(sg2.isValid)
 
         // Releasing ctx1 triggers deinit -> invalidates sg1 only; sg2 and a2 remain alive.
         ctx1 = nil
-        #expect(!graph.isValid(sg1))
+        #expect(!sg1.isValid)
         #expect(!graph.table.isLive(a1.id))
-        #expect(graph.isValid(sg2))
+        #expect(sg2.isValid)
         #expect(graph.value(of: a2) == 22)
     }
 
@@ -267,7 +267,7 @@ struct NodeCacheAndUpdateCallbackTests {
 
         let reader = graph.makeRule {
             ctx.invalidate()
-            #expect(!graph.isValid(sg))
+            #expect(!sg.isValid)
             #expect(notices == 0)
             return attr.value * 3
         }

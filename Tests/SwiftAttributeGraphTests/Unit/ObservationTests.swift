@@ -121,7 +121,7 @@ import Testing
         _ = graph.value(of: frame)
         let told = Counter()
         _ = graph.observe(frame.erased) { told.count += 1 }
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(told.count == 0)
     }
 }

@@ -178,7 +178,7 @@ struct StressBenchmark {
 
         let freeTime = timer.measure {
             for sub in createdSubgraphs {
-                churnGraph.invalidate(sub)
+                sub.invalidate()
             }
         }
         print("   Liberación completa e invalidación de 10.000 subgrafos: \(String(format: "%.2f", freeTime)) ms")

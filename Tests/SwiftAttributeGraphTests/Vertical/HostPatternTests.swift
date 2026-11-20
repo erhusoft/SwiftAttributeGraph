@@ -29,7 +29,7 @@ import Testing
     /// `Create; AddChild(parent, child)` followed by the scoped creation of the content.
     static func makeChild<T>(_ graph: Graph, of parent: Subgraph, addChild: Bool = true, _ build: () -> T) -> (Subgraph, T) {
         let child = graph.makeSubgraph(parent: parent)
-        if addChild { graph.addChild(child, to: parent) }       // idempotent: makeSubgraph(parent:) already linked it [O, test 3]
+        if addChild { parent.addChild(child) }       // idempotent: makeSubgraph(parent:) already linked it [O, test 3]
         let content = inScope(graph, child, build)
         return (child, content)
     }
@@ -206,8 +206,8 @@ import Testing
         for child in children { #expect(graph.isAncestor(parent, of: child)) }
 
         // Immediate removal: Apply + Invalidate.
-        graph.invalidate(children[3])
-        #expect(!graph.isValid(children[3]))
+        (children[3]).invalidate()
+        #expect(!(children[3]).isValid)
         #expect(graph.nodeCount == base + 1 + 1 + 3 * 2)
         #expect(graph.inputCount(of: container.id) == 3, "no dangling edge to the freed child [O]")
         #expect(graph.value(of: container) == 10, "the container keeps its cached value until another input dirties it")
@@ -233,19 +233,19 @@ import Testing
         let nodes = graph.nodeCount
         #expect(nodes == base + 3 * 2)
 
-        graph.removeChild(children[1], from: parent)
-        #expect(graph.isValid(children[1]) && graph.nodeCount == nodes, "deferred: nothing freed, content readable")
+        (parent).removeChild(children[1])
+        #expect((children[1]).isValid && graph.nodeCount == nodes, "deferred: nothing freed, content readable")
         #expect(graph.value(of: outputs[1]) == 2)
         #expect(!graph.isAncestor(parent, of: children[1]))
 
-        graph.addChild(children[1], to: parent)             // reinsertion
+        (parent).addChild(children[1])             // reinsertion
         #expect(graph.isAncestor(parent, of: children[1]))
 
-        graph.removeChild(children[2], from: parent)
-        graph.invalidate(parent)
-        #expect(graph.isValid(children[2]), "the removed child is an orphan: invalidating the parent does not reach it [O]")
+        (parent).removeChild(children[2])
+        parent.invalidate()
+        #expect((children[2]).isValid, "the removed child is an orphan: invalidating the parent does not reach it [O]")
         #expect(graph.nodeCount == base + 2, "only the orphan's nodes remain")
-        graph.invalidate(children[2])
+        (children[2]).invalidate()
         #expect(graph.nodeCount == base)
         #expect(graph.liveSubgraphCount == baseSubgraphs)
         #expect(graph.edgeCount == 0)
@@ -281,7 +281,7 @@ import Testing
         #expect(graph.value(of: combiner) == [10, 20, 30])
         #expect(runs.n == 1)
 
-        graph.invalidate(subgraphs[1])
+        (subgraphs[1]).invalidate()
         #expect(weaks[1].id.map { !graph.isLiveForTest($0) } ?? true)
         #expect(graph.value(of: weaks[1]) == nil, "the weak of an invalidated child reads nil [O]")
         #expect(graph.value(of: combiner) == [10, 20, 30], "native: not rerun by dependency, keeps the stale value [O, weak-combiner-three-children-invalidate-middle]")
@@ -298,7 +298,7 @@ import Testing
         }
         #expect(graph.value(of: stale) == [10, 30])
 
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(graph.nodeCount == base)
     }
 
@@ -381,7 +381,7 @@ import Testing
         _ = graph.value(of: item)
         #expect(seeds.n == runsBefore + 1, "the measured input is a real dependency of the item (it reran and anyInputsChanged saw it)")
 
-        graph.invalidate(scope)
+        scope.invalidate()
         #expect(graph.nodeCount == base)
     }
 
@@ -412,7 +412,7 @@ import Testing
         #expect(graph.value(of: last) == depth + 5)
         #expect(graph.liveSubgraphCount == baseSubgraphs + depth + 1)
 
-        graph.invalidate(top)
+        top.invalidate()
         #expect(graph.nodeCount == base)
         #expect(graph.liveSubgraphCount == baseSubgraphs)
     }

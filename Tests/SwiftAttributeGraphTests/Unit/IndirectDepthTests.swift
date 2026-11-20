@@ -45,7 +45,7 @@ import Testing
             graph.setValue(3, for: source)
             #expect(graph.value(of: rule) == 3)
         }
-        graph.invalidate(owner)
+        owner.invalidate()
         #expect(graph.nodeCount == 0)
     }
 }

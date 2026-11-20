@@ -190,7 +190,7 @@ struct UISimulator {
         print("  Valor de la rama condicional: \"\(graph.value(of: dynamicRule))\"")
 
         print("  Desmontando la rama condicional (invalidando subgrafo)...")
-        graph.invalidate(branchSubgraph)
+        branchSubgraph.invalidate()
         print("  Nodos activos tras invalidar: \(graph.nodeCount)")
         print("  Subgrafos vivos tras invalidar: \(graph.liveSubgraphCount)")
         print("  ✓ ¡ÉXITO! Todos los atributos y reglas de la rama murieron con su subgrafo.")
@@ -220,7 +220,7 @@ struct UISimulator {
         print("\n  Eliminando el ítem #2 de la lista (invalidando su subgrafo)...")
         let removedItem = listItems.remove(at: 1)
         let nodesBefore = graph.nodeCount
-        graph.invalidate(removedItem.subgraph)
+        removedItem.subgraph.invalidate()
         let nodesAfter = graph.nodeCount
         print("  Nodos liberados con el subgrafo de la fila: \(nodesBefore - nodesAfter) atributos")
         print("  --- Render de la lista resultante ---")

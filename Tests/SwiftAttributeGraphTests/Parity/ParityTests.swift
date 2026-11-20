@@ -94,7 +94,7 @@ import Testing
         graph.setValue(5, for: stateA)                      // a tap in branch A
         #expect(graph.value(of: stateA) == 5)
 
-        graph.invalidate(branchA)                           // switch to B: A disappears
+        branchA.invalidate()                           // switch to B: A disappears
         let oldID = stateA.id
         branchA = graph.makeSubgraph()                      // back to A: new subgraph, new state
         stateA = graph.withCurrent(branchA) { graph.makeInput(0) }
@@ -157,9 +157,9 @@ import Testing
             let v1 = graph.value(of: out)
             if switchFirst {
                 graph.setValue(true, for: useB)
-                graph.invalidate(subA)
+                subA.invalidate()
             } else {
-                graph.invalidate(subA)
+                subA.invalidate()
                 graph.setValue(true, for: useB)
             }
             let v2 = graph.value(of: out)
@@ -182,7 +182,7 @@ import Testing
         let v1 = graph.value(of: reader)
         graph.setSource(srcB, for: ind)
         let v2 = graph.value(of: reader)
-        graph.invalidate(subA)
+        subA.invalidate()
         let v3 = graph.value(of: reader)
         graph.setValue(205, for: srcB)
         let v4 = graph.value(of: reader)
@@ -294,9 +294,9 @@ import Testing
         var between: [Int?] = []
 
         graph.withoutSubgraphInvalidation {
-            graph.invalidate(sub1)
+            sub1.invalidate()
             graph.withoutSubgraphInvalidation {
-                graph.invalidate(sub2)
+                sub2.invalidate()
             }
             between = [graph.value(of: w1), graph.value(of: w2)]
         }
@@ -331,12 +331,12 @@ import Testing
 
         let t1 = graph.observe(sub1) {
             events.append("notice1-start")
-            graph.invalidate(sub2)
+            sub2.invalidate()
             events.append("notice1-end")
         }
         let t2 = graph.observe(sub2) {
             events.append("notice2-start")
-            graph.invalidate(sub3)
+            sub3.invalidate()
             events.append("notice2-end")
         }
         let t3 = graph.observe(sub3) {
@@ -344,8 +344,8 @@ import Testing
         }
         _ = (t1, t2, t3)
 
-        graph.invalidate(sub1)
-        #expect(!graph.isValid(sub1) && !graph.isValid(sub2) && !graph.isValid(sub3))
+        sub1.invalidate()
+        #expect(!sub1.isValid && !sub2.isValid && !sub3.isValid)
         #expect(graph.nodeCount == 0)
         #expect(events == [
             "notice1-start", "notice1-end", "deinit(obj1)",
@@ -360,7 +360,7 @@ import Testing
         let a0 = graph.withCurrent(sub0) { graph.makeInput(999) }
         let w0 = WeakAttribute(a0)
         var staleWeaks = [w0]
-        graph.invalidate(sub0)
+        sub0.invalidate()
 
         for i in 0..<2_000 {
             let sub = graph.makeSubgraph()
@@ -373,7 +373,7 @@ import Testing
             if i % 20 == 0 {
                 staleWeaks.append(WeakAttribute(x))
             }
-            graph.invalidate(sub)
+            sub.invalidate()
             #expect(graph.value(of: w0) == nil)
         }
 
@@ -437,7 +437,7 @@ import Testing
         graph.setSource(c, for: ind1)
         #expect(graph.value(of: reader) == 31)
         #expect(readerRuns == 3)
-        graph.invalidate(child)
+        child.invalidate()
         #expect(graph.value(of: reader) == 31)
         #expect(readerRuns == 3 && dep1Runs == 1 && dep2Runs == 1)
     }
@@ -510,7 +510,7 @@ import Testing
         let pObs2 = graph.observe(parent) { events.append("parent-obs2") }
         _ = (c1Obs1, c1Obs2, g1Obs1, c2Obs1, c2Obs2, pObs1, pObs2)
 
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(events == ["parent-obs1", "parent-obs2", "child2-obs1", "child1-obs1", "child1-obs2", "grand1-obs1"])
     }
 }

@@ -81,7 +81,7 @@ import Testing
             _ = warmChain(of: graph, root: root)
         }
         #expect(graph.nodeCount == depth)
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.nodeCount == 0)
     }
 
@@ -97,7 +97,7 @@ import Testing
             previous = graph.makeRule { source.value }
             _ = graph.value(of: previous)
         }
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.inputs(of: first.id).isEmpty && !graph.isDirty(previous.id))
     }
 
@@ -114,7 +114,7 @@ import Testing
             current = last
         }
         #expect(graph.nodeCount == 20_000 && graph.liveSubgraphCount == 20_002)
-        graph.invalidate(top)
+        top.invalidate()
         #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
         #expect(!graph.isLive(last))
     }
@@ -123,7 +123,7 @@ import Testing
         let graph = Graph()
         let parent = graph.makeSubgraph()
         for i in 0..<20_000 { graph.withCurrent(graph.makeSubgraph(parent: parent)) { _ = graph.makeInput(i) } }
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
     }
 
@@ -132,7 +132,7 @@ import Testing
         let top = graph.makeSubgraph()
         var current = top
         for _ in 0..<20_000 { current = graph.makeSubgraph(parent: current) }
-        let rule = graph.makeRule { () -> Int in graph.invalidate(top); return 1 }
+        let rule = graph.makeRule { () -> Int in top.invalidate(); return 1 }
         _ = graph.value(of: rule)
         #expect(graph.liveSubgraphCount == 1)
     }

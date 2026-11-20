@@ -9,7 +9,7 @@ struct SubgraphDAGTests {
         let a = graph.makeSubgraph(parent: r)
         let b = graph.makeSubgraph(parent: r)
         let c = graph.makeSubgraph(parent: a)
-        graph.addChild(c, to: b)
+        b.addChild(c)
 
         var notifications: [Subgraph] = []
         graph.observe(r) { notifications.append(r) }
@@ -18,13 +18,13 @@ struct SubgraphDAGTests {
         graph.observe(c) { notifications.append(c) }
 
         let baseline = graph.liveSubgraphCount - 4
-        graph.invalidate(r)
+        r.invalidate()
 
         #expect(graph.liveSubgraphCount == baseline)
         #expect(notifications.count == 4)
         #expect(Set(notifications) == Set([r, a, b, c]))
         #expect(notifications.first == r)
-        #expect(!graph.isValid(c))
+        #expect(!c.isValid)
     }
 
     @Test func sharedChildInSameContextDiesAndUnlinksFromLivingParent() {
@@ -32,17 +32,17 @@ struct SubgraphDAGTests {
         let p1 = graph.makeSubgraph()
         let p2 = graph.makeSubgraph()
         let c = graph.makeSubgraph(parent: p1)
-        graph.addChild(c, to: p2)
+        p2.addChild(c)
 
         let attr = graph.withCurrent(c) { graph.makeInput(42) }
         var cInvalidated = 0
         graph.observe(c) { cInvalidated += 1 }
 
-        graph.invalidate(p1)
+        p1.invalidate()
 
-        #expect(!graph.isValid(p1))
-        #expect(!graph.isValid(c))
-        #expect(graph.isValid(p2))
+        #expect(!p1.isValid)
+        #expect(!c.isValid)
+        #expect(p2.isValid)
         #expect(cInvalidated == 1)
         #expect(graph.subgraphs.children(of: p2.id.index).isEmpty)
         #expect(!graph.table.isLive(attr.id))
@@ -54,17 +54,17 @@ struct SubgraphDAGTests {
         let ctx2 = graph.makeSubgraphContext()
         let p2 = graph.makeSubgraph(context: ctx2)
         let c = graph.makeSubgraph(parent: p2) // inherits ctx2 != root context
-        graph.addChild(c, to: p1)
+        p1.addChild(c)
 
         let attr = graph.withCurrent(c) { graph.makeInput(99) }
         var cInvalidated = 0
         graph.observe(c) { cInvalidated += 1 }
 
-        graph.invalidate(p1)
+        p1.invalidate()
 
-        #expect(!graph.isValid(p1))
-        #expect(graph.isValid(p2))
-        #expect(graph.isValid(c))
+        #expect(!p1.isValid)
+        #expect(p2.isValid)
+        #expect(c.isValid)
         #expect(cInvalidated == 0)
         #expect(graph.value(of: attr) == 99)
         #expect(graph.subgraphs.parents(of: c.id.index) == [p2.id.index])
@@ -77,7 +77,7 @@ struct SubgraphDAGTests {
         let p2 = graph.makeSubgraph(context: ctx2)
         let sameCtxChild = graph.makeSubgraph(parent: p1)
         let diffCtxChild = graph.makeSubgraph(parent: p2)
-        graph.addChild(diffCtxChild, to: p1)
+        p1.addChild(diffCtxChild)
 
         var sameNotices = 0
         var diffNotices = 0
@@ -85,30 +85,30 @@ struct SubgraphDAGTests {
         graph.observe(diffCtxChild) { diffNotices += 1 }
 
         graph.withoutSubgraphInvalidation {
-            graph.invalidate(p1)
-            #expect(!graph.isValid(p1))
-            #expect(!graph.isValid(sameCtxChild))
-            #expect(graph.isValid(diffCtxChild))
+            p1.invalidate()
+            #expect(!p1.isValid)
+            #expect(!sameCtxChild.isValid)
+            #expect(diffCtxChild.isValid)
             #expect(sameNotices == 0)
             #expect(diffNotices == 0)
         }
 
         #expect(sameNotices == 1)
         #expect(diffNotices == 0)
-        #expect(graph.isValid(diffCtxChild))
+        #expect(diffCtxChild.isValid)
     }
 
     @Test func reusedSubgraphSlotBumpsGenerationInDAG() {
         let graph = Graph()
         let p = graph.makeSubgraph()
         let c = graph.makeSubgraph(parent: p)
-        graph.invalidate(c)
+        c.invalidate()
 
         let reused = graph.makeSubgraph(parent: p)
         #expect(reused.id.index == c.id.index)
         #expect(reused.id.generation != c.id.generation)
-        #expect(!graph.isValid(c))
-        #expect(graph.isValid(reused))
+        #expect(!c.isValid)
+        #expect(reused.isValid)
         #expect(!graph.isAncestor(c, of: p))
         #expect(graph.isAncestor(p, of: reused))
     }
@@ -119,7 +119,7 @@ struct SubgraphDAGTests {
         let first = graph.makeSubgraph(parent: root)
         let second = graph.makeSubgraph(parent: root)
         let leaf = graph.makeSubgraph(parent: first)
-        graph.addChild(leaf, to: second)
+        second.addChild(leaf)
 
         var order: [String] = []
         graph.observe(root) { order.append("root") }
@@ -127,7 +127,7 @@ struct SubgraphDAGTests {
         graph.observe(second) { order.append("second") }
         graph.observe(leaf) { order.append("leaf") }
 
-        graph.invalidate(root)
+        root.invalidate()
 
         // LIFO stack pops `root`, then `second` (last linked), then `leaf`, then `first`.
         #expect(order == ["root", "second", "leaf", "first"])
@@ -138,10 +138,10 @@ struct SubgraphDAGTests {
         let fallingParent = graph.makeSubgraph()
         let livingParent = graph.makeSubgraph(context: graph.makeSubgraphContext())
         let child = graph.makeSubgraph(parent: livingParent)
-        graph.addChild(child, to: fallingParent)
+        fallingParent.addChild(child)
 
         graph.withoutSubgraphInvalidation {
-            graph.invalidate(fallingParent)
+            fallingParent.invalidate()
             graph.setFallingForTesting(child, true)
             let chosen = graph.subgraphForCreating(in: child.id.index)
             #expect(chosen == livingParent.id)
@@ -153,7 +153,7 @@ struct SubgraphDAGTests {
         let p1 = graph.makeSubgraph()
         let p2 = graph.makeSubgraph()
         let shared = graph.makeSubgraph(parent: p1)
-        graph.addChild(shared, to: p2)
+        p2.addChild(shared)
 
         let a = graph.withCurrent(shared) { graph.makeInput(1) }
         graph.setFlags([.init(rawValue: 1 << 0)], for: a)
@@ -164,7 +164,7 @@ struct SubgraphDAGTests {
         }
         #expect(visitedFromP2 == [Int(a.id.index)])
 
-        graph.removeChild(shared, from: p2)
+        p2.removeChild(shared)
         var visitedAfterUnlink: [Int] = []
         graph.forEach(in: p2, flags: [.init(rawValue: 1 << 0)]) { attr in
             visitedAfterUnlink.append(Int(attr.id.index))
@@ -177,7 +177,7 @@ struct SubgraphDAGTests {
             let graph = Graph()
             let p = graph.makeSubgraph()
             let c = graph.makeSubgraph(parent: p)
-            graph.addChild(p, to: c)
+            c.addChild(p)
         }
     }
 
@@ -186,8 +186,8 @@ struct SubgraphDAGTests {
         let p = graph.makeSubgraph()
         let c = graph.makeSubgraph(parent: p)
 
-        graph.addChild(c, to: p)
-        graph.addChild(c, to: p)
+        p.addChild(c)
+        p.addChild(c)
 
         #expect(graph.subgraphs.children(of: p.id.index) == [c.id.index])
         #expect(graph.subgraphs.parents(of: c.id.index) == [p.id.index])
@@ -199,7 +199,7 @@ struct SubgraphDAGTests {
         let p2 = graph.makeSubgraph()
         let c = graph.makeSubgraph(parent: p1)
 
-        graph.removeChild(c, from: p2)
+        p2.removeChild(c)
 
         #expect(graph.subgraphs.parents(of: c.id.index) == [p1.id.index])
         #expect(graph.subgraphs.children(of: p2.id.index).isEmpty)
@@ -211,17 +211,17 @@ struct SubgraphDAGTests {
         let ctx2 = graph.makeSubgraphContext()
         let p2 = graph.makeSubgraph(context: ctx2)
         let c = graph.makeSubgraph(parent: p2)
-        graph.addChild(c, to: p1)
+        p1.addChild(c)
 
         var cNotices = 0
         graph.observe(c) { cNotices += 1 }
 
-        graph.invalidate(p1)
-        #expect(graph.isValid(c))
+        p1.invalidate()
+        #expect(c.isValid)
         #expect(cNotices == 0)
 
-        graph.invalidate(p2)
-        #expect(!graph.isValid(c))
+        p2.invalidate()
+        #expect(!c.isValid)
         #expect(cNotices == 1)
     }
 }

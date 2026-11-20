@@ -217,7 +217,7 @@ public final class Graph {
     }
 
     /// Links `child` under `parent` in the subgraph DAG. Rejects self-links and cycles.
-    public func addChild(_ child: Subgraph, to parent: Subgraph) {
+    func addChild(_ child: Subgraph, to parent: Subgraph) {
         assertOwnThread()
         precondition(subgraphs.isLive(parent.id) && !subgraphs.isFalling(index: parent.id.index),
                      "addChild: the parent subgraph was invalidated")
@@ -227,7 +227,7 @@ public final class Graph {
     }
 
     /// Unlinks `child` from `parent` in the subgraph DAG without invalidating `child`.
-    public func removeChild(_ child: Subgraph, from parent: Subgraph) {
+    func removeChild(_ child: Subgraph, from parent: Subgraph) {
         assertOwnThread()
         precondition(subgraphs.isLive(parent.id), "removeChild: the parent subgraph was invalidated")
         precondition(subgraphs.isLive(child.id), "removeChild: the child subgraph was invalidated")
@@ -256,7 +256,7 @@ public final class Graph {
     func isLive(_ subgraph: Subgraph) -> Bool { subgraphs.isLive(subgraph.id) }
 
     /// Whether the subgraph is valid (it is alive and has not been invalidated).
-    public func isValid(_ subgraph: Subgraph) -> Bool {
+    func isValid(_ subgraph: Subgraph) -> Bool {
         assertOwnThread()
         return subgraphs.isLive(subgraph.id) && !subgraphs.isFalling(index: subgraph.id.index)
     }

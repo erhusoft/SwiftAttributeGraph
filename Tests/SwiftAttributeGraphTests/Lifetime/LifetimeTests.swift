@@ -16,7 +16,7 @@ import Testing
                     _ = graph.value(of: body)
                 }
             }
-            for subgraph in subgraphs { graph.invalidate(subgraph) }
+            for subgraph in subgraphs { subgraph.invalidate() }
             #expect(graph.nodeCount == 1)
         }
         #expect(graph.table.outputs[Int(base.id.index)].isEmpty, "the survivor keeps no reader of a dead rule")
@@ -29,7 +29,7 @@ import Testing
         let inside = graph.withCurrent(sub) { graph.makeRule { outsideSource.value + 1 } }
         _ = graph.value(of: inside)
         #expect(graph.table.outputs[Int(outsideSource.id.index)].count == 1)
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.table.outputs[Int(outsideSource.id.index)].isEmpty)
     }
 
@@ -42,7 +42,7 @@ import Testing
             let c = graph.makeRule { b.value + a.value }
             _ = graph.value(of: c)
         }
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.nodeCount == 0)
     }
 
@@ -53,7 +53,7 @@ import Testing
         let told = Counter()
         let dead = graph.withCurrent(sub) { graph.makeInput(1) }
         graph.observe(dead.erased) { told.count += 1 }
-        graph.invalidate(sub)
+        sub.invalidate()
         let reborn = graph.makeInput(2)           // takes the freed slot
         graph.setValue(3, for: reborn)
         #expect(told.count == 0, "an observer must not follow the slot to the attribute that reuses it")
@@ -87,7 +87,7 @@ import Testing
                     for _ in 0..<10 { _ = graph.makeSubgraph() }
                     _ = graph.makeInput(round)
                 }
-                graph.invalidate(old)
+                old.invalidate()
             }
             return round
         }
@@ -96,7 +96,7 @@ import Testing
             graph.setValue(round, for: switcher)
             #expect(graph.value(of: host) == round)
         }
-        graph.invalidate(branch)
+        branch.invalidate()
         #expect(graph.nodeCount == baseNodes + 1)                               // `host` is the only addition
         #expect(graph.liveSubgraphCount == baseSubgraphs)
         #expect(graph.subgraphs.slotCount < 40, "the slots of dead subgraphs are reused")

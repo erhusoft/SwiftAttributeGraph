@@ -31,7 +31,7 @@ import Testing
         let sub = graph.makeSubgraph()
         let (a, b) = graph.withCurrent(sub) { (graph.makeInput(2), graph.makeInput(3)) }
         #expect(graph.nodeCount == 3)
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.nodeCount == 1)
         #expect(graph.contains(keep.id))
         #expect(!graph.contains(a.id))
@@ -42,7 +42,7 @@ import Testing
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let a = graph.withCurrent(sub) { graph.makeInput(1) }
-        graph.invalidate(sub)
+        sub.invalidate()
         let b = graph.makeInput(2)
         #expect(index(of: b.id) == index(of: a.id), "the freed slot should be reused")
         #expect(b.id != a.id, "a reused slot must get a new generation")
@@ -52,7 +52,7 @@ import Testing
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let stale = graph.withCurrent(sub) { graph.makeInput(1) }.id
-        graph.invalidate(sub)
+        sub.invalidate()
         let fresh = graph.makeInput(2)
         #expect(!graph.contains(stale))
         #expect(graph.contains(fresh.id))
@@ -65,7 +65,7 @@ import Testing
             let sub = graph.makeSubgraph()
             let id = graph.withCurrent(sub) { graph.makeInput(round) }.id
             #expect(id != AttributeID(rawValue: 0))
-            graph.invalidate(sub)
+            sub.invalidate()
         }
     }
 
@@ -74,7 +74,7 @@ import Testing
         for round in 0..<200 {
             let sub = graph.makeSubgraph()
             graph.withCurrent(sub) { for _ in 0..<50 { _ = graph.makeInput(round) } }
-            graph.invalidate(sub)
+            sub.invalidate()
         }
         #expect(graph.nodeCount == 0)
         let probe = graph.makeInput(0)
@@ -91,9 +91,9 @@ import Testing
             return o
         }
         #expect(graph.subgraph(of: o.id) == outer)
-        graph.invalidate(inner)
+        inner.invalidate()
         #expect(graph.nodeCount == 1)
-        graph.invalidate(outer)
+        outer.invalidate()
         #expect(graph.nodeCount == 0)
     }
 
@@ -101,15 +101,15 @@ import Testing
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
             let sub = graph.makeSubgraph()
-            graph.invalidate(sub)
-            graph.invalidate(sub)
+            sub.invalidate()
+            sub.invalidate()
         }
     }
 
     @Test func theRootSubgraphCannotBeInvalidated() async {
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
-            graph.invalidate(graph.rootSubgraph)
+            graph.rootSubgraph.invalidate()
         }
     }
 }

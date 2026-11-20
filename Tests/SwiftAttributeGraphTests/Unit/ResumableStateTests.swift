@@ -211,7 +211,7 @@ import Testing
             graph.setValue(1, for: tick)
             seen.append(graph.value(of: reader))
         }
-        let trigger = graph.makeRule { () -> Int in graph.invalidate(a); graph.invalidate(b); return 0 }
+        let trigger = graph.makeRule { () -> Int in a.invalidate(); b.invalidate(); return 0 }
         _ = graph.value(of: trigger)
         #expect(seen == [99])
         #expect(graph.nodeCount == 2 && graph.liveSubgraphCount == 1 && graph.frames.isEmpty)

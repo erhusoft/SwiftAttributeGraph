@@ -163,7 +163,7 @@ import Testing
                     for _ in 0..<3 { _ = graph.makeInput(2) }
                 }
             }
-            for subgraph in subgraphs { graph.invalidate(subgraph) }
+            for subgraph in subgraphs { subgraph.invalidate() }
         }
         Self.report("2,000 subgraphs x 5 attributes: create + invalidate", ms)
         #expect(ms < 10_000)
@@ -274,7 +274,7 @@ import Testing
                 level = next
             }
             for sub in level { graph.withCurrent(sub) { _ = graph.makeInput(1) } }
-            graph.invalidate(root)
+            root.invalidate()
         }
         Self.report("M5 build + invalidate a tree of 111,111 subgraphs (100,000 attributes)", ms)
         #expect(ms < 5_000)
@@ -285,7 +285,7 @@ import Testing
             let graph = Graph()
             var rows: [Subgraph] = []
             for round in 0..<20 {
-                for sub in rows { graph.invalidate(sub) }
+                for sub in rows { sub.invalidate() }
                 rows = (0..<1_000).map { _ in
                     let sub = graph.makeSubgraph()
                     graph.withCurrent(sub) {

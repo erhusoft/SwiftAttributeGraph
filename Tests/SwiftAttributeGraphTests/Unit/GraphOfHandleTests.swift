@@ -37,14 +37,14 @@ import Testing
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let old = graph.withCurrent(sub) { graph.makeInput(1) }
-        graph.invalidate(sub)
+        sub.invalidate()
         let fresh = graph.makeInput(2)
         #expect(fresh.id.index == old.id.index)
         #expect(fresh.graph === graph)
         #expect(Graph.graph(of: old.erased) == nil, "a dead attribute belongs to no graph")
         let again = graph.makeSubgraph()
         #expect(again.graph === graph)
-        graph.invalidate(again)
+        again.invalidate()
         #expect(Graph.graph(of: again) == nil)
     }
 
@@ -57,7 +57,7 @@ import Testing
         for i in 0..<70_000 {
             let attribute = graph.withCurrent(current) { graph.makeInput(i) }
             #expect(attribute.graph === graph)
-            graph.invalidate(current)
+            current.invalidate()
             #expect(Graph.graph(of: attribute.erased) == nil)
             #expect(Graph.graph(of: current) == nil)
             current = graph.makeSubgraph()

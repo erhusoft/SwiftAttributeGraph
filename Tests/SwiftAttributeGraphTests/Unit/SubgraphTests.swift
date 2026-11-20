@@ -28,7 +28,7 @@ import Testing
         let grandchild = graph.makeSubgraph(parent: child)
         let attributes = [parent, child, grandchild].map { s in graph.withCurrent(s) { graph.makeInput(1) } }
         #expect(graph.nodeCount == 3 && graph.liveSubgraphCount == 4)
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
         #expect(attributes.allSatisfy { !graph.contains($0.id) })
         #expect(![parent, child, grandchild].contains { graph.isLive($0) })
@@ -41,11 +41,11 @@ import Testing
         let first = graph.makeSubgraph(parent: parent), second = graph.makeSubgraph(parent: parent), third = graph.makeSubgraph(parent: parent)
         let kept = [parent, first, third].map { s in graph.withCurrent(s) { graph.makeInput(1) } }
         graph.withCurrent(second) { _ = graph.makeInput(2) }
-        graph.invalidate(second)
+        second.invalidate()
         #expect(graph.children(of: parent) == [first, third])
         #expect(kept.allSatisfy { graph.contains($0.id) })
         #expect(graph.nodeCount == 3)
-        graph.invalidate(first); graph.invalidate(third)
+        first.invalidate(); third.invalidate()
         #expect(graph.children(of: parent).isEmpty)
     }
 
@@ -57,7 +57,7 @@ import Testing
         let inParent = graph.withCurrent(parent) { graph.makeRule { inChild.value + outside.value } }
         let reader = graph.makeRule { inParent.value + 1 }                 // outside the set
         _ = graph.value(of: reader)
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(!graph.isDirty(reader.id))
         #expect(graph.inputs(of: reader.id).isEmpty)
         #expect(graph.table.outputs[Int(outside.id.index)].isEmpty)        // the dead rule left no edge behind
@@ -68,7 +68,7 @@ import Testing
     @Test func aSubgraphIDDoesNotResolveAfterItsSlotIsReused() {
         let graph = Graph()
         let old = graph.makeSubgraph()
-        graph.invalidate(old)
+        old.invalidate()
         let reborn = graph.makeSubgraph()
         #expect(reborn.id.index == old.id.index && reborn != old)
         #expect(!graph.isLive(old) && graph.isLive(reborn))
@@ -88,7 +88,7 @@ import Testing
                 if name == "first" { log.events.append("state=\(graph.value(of: state))") }
             }
         }
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(log.events == ["parent alive=true", "second alive=true", "first alive=true", "state=41"])
         #expect(!graph.contains(state.id))
     }
@@ -99,7 +99,7 @@ import Testing
         let sub = graph.makeSubgraph()
         let token = graph.observe(sub) { log.events.append("told") }
         token.cancel()
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(log.events.isEmpty)
     }
 
@@ -107,8 +107,8 @@ import Testing
         let graph = Graph()
         let a = graph.makeSubgraph(), b = graph.makeSubgraph()
         graph.withCurrent(b) { _ = graph.makeInput(1) }
-        graph.observe(a) { graph.invalidate(b) }
-        graph.invalidate(a)
+        graph.observe(a) { b.invalidate() }
+        a.invalidate()
         #expect(!graph.isLive(b) && graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
     }
 
@@ -130,8 +130,8 @@ import Testing
             log.events.append("value=\(graph.value(of: reader))")
         }
         let trigger = graph.makeRule { () -> Int in
-            graph.invalidate(a)
-            graph.invalidate(b)
+            a.invalidate()
+            b.invalidate()
             return 0
         }
         _ = graph.value(of: trigger)
@@ -152,8 +152,8 @@ import Testing
             log.events.append("detached")
         }
         let trigger = graph.makeRule { () -> Int in
-            graph.invalidate(a)
-            graph.invalidate(b)
+            a.invalidate()
+            b.invalidate()
             return 0
         }
         _ = graph.value(of: trigger)
@@ -171,8 +171,8 @@ import Testing
         let log = Log()
         let rule = graph.makeRule { () -> Int in
             if switcher.value {
-                graph.invalidate(branch)
-                log.events.append("subgraph valid right after invalidate: \(graph.isValid(branch))")
+                branch.invalidate()
+                log.events.append("subgraph valid right after invalidate: \(branch.isValid)")
                 log.events.append("alive right after invalidate: \(graph.contains(state.id))")
                 log.events.append("still readable: \(state.value)")
             }
@@ -184,7 +184,7 @@ import Testing
         #expect(log.events == ["subgraph valid right after invalidate: false",
                                "alive right after invalidate: true",
                                "still readable: 7"])
-        #expect(!graph.contains(state.id) && !graph.isLive(branch) && !graph.isValid(branch))
+        #expect(!graph.contains(state.id) && !graph.isLive(branch) && !branch.isValid)
         #expect(graph.nodeCount == 2)                                      // `switcher` and `rule`
     }
 
@@ -193,7 +193,7 @@ import Testing
             let graph = Graph()
             let branch = graph.makeSubgraph()
             let rule = graph.makeRule { () -> Int in
-                graph.invalidate(branch)
+                branch.invalidate()
                 _ = graph.withCurrent(branch) { graph.makeInput(1) }
                 return 0
             }
@@ -205,7 +205,7 @@ import Testing
         let graph = Graph()
         let branch = graph.makeSubgraph()
         graph.withCurrent(branch) { _ = graph.makeInput(1) }
-        let rule = graph.makeRule { () -> Int in graph.invalidate(branch); graph.invalidate(branch); return 0 }
+        let rule = graph.makeRule { () -> Int in branch.invalidate(); branch.invalidate(); return 0 }
         _ = graph.value(of: rule)
         #expect(!graph.isLive(branch) && graph.nodeCount == 1)
     }
@@ -214,15 +214,15 @@ import Testing
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
             let sub = graph.makeSubgraph()
-            graph.invalidate(sub)
-            graph.invalidate(sub)
+            sub.invalidate()
+            sub.invalidate()
         }
     }
 
     @Test func theRootCannotBeInvalidated() async {
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
-            graph.invalidate(graph.rootSubgraph)
+            graph.rootSubgraph.invalidate()
         }
     }
 
@@ -230,7 +230,7 @@ import Testing
         let graph = Graph()
         let sub = graph.makeSubgraph()
         let rule = graph.withCurrent(sub) { () -> Attribute<Int> in
-            graph.makeRule { () -> Int in graph.invalidate(sub); return 5 }
+            graph.makeRule { () -> Int in sub.invalidate(); return 5 }
         }
         #expect(graph.value(of: rule) == 5)
         #expect(!graph.contains(rule.id) && graph.nodeCount == 0)
@@ -242,7 +242,7 @@ import Testing
         let branch = graph.makeSubgraph()
         graph.observe(branch) { log.events.append("notice") }
         let rule = graph.makeRule { () -> Int in
-            graph.invalidate(branch)
+            branch.invalidate()
             log.events.append("rule done")
             return 0
         }
@@ -273,9 +273,9 @@ import Testing
         _ = graph.withCurrent(caller) { graph.value(of: rule) }
         #expect(made.events == ["true true true"])
         #expect(graph.nodeCount == 3)
-        graph.invalidate(owner)
+        owner.invalidate()
         #expect(graph.contains(direct!.id) && graph.nodeCount == 2)
-        graph.invalidate(caller)
+        caller.invalidate()
         #expect(!graph.contains(direct!.id) && graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
     }
 
@@ -294,7 +294,7 @@ import Testing
         }
         #expect(graph.value(of: rule) == 2)
         #expect(graph.subgraph(of: direct!.id) == graph.rootSubgraph)
-        graph.invalidate(owner)
+        owner.invalidate()
         #expect(graph.contains(direct!.id))
     }
 
@@ -323,7 +323,7 @@ import Testing
         graph.setValue(6, for: y)
         #expect(graph.value(of: outer) == 161)
         #expect(log.events == ["created", "r", "outer"])
-        graph.invalidate(caller)
+        caller.invalidate()
         #expect(!graph.contains(created!.id))
         log.events.removeAll()
         #expect(graph.value(of: outer) == 161 && log.events == [])
@@ -343,7 +343,7 @@ import Testing
         let r = graph.withCurrent(owner) {
             graph.makeRule { () -> Int in
                 if created == nil {
-                    callerValidAtCreation = graph.isValid(caller)
+                    callerValidAtCreation = caller.isValid
                     created = createRule ? graph.makeRule { y.value * 10 } : graph.makeInput(10)
                 }
                 return created!.value + 1
@@ -353,19 +353,19 @@ import Testing
         let outer = graph.makeRule { () -> Int in
             if armed {
                 armed = false
-                graph.invalidate(caller)
+                caller.invalidate()
             }
             return r.value + 100
         }
         #expect(graph.withCurrent(caller) { graph.value(of: outer) } == (createRule ? 151 : 111))
         #expect(!callerValidAtCreation)
         #expect(graph.subgraph(of: created!.id) == owner)
-        #expect(!graph.isValid(caller) && graph.contains(created!.id))
+        #expect(!caller.isValid && graph.contains(created!.id))
         if createRule {
             graph.setValue(6, for: y)
             #expect(graph.value(of: outer) == 161)
         }
-        graph.invalidate(owner)
+        owner.invalidate()
         #expect(!graph.contains(created!.id))
     }
 
@@ -391,7 +391,7 @@ import Testing
         let rule = graph.withCurrent(owner) { graph.makeResumableRule(CreatingResumableRule(box: box)) }
         #expect(graph.withCurrent(caller) { graph.value(of: rule) } == 4)
         #expect(graph.subgraph(of: box.attribute!.id) == caller)
-        graph.invalidate(caller)
+        caller.invalidate()
         #expect(!graph.contains(box.attribute!.id))
     }
 
@@ -422,7 +422,7 @@ import Testing
         }
         let invalidator = graph.makeRule { () -> Int in
             _ = tick.value
-            graph.invalidate(branch)
+            branch.invalidate()
             return graph.value(of: inside)
         }
         _ = graph.value(of: invalidator)
@@ -444,7 +444,7 @@ import Testing
             }
             let outer = graph.withCurrent(sub) {
                 graph.makeRule { () -> Int in
-                    graph.invalidate(sub)
+                    sub.invalidate()
                     return inner.value
                 }
             }
@@ -545,9 +545,9 @@ import Testing
         graph.observe(child) { log.events.append("child invalidated") }
 
         graph.withoutSubgraphInvalidation {
-            graph.invalidate(child)
+            child.invalidate()
             // Immediately marked invalid (`isValid == false`), while its attributes remain alive until the scope ends.
-            #expect(!graph.isValid(child))
+            #expect(!child.isValid)
             #expect(graph.contains(target.id))
             #expect(graph.value(of: weakTarget) == 42)
             #expect(log.events.isEmpty)

@@ -9,7 +9,7 @@ import Testing
         let duration = ContinuousClock().measure {
             for _ in 0..<depth {
                 let child = graph.makeSubgraph(parent: graph.rootSubgraph)   // fresh, no children yet
-                graph.addChild(child, to: parent)
+                parent.addChild(child)
                 parent = child
             }
         }
@@ -40,7 +40,7 @@ import Testing
         }
         let duration = ContinuousClock().measure {
             for child in children {
-                graph.invalidate(child)
+                child.invalidate()
             }
         }
         #expect(graph.nodeCount == 0 && graph.liveSubgraphCount == 2)
@@ -64,7 +64,7 @@ import Testing
 
         // Invalidate the middle child c2; remaining children must stay in creation order [c1, c3, c4],
         // visited in reverse creation order [c4, c3, c1] by `forEach` and by `observe` when `parent` is invalidated.
-        graph.invalidate(c2)
+        c2.invalidate()
         #expect(graph.children(of: parent) == [c1, c3, c4])
         var visited: [AttributeID] = []
         graph.forEach(in: parent, flags: flag) { visited.append($0.id) }
@@ -75,7 +75,7 @@ import Testing
         graph.observe(c1) { notices.append("c1") }
         graph.observe(c3) { notices.append("c3") }
         graph.observe(c4) { notices.append("c4") }
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(notices == ["parent", "c4", "c3", "c1"])
 
         // 2. Cost scaling across 1,000, 5,000, and 20,000 siblings must be linear, not O(N^2) (~297 ms in release before fix).

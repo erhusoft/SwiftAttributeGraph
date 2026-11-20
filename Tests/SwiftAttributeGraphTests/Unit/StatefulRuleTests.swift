@@ -262,7 +262,7 @@ import Testing
             let sub = graph.makeSubgraph()
             graph.withCurrent(sub) { _ = graph.value(of: graph.makeStatefulRule(Holding())) }
             #expect(Tracker.alive == before + 1)
-            graph.invalidate(sub)
+            sub.invalidate()
             #expect(Tracker.alive == before)
         }
         #expect(graph.nodeCount == base)

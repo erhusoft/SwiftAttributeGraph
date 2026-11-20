@@ -81,9 +81,9 @@ import Testing
                     let target = candidates[random.next(candidates.count)]
                     let handle = handles[target]
                     if random.next(2) == 0 {
-                        graph.invalidate(handle)
+                        handle.invalidate()
                     } else {
-                        let trigger = graph.makeRule { () -> Int in graph.invalidate(handle); return 0 }
+                        let trigger = graph.makeRule { () -> Int in handle.invalidate(); return 0 }
                         _ = graph.value(of: trigger)
                         attributes.append(ModelAttribute(owner: 0, isRule: true, source: nil))
                         inputs.append(trigger); ids.append(trigger.id)
@@ -105,7 +105,7 @@ import Testing
                 }
             }
             // Everything below the root goes away; nothing is left but the root.
-            for s in liveSubgraphs().filter({ $0 != 0 && subgraphs[$0].parent == 0 }) { graph.invalidate(handles[s]) }
+            for s in liveSubgraphs().filter({ $0 != 0 && subgraphs[$0].parent == 0 }) { (handles[s]).invalidate() }
             #expect(graph.liveSubgraphCount == 1 && graph.nodeCount == attributes.indices.filter { attributes[$0].alive && attributes[$0].owner == 0 }.count)
         }
     }

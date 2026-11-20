@@ -273,7 +273,7 @@ import Testing
         let downstream = graph.makeRule { outside.value + 1 }
         #expect(graph.value(of: downstream) == 6)
 
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(!graph.isDirty(outside.id))
         #expect(!graph.isDirty(downstream.id))
         #expect(graph.inputs(of: outside.id) == [use.id], "the edge to the dead attribute is removed")
@@ -290,7 +290,7 @@ import Testing
             let inside = graph.withCurrent(sub) { graph.makeInput(5) }
             let outside = graph.makeRule { _ = trigger.value; return inside.value }
             _ = graph.value(of: outside)
-            graph.invalidate(sub)
+            sub.invalidate()
             graph.setValue(1, for: trigger)
             _ = graph.value(of: outside)
         }
@@ -306,9 +306,9 @@ import Testing
             }
         }
         #expect(graph.nodeCount == 400)
-        graph.invalidate(groups[0])
+        (groups[0]).invalidate()
         #expect(graph.nodeCount == 398)
-        for group in groups.dropFirst() { graph.invalidate(group) }
+        for group in groups.dropFirst() { group.invalidate() }
         #expect(graph.nodeCount == 0)
     }
 

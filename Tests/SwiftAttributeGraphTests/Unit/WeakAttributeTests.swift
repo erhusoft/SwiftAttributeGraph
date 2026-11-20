@@ -27,7 +27,7 @@ import Testing
         graph.setValue(99, for: target)
         #expect(graph.value(of: weak) == 99)
 
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.attribute(of: weak) == nil)
         #expect(graph.value(of: weak) == nil)
         #expect(graph.changedValue(of: weak) == nil)
@@ -57,7 +57,7 @@ import Testing
         #expect(counter.runs == 2)
 
         // 3. Invalidating `sub` detaches the edge without dirtying `reader` (matches native AttributeGraph C15):
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.value(of: reader) == 66)
         #expect(counter.runs == 2)
 
@@ -89,7 +89,7 @@ import Testing
         graph.setValue(20, for: target)
         #expect(graph.value(of: rule) == 200)
 
-        graph.invalidate(sub)
+        sub.invalidate()
         #expect(graph.value(of: rule) == 200) // cached until `tick` changes
         graph.setValue(2, for: tick)
         #expect(graph.value(of: rule) == -999)
@@ -145,7 +145,7 @@ import Testing
         graph.setValue(7, for: p)
         #expect(graph.value(of: ruleNoOverride) == 27)
 
-        graph.invalidate(sub)
+        sub.invalidate()
         graph.setValue(8, for: p)
         #expect(graph.value(of: ruleNoOverride) == -2)
 

@@ -234,7 +234,7 @@ import Testing
         #expect(runs == 2)
 
         // Invalidating `child` resets `indirect` back to `initial` without dirtying `reader`.
-        graph.invalidate(child)
+        child.invalidate()
         #expect(graph.source(of: indirect) == initial)
         #expect(!graph.isDirty(reader.id))
         #expect(graph.value(of: reader) == 78)

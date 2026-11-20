@@ -164,10 +164,10 @@ import Testing
         let child = graph.makeSubgraph(parent: parent)
         let rule = graph.withCurrent(parent) { graph.makeRule { Int64(3) } }
         _ = graph.withCurrent(child) { graph.makeIndirect(rule) }
-        graph.invalidate(child)
+        child.invalidate()
         #expect(graph.counter(for: .nodes) == 1)
         #expect(graph.nodeCount == 1)
-        graph.invalidate(parent)
+        parent.invalidate()
         #expect(graph.counter(for: .nodes) == 0, "native: 0 after the parent is invalidated [O]")
         #expect(graph.counter(for: .createdNodes) == 1, "freed nodes stay in createdNodes, indirect ones never enter")
         #expect(graph.nodeCount == 0)

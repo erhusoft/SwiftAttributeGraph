@@ -52,7 +52,7 @@ import Testing
             let graph = Graph()
             let sub = graph.makeSubgraph()
             let input = graph.withCurrent(sub) { graph.makeInput(1) }
-            graph.invalidate(sub)
+            sub.invalidate()
             _ = graph.value(of: input)
         }
     }

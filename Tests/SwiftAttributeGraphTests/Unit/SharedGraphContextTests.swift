@@ -128,12 +128,12 @@ import Testing
         let a1 = graph.withCurrent(sg1) { graph.makeInput(Int64(1)) }
         _ = graph.withCurrent(sg2) { graph.makeInput(Int64(2)) }
         #expect(graph.counter(for: .nodes) == 2)
-        graph.invalidate(sg2)
-        #expect(graph.isValid(sg1) && !graph.isValid(sg2))
+        sg2.invalidate()
+        #expect(sg1.isValid && !sg2.isValid)
         #expect(graph.value(of: a1) == 1)
         #expect(shared.counter(for: .nodes) == 1 && graph.counter(for: .nodes) == 1, "native: counters are graph-wide [O]")
         #expect(graph.counter(for: .subgraphs) == 1)
-        graph.invalidate(sg1)
+        sg1.invalidate()
         #expect(graph.counter(for: .nodes) == 0 && graph.counter(for: .subgraphs) == 0)
     }
 
@@ -337,7 +337,7 @@ import Testing
 
         // (f) Invalidating consumer subgraph sg3 stops c3 from firing
         _ = graph.value(of: cOut)
-        graph.invalidate(sg3)
+        sg3.invalidate()
         #expect(ev1.isEmpty && ev2.isEmpty && ev3.isEmpty)
         graph.setValue(40, for: a)
         // Now `b` in sg2 has no outputs left either (since `c` in sg3 was invalidated!), so neither c2 nor c3 fires!

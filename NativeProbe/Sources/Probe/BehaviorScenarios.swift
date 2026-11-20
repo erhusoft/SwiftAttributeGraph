@@ -1594,11 +1594,11 @@ func subgraphDagAddChild() {
     let p1 = graph.makeSubgraph()
     let p2 = graph.makeSubgraph()
     let childSame = graph.withSubgraph(p1) { graph.makeSubgraph() }
-    graph.addChild(childSame, to: p2)
-    graph.invalidate(p1)
-    let sameValidAfterP1 = graph.isValid(childSame)
-    graph.invalidate(p2)
-    let sameValidAfterP2 = graph.isValid(childSame)
+    p2.addChild(childSame)
+    p1.invalidate()
+    let sameValidAfterP1 = childSame.isValid
+    p2.invalidate()
+    let sameValidAfterP2 = childSame.isValid
 
     print("subgraph-dag-add-child|same=[\(sameValidAfterP1), \(sameValidAfterP2)]")
 }
@@ -1923,11 +1923,11 @@ func subgraphAddChildSecondaryParent() {
     let p2 = graph.makeSubgraph()
     let child = graph.withSubgraph(p1) { graph.makeSubgraph() }
     graph.addChild(child, to: p2, tag: 1)
-    let validBefore = graph.isValid(child)
-    graph.invalidate(p1)
-    let validAfterP1 = graph.isValid(child)
-    graph.invalidate(p2)
-    let validAfterP2 = graph.isValid(child)
+    let validBefore = child.isValid
+    p1.invalidate()
+    let validAfterP1 = child.isValid
+    p2.invalidate()
+    let validAfterP2 = child.isValid
     print("subgraph-add-child-secondary-parent|valid=[\(validBefore), \(validAfterP1), \(validAfterP2)]")
 }
 
@@ -1937,11 +1937,11 @@ func subgraphAddChildSecondaryParentReverse() {
     let p2 = graph.makeSubgraph()
     let child = graph.withSubgraph(p1) { graph.makeSubgraph() }
     graph.addChild(child, to: p2, tag: 1)
-    let validBefore = graph.isValid(child)
-    graph.invalidate(p2)
-    let validAfterP2 = graph.isValid(child)
-    graph.invalidate(p1)
-    let validAfterP1 = graph.isValid(child)
+    let validBefore = child.isValid
+    p2.invalidate()
+    let validAfterP2 = child.isValid
+    p1.invalidate()
+    let validAfterP1 = child.isValid
     print("subgraph-add-child-secondary-parent-reverse|valid=[\(validBefore), \(validAfterP2), \(validAfterP1)]")
 }
 
@@ -1949,9 +1949,9 @@ func subgraphCreate2() {
     let graph = Driver()
     let a = graph.input(Int64(1))
     let sg = graph.makeSubgraph(for: a)
-    let validBefore = graph.isValid(sg)
-    graph.invalidate(sg)
-    let validAfter = graph.isValid(sg)
+    let validBefore = sg.isValid
+    sg.invalidate()
+    let validAfter = sg.isValid
     print("subgraph-create2|valid=[\(validBefore), \(validAfter)]")
 }
 
@@ -1967,7 +1967,7 @@ func weakReadAfterChildInvalidate() {
     }
     let v1 = graph.read(consumer)
     let w1 = graph.readWeak(w)
-    graph.invalidate(childSg)
+    childSg.invalidate()
     let w2 = graph.readWeak(w)
     let v2 = graph.read(consumer)
     print("weak-read-after-child-invalidate|weak=[\(String(describing: w1)), \(String(describing: w2))]|consumer=[\(v1), \(v2)]|runs=\(consumerRuns)")
@@ -1980,7 +1980,7 @@ func weakMultipleOnSameChild() {
     let w1 = graph.weak(child)
     let w2 = graph.weak(child)
     let before = [graph.readWeak(w1), graph.readWeak(w2)]
-    graph.invalidate(childSg)
+    childSg.invalidate()
     let after = [graph.readWeak(w1), graph.readWeak(w2)]
     print("weak-multiple-on-same-child|before=\(before)|after=\(after)")
 }
@@ -2004,7 +2004,7 @@ func weakCombinerThreeChildrenInvalidateMiddle() {
         return (graph.readWeak(w1) ?? 0) + (graph.readWeak(w2) ?? 0) + (graph.readWeak(w3) ?? 0)
     }
     let v1 = graph.read(combiner)
-    graph.invalidate(sg2)
+    sg2.invalidate()
     let v2 = graph.read(combiner)
     print("weak-combiner-three-children-invalidate-middle|values=[\(v1), \(v2)]|runs=\(combinerRuns)|order=\(order)")
 }
@@ -2288,14 +2288,14 @@ func subgraphAddChildOwnerScenario() {
             let child = graph.makeSubgraph()
             graph.addChild(child, to: p1, tag: tag)
             graph.addChild(child, to: p2, tag: tag)
-            let v0 = graph.isValid(child)
+            let v0 = child.isValid
             if p1First {
-                graph.invalidate(p1); let v1 = graph.isValid(child)
-                graph.invalidate(p2); let v2 = graph.isValid(child)
+                p1.invalidate(); let v1 = child.isValid
+                p2.invalidate(); let v2 = child.isValid
                 aRes.append([v0, v1, v2])
             } else {
-                graph.invalidate(p2); let v1 = graph.isValid(child)
-                graph.invalidate(p1); let v2 = graph.isValid(child)
+                p2.invalidate(); let v1 = child.isValid
+                p1.invalidate(); let v2 = child.isValid
                 aRes.append([v0, v1, v2])
             }
         }
@@ -2305,9 +2305,9 @@ func subgraphAddChildOwnerScenario() {
     let b1_p1 = graph.makeSubgraph(); let b1_p2 = graph.makeSubgraph()
     let b1_child = graph.withSubgraph(b1_p1) { graph.makeSubgraph() }
     graph.addChild(b1_child, to: b1_p2, tag: 1)
-    let b1_0 = graph.isValid(b1_child)
-    graph.invalidate(b1_p1); let b1_1 = graph.isValid(b1_child)
-    graph.invalidate(b1_p2); let b1_2 = graph.isValid(b1_child)
+    let b1_0 = b1_child.isValid
+    b1_p1.invalidate(); let b1_1 = b1_child.isValid
+    b1_p2.invalidate(); let b1_2 = b1_child.isValid
 
     // (d) 3 parents (p1, p2, p3)
     let d1 = graph.makeSubgraph(); let d2 = graph.makeSubgraph(); let d3 = graph.makeSubgraph()
@@ -2315,8 +2315,8 @@ func subgraphAddChildOwnerScenario() {
     graph.addChild(dChild, to: d1, tag: 1)
     graph.addChild(dChild, to: d2, tag: 1)
     graph.addChild(dChild, to: d3, tag: 1)
-    let d_0 = graph.isValid(dChild)
-    graph.invalidate(d2); let d_1 = graph.isValid(dChild)
+    let d_0 = dChild.isValid
+    d2.invalidate(); let d_1 = dChild.isValid
 
     print("subgraph-add-child-owner|a=\(aRes)|b=\([b1_0, b1_1, b1_2])|d=\([d_0, d_1])")
 }
@@ -2724,12 +2724,12 @@ func subgraphRemoveChildScenario() {
     let graph = Driver()
     let parent = graph.makeSubgraph()
     let child = graph.makeSubgraph()
-    graph.addChild(child, to: parent)
-    let v0 = graph.isValid(child)
-    graph.removeChild(child, from: parent)
-    let v1 = graph.isValid(child)
-    graph.invalidate(parent)
-    let v2 = graph.isValid(child)
+    parent.addChild(child)
+    let v0 = child.isValid
+    parent.removeChild(child)
+    let v1 = child.isValid
+    parent.invalidate()
+    let v2 = child.isValid
     print("subgraph-remove-child|v0=\(v0)|v1=\(v1)|v2=\(v2)")
 }
 
@@ -2737,12 +2737,12 @@ func subgraphRemoveChildThenUpdateScenario() {
     let graph = Driver()
     let parent = graph.makeSubgraph()
     let child = graph.makeSubgraph()
-    graph.addChild(child, to: parent)
-    graph.removeChild(child, from: parent)
-    let vBeforeUpdate = graph.isValid(child)
-    graph.invalidate(parent)
+    parent.addChild(child)
+    parent.removeChild(child)
+    let vBeforeUpdate = child.isValid
+    parent.invalidate()
     graph.update(parent, flags: 0xFF)
-    let vAfterUpdate = graph.isValid(child)
+    let vAfterUpdate = child.isValid
     let parentDirty = graph.isDirty(parent, flags: 0xFF)
     print("subgraph-remove-child-then-update|before=\(vBeforeUpdate)|after=\(vAfterUpdate)|parentDirty=\(parentDirty)")
 }
@@ -2776,13 +2776,13 @@ func subgraphDynamicReorderScenario() {
     let graph = Driver()
     let parent = graph.makeSubgraph()
     let children = (0..<3).map { _ in graph.makeSubgraph() }
-    for child in children { graph.addChild(child, to: parent) }
+    for child in children { parent.addChild(child) }
     let before = children.map { graph.isValid($0) }
     graph.removeChild(children[1], from: parent)
     let afterRemove = children.map { graph.isValid($0) }
     graph.addChild(children[1], to: parent)
     let afterReinsert = children.map { graph.isValid($0) }
-    graph.invalidate(parent)
+    parent.invalidate()
     let afterInvalidate = children.map { graph.isValid($0) }
     print("subgraph-dynamic-reorder|before=\(before)|afterRemove=\(afterRemove)|afterReinsert=\(afterReinsert)|afterInvalidate=\(afterInvalidate)")
 }

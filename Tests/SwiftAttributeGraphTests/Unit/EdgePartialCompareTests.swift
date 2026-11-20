@@ -125,7 +125,7 @@ struct EdgePartialCompareTests {
         // Re-add and invalidate owner subgraph.
         graph.setValue(true, for: flag)
         #expect(graph.value(of: consumer) == 1)
-        graph.invalidate(sg)
+        sg.invalidate()
         #expect(graph.edgeComparators[consumer.id.index] == nil)
     }
 
@@ -219,7 +219,7 @@ struct EdgePartialCompareTests {
         #expect(graph.edgeComparators[consumer.id.index]?[indirectA.id.index] == nil)
 
         // Invalidate `sg` owning the indirects -> no dangling references.
-        graph.invalidate(sg)
+        sg.invalidate()
         #expect(!graph.table.isLive(indirectA.id))
         #expect(!graph.table.isLive(indirectB.id))
     }
@@ -362,7 +362,7 @@ struct EdgePartialCompareTests {
         #expect(graph.value(of: consumer) == 0)
         #expect(graph.edgeComparators[consumer.id.index]?[indA.id.index] == nil)
 
-        graph.invalidate(sg)
+        sg.invalidate()
         #expect(graph.liveSubgraphCount == baseSubgraphs)
         #expect(graph.edgeComparators[consumer.id.index] == nil)
     }

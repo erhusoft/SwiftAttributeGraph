@@ -568,11 +568,11 @@ import SwiftAttributeGraph
         let p2 = g.makeSubgraph(context: ctx2)
         let sameChild = g.makeSubgraph(parent: p1)
         let diffChild = g.makeSubgraph(parent: p2)
-        g.addChild(diffChild, to: p1)
+        (p1).addChild(diffChild)
 
-        g.invalidate(p1)
-        #expect(!g.isValid(sameChild))
-        #expect(g.isValid(diffChild))
+        (p1).invalidate()
+        #expect(!(sameChild).isValid)
+        #expect((diffChild).isValid)
     }
 
     @Test func oracle6_cooperative_cancellation() {
@@ -694,7 +694,7 @@ import SwiftAttributeGraph
         let weak = WeakAttribute(attr)
 
         #expect(g.value(of: weak) == 42)
-        g.invalidate(sg)
+        (sg).invalidate()
         #expect(g.value(of: weak) == nil)
     }
 }

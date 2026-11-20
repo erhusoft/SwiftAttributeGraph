@@ -35,7 +35,7 @@ import Testing
         log.events = []
         let new = graph.makeSubgraph()
         log.events.append("B built")
-        graph.invalidate(old)
+        old.invalidate()
         let events = log.events
         #expect(events.first == "B built")
         let disappear = events.indices.filter { events[$0].hasSuffix("disappear") }
@@ -53,7 +53,7 @@ import Testing
         var branch = graph.makeSubgraph()
         var state = graph.withCurrent(branch) { graph.makeInput(0) }
         graph.setValue(5, for: state)
-        graph.invalidate(branch)
+        branch.invalidate()
         branch = graph.makeSubgraph()
         state = graph.withCurrent(branch) { graph.makeInput(0) }
         #expect(graph.value(of: state) == 0)
@@ -73,7 +73,7 @@ import Testing
 
         mutating func show(_ ids: [Int]) {
             for id in subgraphs.keys where !ids.contains(id) {                 // rows that left
-                graph.invalidate(subgraphs[id]!)
+                (subgraphs[id]!).invalidate()
                 subgraphs[id] = nil; states[id] = nil; bodies[id] = nil
             }
             for id in ids where subgraphs[id] == nil {                         // rows that arrived

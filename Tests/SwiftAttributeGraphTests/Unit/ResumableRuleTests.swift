@@ -248,7 +248,7 @@ import Testing
             for _ in 0..<20_000 { last = graph.makeResumableRule(PlusOne(source: last, counter: counter)) }
             #expect(graph.value(of: last) == 20_000)
         }
-        graph.invalidate(owner)
+        owner.invalidate()
         #expect(weakCounter == nil && graph.nodeCount == 0 && graph.liveSubgraphCount == 1)
     }
 

@@ -86,10 +86,10 @@ import Testing
         expect(graph, 6, 8, 6, 13, 6, 1, 1, "18 a read under withoutUpdate is a transaction")
         let sg2 = graph.makeSubgraph()
         expect(graph, 6, 8, 6, 13, 6, 2, 2, "19 second subgraph")
-        graph.addChild(sg2, to: sg)
-        graph.invalidate(sg2)
+        sg.addChild(sg2)
+        sg2.invalidate()
         expect(graph, 6, 8, 6, 13, 6, 1, 2, "21 invalidated child: subgraphs falls, createdSubgraphs does not")
-        graph.invalidate(sg)
+        sg.invalidate()
         expect(graph, 0, 8, 6, 13, 6, 0, 2, "22 invalidated parent frees the nodes")
     }
 
