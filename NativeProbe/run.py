@@ -91,6 +91,7 @@ SCENARIOS = [
     "compare-values-302-edges",
     "compare-values-103-102",
     "subgraph-remove-child",
+    "subgraph-remove-child-then-update",
     "get-input-value-explicit-reader",
     "get-input-value-dup-prune",
     "get-input-value-non-rule-reader",

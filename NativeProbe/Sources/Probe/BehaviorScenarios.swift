@@ -2732,3 +2732,17 @@ func subgraphRemoveChildScenario() {
     let v2 = graph.isValid(child)
     print("subgraph-remove-child|v0=\(v0)|v1=\(v1)|v2=\(v2)")
 }
+
+func subgraphRemoveChildThenUpdateScenario() {
+    let graph = Driver()
+    let parent = graph.makeSubgraph()
+    let child = graph.makeSubgraph()
+    graph.addChild(child, to: parent)
+    graph.removeChild(child, from: parent)
+    let vBeforeUpdate = graph.isValid(child)
+    graph.invalidate(parent)
+    graph.update(parent, flags: 0xFF)
+    let vAfterUpdate = graph.isValid(child)
+    let parentDirty = graph.isDirty(parent, flags: 0xFF)
+    print("subgraph-remove-child-then-update|before=\(vBeforeUpdate)|after=\(vAfterUpdate)|parentDirty=\(parentDirty)")
+}
