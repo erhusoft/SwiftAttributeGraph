@@ -207,6 +207,45 @@ import Testing
         }
     }
 
+    /// Native parity (`NativeProbe` scenarios `in-rule-invalidate-*`): Apple traps with "setting value during update".
+    @Test func aRuleThatInvalidatesAValueStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let input = graph.makeInput(1)
+            let target = graph.makeRule { input.value + 1 }
+            _ = graph.value(of: target)
+            let output = graph.makeRule { graph.invalidateValue(of: target); return 0 }
+            _ = graph.value(of: output)
+        }
+    }
+
+    /// Native parity (`NativeProbe` scenario `in-rule-invalidate-inside-without-update`): inside `withoutUpdate` no rule
+    /// is tracking reads, and Apple accepts the invalidation; the target runs again on its next read.
+    @Test func aRuleMayInvalidateAValueInsideWithoutUpdate() {
+        let graph = Graph()
+        let input = graph.makeInput(1)
+        let trigger = graph.makeInput(false)
+        var salt = 10
+        let counter = Counter()
+        let salted = graph.makeRule { () -> Int in
+            counter.runs += 1
+            return input.value + salt
+        }
+        let writer = graph.makeRule { () -> Int in
+            if trigger.value {
+                salt = 50
+                graph.withoutUpdate { graph.invalidateValue(of: salted) }
+            }
+            return 0
+        }
+        #expect(graph.value(of: salted) == 11)
+        #expect(graph.value(of: writer) == 0)
+        graph.setValue(true, for: trigger)
+        #expect(graph.value(of: writer) == 0)
+        #expect(graph.value(of: salted) == 51)
+        #expect(counter.runs == 2)
+    }
+
     @Test func writingToARuleStopsTheProgram() async {
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
@@ -366,6 +405,67 @@ import Testing
         graph.mutateBody(of: stateful, as: ScaledStatefulRule.self, invalidating: true) { $0.bonus = 50 }
         #expect(graph.isDirty(stateful.id))
         #expect(graph.value(of: stateful) == 54)
+    }
+
+    /// Native parity (`NativeProbe` scenario `in-rule-mutate-body-invalidating-input`): a rule that mutates, with
+    /// invalidation, the body of a rule it has just read stays dirty after its run and runs again on the next read.
+    @Test func mutateBodyInvalidatingInsideARuleKeepsTheRunningReaderDirty() {
+        let graph = Graph()
+        let input = graph.makeInput(3)
+        let scaled = graph.makeRule(ScaledRule(source: input, factor: 10))
+        let counter = Counter()
+        var armed = true
+        let reader = graph.makeRule { () -> Int in
+            counter.runs += 1
+            let value = scaled.value
+            if armed {
+                armed = false
+                graph.mutateBody(of: scaled, as: ScaledRule.self, invalidating: true) { $0.factor = 20 }
+            }
+            return value
+        }
+
+        #expect(graph.value(of: reader) == 30)
+        #expect(graph.isDirty(reader.id))
+        #expect(graph.value(of: reader) == 60)
+        #expect(graph.value(of: reader) == 60)
+        #expect(graph.value(of: scaled) == 60)
+        #expect(counter.runs == 2)
+    }
+
+    /// Native parity (`NativeProbe` scenario `in-rule-mutate-body-from-child-during-verification`): a reader that is on
+    /// the update stack (verifying its inputs, not running) when one of its already verified inputs has its body
+    /// mutated with invalidation keeps that update's value, stays dirty and runs on the next read.
+    @Test func mutateBodyInvalidatingFromAChildKeepsTheStackedParentDirty() {
+        let graph = Graph()
+        let input = graph.makeInput(3)
+        let trigger = graph.makeInput(0)
+        let scaled = graph.makeRule(ScaledRule(source: input, factor: 10))
+        let parentCounter = Counter(), childCounter = Counter()
+        var armed = true
+        let child = graph.makeRule { () -> Int in
+            childCounter.runs += 1
+            if trigger.value == 1 && armed {
+                armed = false
+                graph.mutateBody(of: scaled, as: ScaledRule.self, invalidating: true) { $0.factor = 20 }
+            }
+            return 0
+        }
+        let parent = graph.makeRule { () -> Int in
+            parentCounter.runs += 1
+            return scaled.value + child.value
+        }
+
+        #expect(graph.value(of: parent) == 30)
+        graph.setValue(1, for: trigger)
+        #expect(graph.value(of: parent) == 30)
+        #expect((parentCounter.runs, childCounter.runs) == (1, 2))
+        #expect(graph.isDirty(parent.id))
+        #expect(graph.value(of: parent) == 60)
+        #expect((parentCounter.runs, childCounter.runs) == (2, 2))
+        #expect(graph.value(of: scaled) == 60)
+        #expect(graph.value(of: parent) == 60)
+        #expect(parentCounter.runs == 2)
     }
 
     @Test func invalidateValueForcesRuleRecalculationEvenWhenInputsDidNotChange() {

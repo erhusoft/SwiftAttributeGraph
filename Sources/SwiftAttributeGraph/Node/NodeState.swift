@@ -24,4 +24,7 @@ enum NodeState {
     static let cached: UInt16 = 1 << 10
     /// Set by `invalidateValue(of:)` and cleared after the rule's evaluation finishes (`AGValueState.selfModified`).
     static let selfModified: UInt16 = 1 << 11
+    /// The node was on the update stack when the body of one of its inputs was mutated with invalidation: it stays
+    /// dirty when its frame ends (native parity, `NativeProbe` scenario `write-in-rule-mutate-body-invalidating`).
+    static let staysDirty: UInt16 = 1 << 12
 }

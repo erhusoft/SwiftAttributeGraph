@@ -372,9 +372,20 @@ extension Graph {
 
     /// Marks a rule attribute dirty and pending so it is forced to re-evaluate on its next read even if none of its
     /// inputs changed (`AnyAttribute.invalidateValue()` in native AttributeGraph), and propagates dirty to its readers.
+    ///
+    /// Like native AttributeGraph, a rule that is running and tracking its reads must not call it: the program stops
+    /// ("setting value during update"). Inside ``withoutUpdate(_:)-5k18s`` the call is accepted. To change a rule from
+    /// inside another rule, use ``mutateBody(of:as:invalidating:_:)`` with `invalidating: true`.
     public func invalidateValue(of attribute: AnyAttribute) {
         assertOwnThread()
+        precondition(evaluatingNode == Graph.noNode, "invalidateValue(of:): setting value during update")
         precondition(table.isLive(attribute.id), "invalidateValue(of:): the attribute is dead")
+        invalidateRuleValue(attribute)
+    }
+
+    /// The invalidation shared by ``invalidateValue(of:)-(AnyAttribute)`` and ``mutateBody(of:as:invalidating:_:)``;
+    /// it does not check whether a rule is running.
+    func invalidateRuleValue(_ attribute: AnyAttribute) {
         let index = attribute.id.index
         let n = Int(index)
         precondition(table.state[n] & NodeState.isRule != 0, "invalidateValue(of:): only rule attributes can be invalidated")
@@ -403,8 +414,24 @@ extension Graph {
             preconditionFailure("mutateBody(of:as:invalidating:_:): the attribute does not hold a rule of type \(R.self)")
         }
         if invalidating {
-            invalidateValue(of: attribute)
+            invalidateRuleValue(attribute.erased)
+            if evaluatingNode != Graph.noNode {
+                // Readers on the update stack keep this update's value but stay dirty (native parity).
+                for reader in table.outputs[Int(attribute.id.index)]
+                where table.state[Int(reader)] & NodeState.evaluating != 0 {
+                    table.state[Int(reader)] |= NodeState.staysDirty
+                }
+            }
         }
+    }
+
+    /// Ends a frame of a node marked ``NodeState/staysDirty``: the node is dirty again, and so are its readers.
+    @inline(__always)
+    func settleStaysDirty(_ node: UInt32) {
+        let n = Int(node)
+        guard table.state[n] & NodeState.staysDirty != 0 else { return }
+        table.state[n] = (table.state[n] & ~NodeState.staysDirty) | NodeState.dirty
+        propagateDirty(from: node)
     }
 
     // MARK: Writing
@@ -533,6 +560,7 @@ extension Graph {
                     }
                 }
                 table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.pending)
+                settleStaysDirty(node)
                 frames.removeLast()
                 continue
             }
@@ -545,6 +573,7 @@ extension Graph {
                 run(node)
             } else {
                 table.state[n] &= ~(NodeState.dirty | NodeState.evaluating | NodeState.selfModified)
+                settleStaysDirty(node)
             }
             frames.removeLast()
         }
@@ -612,6 +641,7 @@ extension Graph {
                 }
             }
         }
+        settleStaysDirty(node)
     }
 
     /// Where a running rule creates attributes when the caller's current subgraph is being invalidated: the subgraph

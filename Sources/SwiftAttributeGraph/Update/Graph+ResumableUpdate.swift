@@ -65,6 +65,7 @@ extension Graph {
                     }
                 }
             }
+            settleStaysDirty(node)
             frames.removeLast()
         }
     }
