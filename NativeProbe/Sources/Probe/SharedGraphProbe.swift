@@ -30,6 +30,12 @@ private func c_AGGraphHasValue(_ attr: UInt32) -> Bool
 @_silgen_name("AGGraphGetAttributeGraph")
 private func c_AGGraphGetAttributeGraph(_ attr: UInt32) -> UnsafeRawPointer?
 
+@_silgen_name("AGGraphGetContext")
+private func c_AGGraphGetContext_raw(_ graph: UnsafeRawPointer) -> UnsafeRawPointer?
+
+@_silgen_name("AGGraphSetContext")
+private func c_AGGraphSetContext_raw(_ graph: UnsafeRawPointer, _ context: UnsafeRawPointer?)
+
 @_silgen_name("AGGraphSetNeedsUpdate")
 private func c_AGGraphSetNeedsUpdate(_ graph: AttributeGraph.Graph)
 
@@ -1110,6 +1116,119 @@ func runSharedGraphLifetimeProbeIfRequested() {
         let finalVal = r.value // read from S
         let countAfterRead = evalCount
         print("coord-u4|countAfterWrite=\(countAfterWrite)|countAfterSubgraphUpdate=\(countAfterSubgraphUpdate)|finalVal=\(finalVal)|countAfterRead=\(countAfterRead)")
+        exit(0)
+
+    case "routing":
+        setbuf(stdout, nil)
+        let g = Driver()
+        let rawG = unsafeBitCast(g.graph, to: UnsafeRawPointer.self)
+        let s = c_AGGraphCreateShared(g.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+
+        let markerG = UnsafeRawPointer(bitPattern: 0xDEAD_1111)!
+        let markerS = UnsafeRawPointer(bitPattern: 0xBEEF_2222)!
+        c_AGGraphSetContext_raw(rawG, markerG)
+        c_AGGraphSetContext_raw(rawS, markerS)
+
+        let input: Handle<Int64> = g.input(100)
+        let inputID = input.identifier.rawValue
+
+        var insideRuleGraphInput: UnsafeRawPointer? = nil
+        var insideRuleCtxInput: UnsafeRawPointer? = nil
+
+        var rID: UInt32 = 0
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                insideRuleGraphInput = c_AGGraphGetAttributeGraph(inputID)
+                if let gh = insideRuleGraphInput {
+                    insideRuleCtxInput = c_AGGraphGetContext_raw(gh)
+                }
+                return input.value + 1
+            }))
+        }
+        rID = r.identifier.rawValue
+        let r2: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                r.value + 1
+            }))
+        }
+
+        var invalidationCallbackAttr: UInt32 = 0
+        var invalidationCallbackGraph: UnsafeRawPointer? = nil
+        var invalidationCallbackCtx: UnsafeRawPointer? = nil
+        s.onInvalidation { attr in
+            invalidationCallbackAttr = attr.rawValue
+            invalidationCallbackGraph = c_AGGraphGetAttributeGraph(attr.rawValue)
+            if let gh = invalidationCallbackGraph {
+                invalidationCallbackCtx = c_AGGraphGetContext_raw(gh)
+            }
+        }
+
+        // Evaluate R and R2
+        let val1 = r.value
+        let valR2 = r2.value
+
+        let outGraphInput = c_AGGraphGetAttributeGraph(inputID)
+        let outCtxInput = outGraphInput != nil ? c_AGGraphGetContext_raw(outGraphInput!) : nil
+
+        let outGraphR = c_AGGraphGetAttributeGraph(rID)
+        let outCtxR = outGraphR != nil ? c_AGGraphGetContext_raw(outGraphR!) : nil
+
+        // Mutate input in G via g.write (AGGraphSetValue) to invalidate R (and R2) in S
+        g.write(200, to: input)
+
+        let afterWriteGraphR = c_AGGraphGetAttributeGraph(rID)
+        let afterWriteCtxR = afterWriteGraphR != nil ? c_AGGraphGetContext_raw(afterWriteGraphR!) : nil
+
+        let matchInputG = (outGraphInput == rawG) && (outCtxInput == markerG) && (insideRuleGraphInput == rawG) && (insideRuleCtxInput == markerG)
+        let matchRS = (outGraphR == rawS) && (outCtxR == markerS) && (afterWriteGraphR == rawS) && (afterWriteCtxR == markerS)
+        let matchInvG = (invalidationCallbackAttr == inputID) && (invalidationCallbackGraph == rawG) && (invalidationCallbackCtx == markerG)
+
+        print("routing|rawG=\(rawG)|rawS=\(rawS)|markerG=\(markerG)|markerS=\(markerS)|inputID=\(inputID)|rID=\(rID)|val1=\(val1)|valR2=\(valR2)|outGraphInput=\(String(describing: outGraphInput))|outCtxInput=\(String(describing: outCtxInput))|outGraphR=\(String(describing: outGraphR))|outCtxR=\(String(describing: outCtxR))|invAttr=\(invalidationCallbackAttr)|invGraph=\(String(describing: invalidationCallbackGraph))|invCtx=\(String(describing: invalidationCallbackCtx))|matchInputG=\(matchInputG)|matchRS=\(matchRS)|matchInvG=\(matchInvG)")
+        exit(0)
+
+    case "interop-i1":
+        // I1: dos handles compartidos de G. Entrada en G (o S1), regla en S2 que la lee, modificar la entrada, releer.
+        setbuf(stdout, nil)
+        let g = Driver()
+        let s1 = c_AGGraphCreateShared(g.graph)
+        let s2 = c_AGGraphCreateShared(g.graph)
+        let s1Root = AttributeGraph.Subgraph(graph: s1)
+        let s2Root = AttributeGraph.Subgraph(graph: s2)
+
+        let inputG: Handle<Int64> = g.input(10)
+        let inputS1: Handle<Int64> = s1Root.apply { Handle(AttributeGraph.Attribute(value: Int64(20))) }
+
+        let r2: Handle<Int64> = s2Root.apply {
+            Handle(NativeRule(body: {
+                inputG.value + inputS1.value
+            }))
+        }
+
+        let v1 = r2.value
+        inputG.value = 100
+        inputS1.value = 200
+        let v2 = r2.value
+        print("interop-i1|v1=\(v1)|v2=\(v2)|status=OK")
+        exit(0)
+
+    case "interop-i2":
+        // I2 (control): dos grafos independientes; regla en el segundo que lee una entrada del primero.
+        setbuf(stdout, nil)
+        let g1 = Driver()
+        let g2 = Driver()
+        let g2Root = AttributeGraph.Subgraph(graph: g2.graph)
+
+        let input1: Handle<Int64> = g1.input(10)
+        let r2: Handle<Int64> = g2Root.apply {
+            Handle(NativeRule(body: {
+                input1.value + 1
+            }))
+        }
+        print("interop-i2|aboutToRead=true")
+        let v1 = r2.value
+        print("interop-i2|v1=\(v1)")
         exit(0)
 
     default:
