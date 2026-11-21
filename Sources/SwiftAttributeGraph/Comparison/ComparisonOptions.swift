@@ -18,6 +18,8 @@ public struct ComparisonOptions: OptionSet, Hashable, Sendable {
     /// The comparison mode in the low byte, or `nil` when it is a mode this engine does not model (bitwise or indirect).
     public var mode: ComparisonMode? {
         switch rawValue & 0xff {
+        case 0: return .bitwise
+        case 1: return .indirect
         case 2: return .equatableUnlessPOD
         case 3: return .equatableAlways
         default: return nil

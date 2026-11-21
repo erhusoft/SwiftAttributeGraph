@@ -15,6 +15,6 @@ import Testing
         #expect(ComparisonOptions(rawValue: 0x102).mode == .equatableUnlessPOD)
         #expect(ComparisonOptions(rawValue: 0x103).mode == .equatableAlways)
         #expect(ComparisonOptions(rawValue: 0x303).mode == .equatableAlways)
-        #expect(ComparisonOptions(rawValue: 0x100).mode == nil)
+        #expect(ComparisonOptions(rawValue: 0x100).mode == .bitwise)
     }
 }

@@ -36,7 +36,7 @@ enum ValueComparator {
         switch policy {
         case .alwaysDifferent:
             return { _, _ in false }
-        case .bits:
+        case .bits, .comparison(.bitwise), .comparison(.indirect):
             return { bitwiseEqual($0, $1) }
         case .comparison(.equatableUnlessPOD):
             if TypeLayout.isPOD(Value.self) { return planned(Value.self, mode: .view) }

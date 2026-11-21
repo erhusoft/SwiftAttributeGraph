@@ -1,6 +1,10 @@
 /// The comparison modes of native AttributeGraph (`AGComparisonMode`, the `mode:` of `compareValues`). The engine uses
 /// them through ``ValuePolicy/comparison(_:)``.
-public enum ComparisonMode: Hashable, Sendable {
+public enum ComparisonMode: UInt8, Hashable, Sendable {
+    /// Compares the bytes of the value (`AGComparisonModeBitwise`, raw 0). Measured with `compare-mode`.
+    case bitwise = 0
+    /// Like `bitwise` in every measured case (`AGComparisonModeIndirect`, raw 1). Its own path is not modeled.
+    case indirect = 1
 /// Corresponds to `AGComparisonMode` 2 (EquatableUnlessPOD) in its warm state, i.e. with the type layouts already
 /// built (measured on macOS 15.8.3 with options `0x302`). A trivial (POD) type is compared by its bytes, so an
 /// `==` of its own is ignored, `Double.nan` equals itself and `0.0` differs from `-0.0`. A non-trivial `Equatable`
