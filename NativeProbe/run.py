@@ -154,6 +154,7 @@ SCENARIOS = [
     "graph-on-update",
     "graph-on-update-needs",
     "update-body",
+    "compare-modes",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

@@ -3210,3 +3210,28 @@ func updateBodyOracleScenario() {
     _ = d.read(b)
     print("update-body|inside=\(inside)|runsA=\(runsA)|runsB=\(runsB)")
 }
+
+/// compareValues(mode:) for modes 0...3 (bitwise, indirect, equatableUnlessPOD, equatableAlways) on NaN, -0.0 against 0.0,
+/// a class against itself and against an equal-content object. Each case is warmed twice before it is read.
+final class CMBox { let v = 7 }
+
+func compareModesOracleScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let shared = CMBox()
+    var lines: [String] = []
+    for mode in UInt8(0)...3 {
+        for _ in 0..<2 {
+            _ = d.compareModes(Double.nan, Double.nan, mode: mode)
+            _ = d.compareModes(0.0, -0.0, mode: mode)
+            _ = d.compareModes(shared, shared, mode: mode)
+            _ = d.compareModes(CMBox(), CMBox(), mode: mode)
+        }
+        let nan = d.compareModes(Double.nan, Double.nan, mode: mode)
+        let zero = d.compareModes(0.0, -0.0, mode: mode)
+        let same = d.compareModes(shared, shared, mode: mode)
+        let equalContent = d.compareModes(CMBox(), CMBox(), mode: mode)
+        lines.append("m\(mode)=[nan:\(nan),zero:\(zero),same:\(same),equalContent:\(equalContent)]")
+    }
+    print("compare-modes|" + lines.joined(separator: "|"))
+}

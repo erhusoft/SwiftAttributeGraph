@@ -302,6 +302,7 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func compareModes<T>(_ a: T, _ b: T, mode: UInt8) -> Bool { AttributeGraph.compareValues(a, b, mode: AttributeGraph.ComparisonMode(rawValue: mode)!) }
     func onInvalidation(_ callback: @escaping (AnyAttribute) -> Void) { graph.onInvalidation(callback) }
     func onUpdate(_ callback: @escaping () -> Void) { graph.onUpdate(callback) }
     func flagsOf<V>(_ attribute: Handle<V>) -> UInt32 { attribute.valueAndFlags().flags.rawValue }
@@ -582,6 +583,7 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func compareModes<T>(_ a: T, _ b: T, mode: UInt8) -> Bool { compareValues(a, b, mode: ComparisonMode(rawValue: mode)!) }
     func onInvalidation(_ callback: @escaping (AnyAttribute) -> Void) { graph.onInvalidation(callback) }
     func onUpdate(_ callback: @escaping () -> Void) { graph.onUpdate(callback) }
     func flagsOf<V>(_ attribute: Handle<V>) -> UInt32 { attribute.valueAndFlags().flags.rawValue }
@@ -859,3 +861,4 @@ graphOnInvalidationSubgraphScenario()
 graphOnUpdateScenario()
 graphOnUpdateNeedsScenario()
 updateBodyOracleScenario()
+compareModesOracleScenario()
