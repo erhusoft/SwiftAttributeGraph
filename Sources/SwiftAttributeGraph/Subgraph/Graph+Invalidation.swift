@@ -2,7 +2,7 @@
 public final class SubgraphObservationToken {
     private weak var graph: Graph?
     private let subgraph: SubgraphID
-    private let id: Int
+    let id: Int
 
     init(graph: Graph, subgraph: SubgraphID, id: Int) {
         self.graph = graph

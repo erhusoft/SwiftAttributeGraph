@@ -142,6 +142,7 @@ SCENARIOS = [
     "register-dependency-in-rule",
     "any-weak",
     "deferring",
+    "subgraph-observers",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

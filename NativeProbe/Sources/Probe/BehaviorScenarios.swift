@@ -3015,3 +3015,22 @@ func deferringScenario() {
     let validAfterOuter = sub.isValid
     print("deferring|outer=\(outer)|inner=\(inner)|validDuring=\(validDuring)|validAfterInner=\(validAfterInner)|validAfterOuter=\(validAfterOuter)")
 }
+
+/// `AGSubgraphAddObserver` / `AGSubgraphRemoveObserver`: every live observer runs once on invalidation, a removed one does
+/// not run, and each observer gets its own ID.
+func subgraphObserversScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let sub = d.makeSubgraph()
+    var a = 0
+    var b = 0
+    let id1 = d.addObserverID(sub) { a += 1 }
+    let id2 = d.addObserverID(sub) { b += 1 }
+    sub.invalidate()
+    let sub2 = d.makeSubgraph()
+    var removed = 0
+    let id3 = d.addObserverID(sub2) { removed += 1 }
+    d.removeObserverID(sub2, id3)
+    sub2.invalidate()
+    print("subgraph-observers|a=\(a)|b=\(b)|removed=\(removed)|distinct=\(id1 != id2)")
+}

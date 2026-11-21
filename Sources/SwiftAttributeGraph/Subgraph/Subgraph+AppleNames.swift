@@ -66,3 +66,23 @@ extension Subgraph {
     /// The parent at `index` in link order (`AGSubgraphGetParent` in native AttributeGraph).
     public func parent(at index: Int64) -> Subgraph { owningGraph().parent(of: self, at: index) }
 }
+
+/// The identifier of a subgraph observer (`AGObserverID` in native AttributeGraph, `ObserverID` there).
+public typealias ObserverID = Int
+
+extension Subgraph {
+    /// Registers `observer` to run once when this subgraph is invalidated, and returns its identifier
+    /// (`AGSubgraphAddObserver` in native AttributeGraph). The observer stays until ``removeObserver(_:)`` or the subgraph
+    /// dies.
+    public func addObserver(_ observer: @escaping () -> Void) -> ObserverID {
+        owningGraph().observe(self, onInvalidate: observer).id
+    }
+
+    /// Removes the observer with `id`, so it does not run (`AGSubgraphRemoveObserver` in native AttributeGraph).
+    public func removeObserver(_ id: ObserverID) {
+        let graph = owningGraph()
+        guard graph.subgraphs.isLive(self.id) else { return }
+        graph.subgraphObservers[self.id.index]?.removeAll { $0.id == id }
+        if graph.subgraphObservers[self.id.index]?.isEmpty ?? false { graph.subgraphObservers[self.id.index] = nil }
+    }
+}

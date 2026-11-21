@@ -299,6 +299,8 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
+    func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
     func beginDeferring() -> Bool { c_AGGraphBegin(Unmanaged.passUnretained(graph).toOpaque()) }
     func endDeferring(_ wasDeferring: Bool) { c_AGGraphEnd(Unmanaged.passUnretained(graph).toOpaque(), wasDeferring) }
     func addInput<V, W>(_ attribute1: Handle<V>, _ attribute2: Handle<W>, options: UInt32 = 0) { AGGraphAddInput(attribute1.identifier, attribute2.identifier, options, 0) }
@@ -569,6 +571,8 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
+    func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
     func beginDeferring() -> Bool { graph.beginDeferringSubgraphInvalidation() }
     func endDeferring(_ wasDeferring: Bool) { graph.endDeferringSubgraphInvalidation(wasDeferring: wasDeferring) }
     func addInput<V, W>(_ attribute1: Handle<V>, _ attribute2: Handle<W>, options: UInt32 = 0) { precondition(options == 0); graph.addInput(attribute1, attribute2) }
@@ -825,3 +829,4 @@ addInputScenario()
 registerDependencyInRuleScenario()
 anyWeakAttributeScenario()
 deferringScenario()
+subgraphObserversScenario()
