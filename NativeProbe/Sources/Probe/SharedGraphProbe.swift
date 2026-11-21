@@ -152,6 +152,15 @@ func runSharedGraphFaultProbeIfRequested() {
 func runSharedGraphStressProbeIfRequested() {
     guard CommandLine.arguments.count > 1 else { return }
     let mode = CommandLine.arguments[1]
+    if mode == "independent-read" {
+        let first = Driver()
+        let second = Driver()
+        let input: Handle<Int64> = first.input(5)
+        let reader: Handle<Int64> = second.apply(second.scope) { Handle(NativeRule(body: { input.value })) }
+        print("independent|readAcrossGraphs=\(reader.value)")
+        fflush(stdout)
+        exit(0)
+    }
     if mode == "share-retain" {
         let d = Driver()
         var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
