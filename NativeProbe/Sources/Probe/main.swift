@@ -302,6 +302,7 @@ final class Driver {
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
     func onInvalidation(_ callback: @escaping (AnyAttribute) -> Void) { graph.onInvalidation(callback) }
+    func onUpdate(_ callback: @escaping () -> Void) { graph.onUpdate(callback) }
     func flagsOf<V>(_ attribute: Handle<V>) -> UInt32 { attribute.valueAndFlags().flags.rawValue }
     func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { let r = attribute.changedValue(); return (r.value, r.changed) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
@@ -580,6 +581,7 @@ final class Driver {
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
     func onInvalidation(_ callback: @escaping (AnyAttribute) -> Void) { graph.onInvalidation(callback) }
+    func onUpdate(_ callback: @escaping () -> Void) { graph.onUpdate(callback) }
     func flagsOf<V>(_ attribute: Handle<V>) -> UInt32 { attribute.valueAndFlags().flags.rawValue }
     func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { let r = attribute.changedValue(); return (r.value, r.changed) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
@@ -852,3 +854,5 @@ readOptionsEdgeScenario()
 valueAndFlagsScenario()
 graphOnInvalidationScenario()
 graphOnInvalidationSubgraphScenario()
+graphOnUpdateScenario()
+graphOnUpdateNeedsScenario()

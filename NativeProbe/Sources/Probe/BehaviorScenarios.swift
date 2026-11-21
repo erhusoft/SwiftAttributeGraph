@@ -3149,3 +3149,31 @@ func graphOnInvalidationSubgraphScenario() {
     sub.invalidate()
     print("graph-on-invalidation-subgraph|notices=\(notices)")
 }
+
+/// `Graph.onUpdate(_:)`: how many times it runs for a write that dirties a rule, and for the read that follows.
+func graphOnUpdateScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var notices = 0
+    d.onUpdate { notices += 1 }
+    let src: Handle<Int64> = d.input(1)
+    let r: Handle<Int64> = d.rule { d.read(src) + 1 }
+    _ = d.read(r)
+    let afterFirstRead = notices
+    d.write(2, to: src)
+    let afterWrite = notices
+    _ = d.read(r)
+    let afterReread = notices
+    print("graph-on-update|afterFirstRead=\(afterFirstRead)|afterWrite=\(afterWrite)|afterReread=\(afterReread)")
+}
+
+/// `Graph.onUpdate(_:)` after `setNeedsUpdate()`: the callback runs for the pending update request.
+func graphOnUpdateNeedsScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var notices = 0
+    d.onUpdate { notices += 1 }
+    d.setNeedsUpdate()
+    let afterRequest = notices
+    print("graph-on-update-needs|afterRequest=\(afterRequest)")
+}
