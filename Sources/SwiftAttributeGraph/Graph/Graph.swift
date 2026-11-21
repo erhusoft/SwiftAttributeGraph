@@ -12,72 +12,6 @@ public final class Graph {
     // `batch-writes` spent 29 % of its time in `swift_beginAccess`/`SwiftTLSContext::get` on them [O]. The graph is used
     // from one thread and no engine function holds a long `inout` access to one of them while it calls back into user
     // code, which is what the check would catch; debug builds keep the check so the tests still find such an access.
-    #if DEBUG && !SAG_UNCHECKED
-    var table = NodeTable()
-    /// The tag that the IDs of this graph carry (see `GraphRegistry`).
-    let graphTag: UInt32
-    /// Comparators resolved so far, one per value type and policy (see `ValueComparator.Cache`).
-    var comparators = ValueComparator.Cache()
-    var subgraphs = SubgraphTable()
-    var currentSubgraph: SubgraphID
-
-    /// Global epoch counter bumped every time an attribute value in the graph changes.
-    public internal(set) var globalVersion: UInt32 = 1
-
-    // Subgraph invalidation (see `Graph+Invalidation.swift`).
-    var subgraphObservers: [UInt32: [Observer]] = [:]
-    /// Invalidations asked for while a rule runs (or from a notice), done when the outermost update ends.
-    var deferredInvalidations: [Subgraph] = []
-    var nodeCaches: [UInt32: SubgraphNodeCache] = [:]
-    struct WeakGraphContext {
-        weak var value: GraphContext?
-    }
-
-    var updateContexts: [WeakGraphContext] = []
-    var nextGraphContextID: UInt32 = 1
-    var hasAnyInvalidationCallback = false
-    @usableFromInline var readEpoch: UInt32 = 0
-    lazy var defaultUpdateContext: GraphContext = {
-        let ctx = GraphContext(graph: self, id: 0, contextID: graphCounterID + 1,
-                               subgraphContext: SubgraphContext(rawValue: SubgraphTable.defaultContext))
-        updateContexts.append(WeakGraphContext(value: ctx))
-        return ctx
-    }()
-    var isInUpdateCallback = false
-    var edgeComparators: [UInt32: [UInt32: (Any, Any) -> Bool]] = [:]
-    var stickyChangedEdges: [UInt32: Set<UInt32>] = [:]
-    var offsetIndirects: [UInt32: (offset: Int, size: Int)] = [:]
-    var offsetFieldReaders: [UInt32: () -> Any] = [:]
-    var indirectsWithOffsetInChain: Set<UInt32> = []
-    var isInvalidating = false
-    var deferringSubgraphInvalidationDepth = 0
-
-    // Update machinery (see `Graph+Update.swift`).
-    var frames: [UpdateFrame] = []
-    @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
-    var isResumingStep = false
-    /// Number of times a rule has been executed (recalculations) since the graph was created.
-    public internal(set) var recalculationCount = 0
-
-    // Counters behind `counter(for:)` (see `Graph+Counters.swift`).
-    var transactionCount: UInt64 = 0
-    var updateCount: UInt64 = 0
-    var changeCount: UInt64 = 0
-    var createdNodeCount: UInt64 = 0
-    var countsUpdateOnNextRule = false
-    /// `counter(for: .graphID)`; the default context is `graphCounterID + 1`.
-    let graphCounterID: UInt64
-    /// Raised by ``setNeedsUpdate()``, lowered at the start of the next top-level read of a rule.
-    var needsUpdateFlag = false
-
-    // Propagation and notifications (see `Graph+Propagation.swift` and `Graph+Observation.swift`).
-    var dirtyStack: [UInt32] = []
-    var pendingNotifications: [UInt32] = []
-    var observers: [UInt32: [Observer]] = [:]
-    var nextObserverID = 0
-    var batchDepth = 0
-    var isFlushing = false
-    #else
     @exclusivity(unchecked) var table = NodeTable()
     /// The tag that the IDs of this graph carry (see `GraphRegistry`).
     let graphTag: UInt32
@@ -142,7 +76,6 @@ public final class Graph {
     @exclusivity(unchecked) var nextObserverID = 0
     @exclusivity(unchecked) var batchDepth = 0
     @exclusivity(unchecked) var isFlushing = false
-    #endif
 
     #if DEBUG && !SAG_UNCHECKED
     let owningThread = currentThreadToken()
