@@ -256,13 +256,15 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
      - **Estado**: *Descartada / refutada a nivel de datos*.
      - **Fundamento**: Las mediciones directas (E1/c4 y F1/F2) demostraron que los atributos creados en un handle son legibles y evaluables desde otro handle compartido a través del mismo storage central. No existe aislamiento estático de namespace; el aislamiento observable es únicamente estructural a nivel de subgrafos (`rootSubgraph`).
    - **Hipótesis B (Coordinación — los hosts comparten el ciclo de actualización)**:
-     - **Estado**: *Descartada a nivel de AttributeGraph nativo (coordinación delegada a SwiftUI)*.
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (10 repeticiones independientes escribiendo desde G y 10 desde S).
-     - **Medida con contador de evaluaciones**:
-       - Una regla dependiente `R` creada en `S` leyendo una entrada de `G` tiene `evalCount == 1` tras su primera lectura.
-       - Tras modificar la entrada (tanto escribiendo vía `G` como vía `S`), el contador permanece en `evalCount == 1` inmediatamente después de la escritura sin leer `R`.
-       - Al leer `R` explícitamente después, el contador asciende a `evalCount == 2` y devuelve el nuevo valor.
-     - **Conclusión**: La propagación nativa es **100 % lazy (bajo demanda)**. No existe despacho o evaluación eager entre handles compartidos en el motor; la sincronización y el renderizado multi-host se orquestan en capas superiores (`SwiftUI` / `ViewRendererHost` / `CAHostingLayer`) mediante callbacks explícitos, no en el runtime de `AttributeGraph`.
+     - **Estado**: *No se observa propagación eager con el patrón medido (coordinación abierta / delegada)*.
+     - **Referencias**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (escritura simple desde G y S) y `Results/shared-graph-macos-15.8.3/coordination-update-paths.txt` (caminos de actualización U1–U4, 10 repeticiones por caso en procesos aislados).
+     - **Medición con contador de evaluaciones en caminos de actualización**:
+       * **Caso U1 (`AGGraphSetNeedsUpdate` sobre G tras escribir)**: Tras escribir e invocar `SetNeedsUpdate(G)`, `evalCount` permanece en 1; asciende a 2 solo al leer explícitamente desde S.
+       * **Caso U2 (`AGGraphSetUpdateCallback` registrado en G)**: Tras escribir y tras `SetNeedsUpdate(G)`, `evalCount` permanece en 1 y el callback no se dispara (0 disparos); asciende a 2 solo al leer.
+       * **Caso U3 (Escritura en regla con mutación en evaluación)**: Tras la ejecución de la regla escritora en G, `evalCount` de la regla lectora R en S permanece en 1; asciende a 2 solo al leer explícitamente.
+       * **Caso U4 (`AGSubgraphUpdate` sobre el subgrafo lector en S)**: Tras escribir e invocar `AGSubgraphUpdate`, `evalCount` permanece en 1; asciende a 2 solo al leer.
+     - **Conclusión de lo medido**: En todos los caminos medidos (escritura directa y casos U1–U4), la propagación en AttributeGraph es estrictamente bajo demanda (pull / lazy); no se observa propagación eager automática entre handles a nivel del grafo.
+     - **[INFERENCIA (no medida directamente en AttributeGraph)]**: La coordinación del ciclo de renderizado y transacciones entre múltiples hosts vive por encima, en la capa de `SwiftUI` (mediante `ViewRendererHost`, `CAHostingLayer`, transacciones de runloop y `ObservableObject`), y no como un mecanismo intrínseco de despacho eager dentro de `AttributeGraph`.
    - **Hipótesis C (Reutilización de memoria — los hosts reducen el coste de memoria por host)**:
      - **Estado**: *Apoyada y cuantificada mediante pendiente de regresión lineal*.
      - **Referencia**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (10 repeticiones por escala con N = 1.000, 10.000 y 100.000 instancias en procesos aislados).
