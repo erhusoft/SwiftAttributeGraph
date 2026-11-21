@@ -273,6 +273,21 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
        - Handles compartidos (`AGGraphCreateShared`): pendiente de **144,02 ± 0,76 bytes / handle** ($R^2 = 0,999987$).
      - **Conclusión**: El coste incremental real de un handle compartido es de solo ~144 bytes frente a ~9,07 KB por grafo independiente (**98,41 % de ahorro marginal de memoria**, una reducción de ~63x). Esto confirma que el propósito primario del diseño es permitir la creación masiva de puntos de entrada ligeros compartiendo el almacenamiento reactivo central (`_shared_table_bytes`, hash tables y buffers de ejecución).
 
+3. **Medición de enrutamiento e interoperabilidad (Soporte a las hipótesis de diseño)**:
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/routing-and-interop.txt` (10 repeticiones por caso en procesos aislados, 100 % estables).
+   - **Cadena de enrutamiento medida (`AGGraphGetAttributeGraph` $\rightarrow$ `AGGraphGetContext`)**:
+     - En el desensamblado de `SwiftUI.GraphHost.graphInvalidation(from:)` (`0x1e767b934`) se observó la secuencia de llamadas `_AGGraphGetAttributeGraph` (`+0x1c`), `_AGGraphGetContext` (`+0x2c`) y `_AGGraphGetValue` (`+0x98`).
+     - **Hecho medido en runtime**: Asignando punteros de contexto distintos con `AGGraphSetContext` (`0xdead1111` en `G` y `0xbeef2222` en `S`), en 10/10 repeticiones (`exit=0`):
+       * Para la entrada creada en `G` (`ID 536`), `AGGraphGetAttributeGraph` devuelve `rawG` y `AGGraphGetContext` devuelve `0xdead1111` (tanto dentro de la regla lectora, como fuera y en el callback `onInvalidation`).
+       * Para la regla `R` creada en `S` (`ID 1048`), `AGGraphGetAttributeGraph` devuelve `rawS` y `AGGraphGetContext` devuelve `0xbeef2222` (tanto antes como después de invalidar).
+     - Esto confirma que cada atributo conserva su vínculo con el handle específico que lo creó y permite recuperar sin ambigüedad el contexto de usuario asociado a ese handle.
+   - **Interoperabilidad medida entre hosts (`I1` vs `I2`)**:
+     - **Caso I1 (Dos handles compartidos `S1` y `S2` sobre el mismo storage de `G`)**: Una regla en `S2` lee entradas de `G` y `S1` (`v1=30`), se modifican las entradas y se relee (`v2=300`), terminando con `exit=0` en 10/10 repeticiones.
+     - **Caso I2 (Control con dos grafos independientes `G1` y `G2`)**: Una regla en `G2` intenta leer una entrada de `G1` y aborta con `exit=134` (`SIGABRT`, `precondition failure: accessing attribute in a different namespace: 536`) en 10/10 repeticiones.
+     - **Delimitación metodológica**: Lo medido apoya empíricamente que compartir el storage evita el aborto de espacio de nombres al cruzar lecturas entre handles. No obstante, que el motivo de diseño de Apple para `AGGraphCreateShared` sea permitir que varios hosts (AppKit, ventanas, gestos) lean el mismo namespace sin abortar se mantiene como **hipótesis de diseño**, no como hecho demostrado.
+   - **Hipótesis sobre fuentes externas (AppKit y OpenSwiftUI)**:
+     - La hipótesis sobre el choque de espacios de nombres entre AppKit y OpenSwiftUI por usar instancias separadas de `GraphHost.sharedGraph` queda registrada como **no verificada, pendiente de lectura de la fuente**.
+
 ---
 
 ## Conclusiones para la arquitectura del motor
