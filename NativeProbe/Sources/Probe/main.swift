@@ -301,6 +301,7 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func flagsOf<V>(_ attribute: Handle<V>) -> UInt32 { attribute.valueAndFlags().flags.rawValue }
     func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { let r = attribute.changedValue(); return (r.value, r.changed) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
     func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
@@ -577,6 +578,7 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func flagsOf<V>(_ attribute: Handle<V>) -> UInt32 { attribute.valueAndFlags().flags.rawValue }
     func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { let r = attribute.changedValue(); return (r.value, r.changed) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
     func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
@@ -845,3 +847,4 @@ prefetchValueScenario()
 setValueResultScenario()
 changedValueOutsideRuleScenario()
 readOptionsEdgeScenario()
+valueAndFlagsScenario()

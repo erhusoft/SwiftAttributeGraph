@@ -3103,3 +3103,19 @@ func readOptionsEdgeScenario() {
     }
     print("read-options-runs|" + out.joined(separator: "|"))
 }
+
+/// `Attribute.valueAndFlags()` flags: outside a rule, and inside a rule across a change of its input.
+func valueAndFlagsScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let src: Handle<Int64> = d.input(1)
+    let outside0 = d.flagsOf(src)
+    d.write(2, to: src)
+    let outside1 = d.flagsOf(src)
+    var inRule: [UInt32] = []
+    let r: Handle<Int64> = d.rule { inRule.append(d.flagsOf(src)); return d.read(src) + 1 }
+    _ = d.read(r)
+    d.write(3, to: src)
+    _ = d.read(r)
+    print("value-and-flags|outside=\(outside0),\(outside1)|inRule=\(inRule)")
+}
