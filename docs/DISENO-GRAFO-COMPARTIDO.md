@@ -73,3 +73,21 @@ Consecuencias:
 ## 8. Resultado del primer intento de la fase 2 (2026-11-20)
 
 Se movieron a un objeto interno los contadores y banderas que no tienen trampas (transacciones, actualizaciones, cambios, nodos creados, observadores, lote, vaciado), con propiedades calculadas `_read`/`_modify`. Medido en release: lecturas de entrada 114,3 ms (+10,5 %) y de regla 117,4 ms (+8,7 %), frente a la línea base de 103,4 y 108,0 ms. Supera el límite del 5 %, así que se revirtió. Conclusión: el camino de lectura toca estos campos, y el indirecto cuesta más de lo previsto. La fase 2 necesita otra forma: por ejemplo, que el camino caliente siga con las tablas en el propio grafo y solo se mueva lo que no se toca al leer, o un diseño con la referencia al objeto interno copiada en campos locales.
+
+## 9. Propuesta revisada (tras la sección 8): handle reenviador
+
+Restricción medida: el camino de lectura no puede pagar un indirecto (límite del 5 %, sección 8).
+
+Propuesta: `Graph(shared:)` devuelve una referencia **distinta** que guarda la referencia al grafo original y reenvía sus
+llamadas públicas a él. El grafo original no cambia: sus propiedades siguen dentro, y su camino de lectura queda igual. Solo
+la referencia compartida paga el reenvío.
+
+- Identidad: distinta (como mide Apple), estado: el del original.
+- Lectura entre referencias: funciona, porque el grafo activo durante la evaluación es el original.
+- Coste: cero para el grafo original; una llamada de reenvío para la referencia compartida.
+- Riesgo principal: hay que reenviar **cada** método público. Un método olvidado no falla al compilar, y operaría sobre un
+  estado vacío. Mitigación: una prueba que llame a cada método público por la referencia compartida y compare con el original.
+- Fase 4 (oráculo `graph-shared-read`): se mantiene.
+
+Pendiente de decisión del dueño del proyecto: aceptar esta forma (handle reenviador) frente a mover el estado completo
+(sección 8, que supera el límite de rendimiento).
