@@ -26,9 +26,11 @@ struct AppleNamesOffsetTests {
         #expect(runs == 2)
     }
 
-    /// Apple's `AGAttribute.create(self:offset:)`: offset without explicit size defaults to remaining bytes
-    /// [O, AGAttribute.h, AGGraphCreateOffsetAttribute].
-    @Test func createOffsetWithoutSizeDefaultsToRemainingBytes() {
+    /// Apple's `AGAttribute.create(self:offset:)`: without an explicit size, any change to the source value reaches
+    /// the reader, including bytes before `offset`. Measured natively on 16- and 24-byte values at offsets 0, 8 and 16
+    /// (`offset-tree` probe in NativeProbe): changing bytes outside [offset, end) still re-runs the reader, so the
+    /// default size is the whole value, not the bytes that remain after `offset`.
+    @Test func createOffsetWithoutSizeReachesTheReaderOnAnyChange() {
         let graph = Graph()
         struct Quad: BitwiseCopyable, Equatable { var a: Int; var b: Int; var c: Int; var d: Int }
         let source = graph.makeInput(Quad(a: 1, b: 2, c: 3, d: 4))
@@ -42,15 +44,13 @@ struct AppleNamesOffsetTests {
         #expect(graph.value(of: rule) == 3)
         #expect(runs == 1)
 
-        // Mutating 'a' or 'b' (offsets 0..<16) should NOT trigger rule re-evaluation
-        graph.setValue(Quad(a: 99, b: 99, c: 3, d: 4), for: source)
+        // Mutating 'a' (before offset 16) also re-runs the reader, as measured natively.
+        graph.setValue(Quad(a: 99, b: 2, c: 3, d: 4), for: source)
         #expect(graph.value(of: rule) == 3)
-        #expect(runs == 1)
-
-        // Mutating 'c' or 'd' (offsets 16..<32) SHOULD trigger rule re-evaluation
-        graph.setValue(Quad(a: 99, b: 99, c: 42, d: 4), for: source)
-        #expect(graph.value(of: rule) == 42)
         #expect(runs == 2)
+
+        graph.setValue(Quad(a: 99, b: 2, c: 42, d: 4), for: source)
+        #expect(graph.value(of: rule) == 42)
+        #expect(runs == 3)
     }
 }
-

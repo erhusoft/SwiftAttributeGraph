@@ -725,6 +725,7 @@ func ownedLifetime() {
 runIndirectSizeProbeIfRequested()
 runIndirectReadProbeIfRequested()
 runCurrentGraphContextProbeIfRequested()
+runOffsetAndTreeProbeIfRequested()
 runCreateAndClosureScenariosIfRequested()
 runIsolatedScenarioIfRequested()
 runIsDirtyScenariosIfRequested()

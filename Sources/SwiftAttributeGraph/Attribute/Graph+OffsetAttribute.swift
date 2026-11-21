@@ -41,16 +41,18 @@ extension Graph {
         makeProjectedAttribute(of: source, project: project, isEqual: ==)
     }
 
-    /// Creates an indirect attribute with `offset` metadata spanning from `offset` to the end of `Source`.
+    /// Creates an indirect attribute for Apple's size-less `AGGraphCreateOffsetAttribute`.
     ///
-    /// - Note: Defaults `size` to `MemoryLayout<Source>.size - offset`.
+    /// - Note: Measured natively (`offset-tree` probe): without an explicit size, a change anywhere in the value reaches
+    ///   the reader, also bytes before `offset`. So the default compares the whole value, `[0, MemoryLayout<Source>.size)`;
+    ///   `offset` is only validated. An explicit size keeps its range (``makeOffsetIndirect(of:offset:size:)``).
     public func makeOffsetIndirect<Source: BitwiseCopyable>(
         of source: Attribute<Source>,
         offset: Int
     ) -> Attribute<Source> {
         let sourceSize = MemoryLayout<Source>.size
         precondition(offset >= 0 && offset <= sourceSize, "offset \(offset) exceeds source size \(sourceSize)")
-        return makeOffsetIndirect(of: source, offset: offset, size: sourceSize - offset)
+        return makeOffsetIndirect(of: source, offset: 0, size: sourceSize)
     }
 
     /// Creates an indirect attribute with `(offset, size)` metadata for native-style edge-level range comparison.
