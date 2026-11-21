@@ -254,17 +254,22 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 2. **Evaluación de hipótesis frente a medidas directas**:
    - **Hipótesis A (Aislamiento — un host no ve los cambios de otro)**:
      - **Estado**: *Descartada / refutada a nivel de datos*.
-     - **Fundamento**: Las mediciones directas (E1/c4 y F1/F2) demostraron que los atributos creados en un handle son legibles y evaluables desde otro handle compartido a través del mismo storage central. No existe un aislamiento estático de namespace; el aislamiento observable es únicamente de pertenencia a subgrafos (`rootSubgraph`).
+     - **Fundamento**: Las mediciones directas (E1/c4 y F1/F2) demostraron que los atributos creados en un handle son legibles y evaluables desde otro handle compartido a través del mismo storage central. No existe aislamiento estático de namespace; el aislamiento observable es únicamente estructural a nivel de subgrafos (`rootSubgraph`).
    - **Hipótesis B (Coordinación — los hosts comparten el ciclo de actualización)**:
-     - **Estado**: *No distinguida por las medidas actuales (Hipótesis abierta)*.
-     - **Fundamento**: Aunque existen indicios en símbolos (`blockedGraphHosts`, `finishTransactionUpdate`), no se ha medido en nativo si una mutación en un host despierta automáticamente o comparte el ciclo de paso de renderizado con otro sin un puente de vistas (como `ObservableObject`).
+     - **Estado**: *Descartada a nivel de AttributeGraph nativo (coordinación delegada a SwiftUI)*.
+     - **Referencia**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (10 repeticiones independientes escribiendo desde G y 10 desde S).
+     - **Medida con contador de evaluaciones**:
+       - Una regla dependiente `R` creada en `S` leyendo una entrada de `G` tiene `evalCount == 1` tras su primera lectura.
+       - Tras modificar la entrada (tanto escribiendo vía `G` como vía `S`), el contador permanece en `evalCount == 1` inmediatamente después de la escritura sin leer `R`.
+       - Al leer `R` explícitamente después, el contador asciende a `evalCount == 2` y devuelve el nuevo valor.
+     - **Conclusión**: La propagación nativa es **100 % lazy (bajo demanda)**. No existe despacho o evaluación eager entre handles compartidos en el motor; la sincronización y el renderizado multi-host se orquestan en capas superiores (`SwiftUI` / `ViewRendererHost` / `CAHostingLayer`) mediante callbacks explícitos, no en el runtime de `AttributeGraph`.
    - **Hipótesis C (Reutilización de memoria — los hosts reducen el coste de memoria por host)**:
-     - **Estado**: *Apoyada con medida directa en runtime (10 repeticiones)*.
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/design-purpose.txt`.
-     - **Medida (RSS con `mach_task_basic_info`, 1.000 instancias)**:
-       - Grafos independientes (`AGGraphCreate`): $\Delta$RSS mediana de **+9.256.960 bytes** (~9,26 KB por grafo).
-       - Handles compartidos (`AGGraphCreateShared`): $\Delta$RSS mediana de **+393.216 bytes** (~0,39 KB por handle).
-     - **Conclusión**: Crear un handle compartido consume un **95,8 % menos de memoria residente (RSS)** (~23.5x más ligero), evitando replicar la tabla compartida `_shared_table_bytes`, tablas hash y buffers de asignación de `AG::Graph`.
+     - **Estado**: *Apoyada y cuantificada mediante pendiente de regresión lineal*.
+     - **Referencia**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (10 repeticiones por escala con N = 1.000, 10.000 y 100.000 instancias en procesos aislados).
+     - **Medida (Pendiente OLS de RSS)**:
+       - Grafos independientes (`AGGraphCreate`): pendiente de **9.068,47 ± 1,19 bytes / grafo** ($R^2 = 1,000000$).
+       - Handles compartidos (`AGGraphCreateShared`): pendiente de **144,02 ± 0,76 bytes / handle** ($R^2 = 0,999987$).
+     - **Conclusión**: El coste incremental real de un handle compartido es de solo ~144 bytes frente a ~9,07 KB por grafo independiente (**98,41 % de ahorro marginal de memoria**, una reducción de ~63x). Esto confirma que el propósito primario del diseño es permitir la creación masiva de puntos de entrada ligeros compartiendo el almacenamiento reactivo central (`_shared_table_bytes`, hash tables y buffers de ejecución).
 
 ---
 
