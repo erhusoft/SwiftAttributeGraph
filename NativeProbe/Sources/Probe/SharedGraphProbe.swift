@@ -133,3 +133,42 @@ func runSharedGraphFaultProbeIfRequested() {
     exit(0)
 }
 #endif
+
+#if NATIVE_ATTRIBUTE_GRAPH
+/// `Probe share-stress <count>` and `Probe share-depth <count>`: many shared handles from one graph, and a chain of
+/// shared-of-shared handles. Prints the time and whether the first handle still reads.
+func runSharedGraphStressProbeIfRequested() {
+    guard CommandLine.arguments.count > 2 else { return }
+    let mode = CommandLine.arguments[1]
+    if mode == "share-count", let n = Int(CommandLine.arguments[2]) {
+        let d = Driver()
+        var keep: [AttributeGraph.Graph] = []
+        for _ in 0..<n { keep.append(c_AGGraphCreateShared(d.graph)) }
+        print("share-count|created=\(keep.count)")
+        exit(0)
+    }
+    if mode == "graphs-independent", let n = Int(CommandLine.arguments[2]) {
+        let start = ContinuousClock.now
+        var graphs: [AttributeGraph.Graph] = []
+        for _ in 0..<n { graphs.append(AttributeGraph.Graph()) }
+        print("graphs-independent|n=\(n)|time=\(start.duration(to: ContinuousClock.now))|count=\(graphs.count)")
+        exit(0)
+    }
+    guard mode == "share-stress" || mode == "share-depth", let n = Int(CommandLine.arguments[2]) else { return }
+    let d = Driver()
+    let input: Handle<Int64> = d.input(5)
+    let start = ContinuousClock.now
+    var last = d.graph
+    var handles: [AttributeGraph.Graph] = []
+    for _ in 0..<n {
+        let next = c_AGGraphCreateShared(mode == "share-depth" ? last : d.graph)
+        if mode == "share-stress" { handles.append(next) }
+        last = next
+    }
+    let elapsed = start.duration(to: ContinuousClock.now)
+    let root = AttributeGraph.Subgraph(graph: last)
+    let reader: Handle<Int64> = root.apply { Handle(NativeRule(body: { input.value })) }
+    print("\(mode)|n=\(n)|time=\(elapsed)|lastReads=\(reader.value)")
+    exit(0)
+}
+#endif
