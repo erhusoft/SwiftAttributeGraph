@@ -115,3 +115,26 @@ llamador real, o decidir la forma sin ese dato.
 Conclusión: en los binarios que tenemos, nadie llama a `AGGraphCreateShared`. El grafo compartido, por tanto, no es
 necesario para SwiftUI en macOS 15.8. Recomendación: **aplazar las fases 2 a 4** (el handle reenviador incluido) y
 dejarlas documentadas, en lugar de implementarlas sin un uso real que las justifique.
+
+## 12. Clientes de AttributeGraph en la caché de macOS 15.8 (2026-11-20)
+
+Lista de `ipsw dyld imports` (imágenes que cargan AttributeGraph) y su importación de `AGGraphCreateShared`:
+
+| Cliente | Símbolos AG importados | `AGGraphCreateShared` |
+|---|---|---|
+| SwiftUI | 73 | no |
+| SwiftUICore | (sin binario extraído; desensamblado sin llamadas) | no |
+| AXCoreUtilities | 3 | no |
+| Charts | 27 | no |
+| _MapKit_SwiftUI | 29 | no |
+| _SwiftData_SwiftUI | 1 | no |
+| PhotosSwiftUICore | 2 | no |
+| WorkflowUICore | 9 | no |
+| NotificationCenter (app) | no extraíble de la caché | pendiente |
+
+La cadena `AGGraphCreateShared` sí aparece en la tabla de símbolos de la caché (atribuida a Virtualization y libobjc), pero
+Virtualization no importa ningún símbolo de AttributeGraph, así que esa atribución es solo un nombre global de la caché.
+
+Conclusión: ningún cliente del sistema que hemos podido comprobar importa `AGGraphCreateShared`. Puede ser parte de la API
+exportada para otros clientes (de terceros o herramientas internas), o un uso por búsqueda dinámica (`dlsym`) que no se ve
+en las importaciones. No está resuelto, y el handle reenviador sigue aplazado.
