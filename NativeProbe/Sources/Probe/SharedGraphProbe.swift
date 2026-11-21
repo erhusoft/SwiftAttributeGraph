@@ -98,3 +98,38 @@ func runSharedContextTopologyProbeIfRequested() {
     exit(0)
 }
 #endif
+
+#if NATIVE_ATTRIBUTE_GRAPH
+/// `Probe share-fault <case>`: one deliberate misuse of AGGraphCreateShared per process. The exit status and the message
+/// (stderr) are the result. Cases: nil, shared-of-shared, shared-after-first-freed, read-after-first-freed.
+func runSharedGraphFaultProbeIfRequested() {
+    guard CommandLine.arguments.count > 2, CommandLine.arguments[1] == "share-fault" else { return }
+    switch CommandLine.arguments[2] {
+    case "nil":
+        let s = c_AGGraphCreateShared(nil)
+        print("fault|nil|nodes=\(s.counter(for: .nodes))")
+    case "shared-of-shared":
+        let d = Driver()
+        let s1 = c_AGGraphCreateShared(d.graph)
+        let s2 = c_AGGraphCreateShared(s1)
+        print("fault|shared-of-shared|nodes=\(s2.counter(for: .nodes))")
+    case "shared-after-first-freed":
+        var d: Driver? = Driver()
+        let s = c_AGGraphCreateShared(d!.graph)
+        d = nil
+        let s2 = c_AGGraphCreateShared(s)
+        print("fault|shared-after-first-freed|nodes=\(s2.counter(for: .nodes))")
+    case "read-after-first-freed":
+        var d: Driver? = Driver()
+        let shared = c_AGGraphCreateShared(d!.graph)
+        let root = AttributeGraph.Subgraph(graph: shared)
+        let input: Handle<Int64> = d!.input(3)
+        let reader: Handle<Int64> = root.apply { Handle(NativeRule(body: { input.value })) }
+        d = nil
+        print("fault|read-after-first-freed|value=\(reader.value)")
+    default:
+        exit(2)
+    }
+    exit(0)
+}
+#endif

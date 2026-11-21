@@ -1,0 +1,4 @@
+fault|nil|nodes=0
+fault|shared-of-shared|nodes=0
+fault|shared-after-first-freed|nodes=0
+fault|read-after-first-freed|exit=134|message=accessing attribute in a different namespace: 536 (read never evaluated before the first reference was released)
