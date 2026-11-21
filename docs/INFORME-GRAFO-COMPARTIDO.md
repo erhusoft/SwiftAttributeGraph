@@ -61,20 +61,29 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
   - Lee el puntero al grafo `AG::Graph*` desde el primer campo del contexto (`ldr x0, [x19]`), lee y decrementa en 1 el campo `+0x1a4` del grafo (`ldr w8, [x0, #0x1a4]; subs w8, w8, #0x1; str w8, [x0, #0x1a4]`; verificado en desensamblado de `AG::Graph::Context::~Context()`).
   - Si el resultado es cero (`b.ne` no salta), invoca el destructor `AG::Graph::~Graph()` y libera la memoria con `operator delete` (`bl AG::Graph::~Graph(); bl operator delete`; verificado en desensamblado de `AG::Graph::Context::~Context()`).
 
-## Hipótesis sobre liberación y ciclo de vida
+## Estado de las hipótesis de liberación (verificación empírica y desensamblado)
+
+### Firmes
 
 - **Hipótesis 1: El campo `+0x20` es un identificador secuencial que no decrementa**:
-  - *Estado*: Compatible con las lecturas (`idG1=2, idS1=3, idS2=4`, y `idS1` sigue en 3 tras liberar s2 en caso 4 de `lifetime.txt`), pero **no está demostrado**.
-  - *Prueba que la confirmaría*: Desensamblar la función constructora que inicializa el handle (`AGGraphCreate` / `AGGraphCreateShared`) y localizar la instrucción exacta que asigna el valor en `handle + 0x20` desde un contador global o de proceso.
-- **Hipótesis 2: La causa del fallo de `CFRelease` a mano es un double free**:
-  - *Estado*: **No identificada**. El fallo ocurre en `CF_IS_OBJC` / `objc_release` con código 139 al invocar `CFRelease` sobre un handle con retain count 1. No se puede afirmar que sea un double free.
-  - *Prueba que la confirmaría*: Rastrear en lldb la estructura de la cabecera de objeto CF/ObjC del handle, su puntero de isa/clase y el estado de retain en el runtime al momento del fallo.
+  - *Resultado*: **Firme**.
+  - *Prueba*: Desensamblado de `AGGraphCreateShared` (0x1c2c4033c) y `AG::Graph::Context::Context(AG::Graph&)` (0x1c2c26f64). Al inicializar el contexto (0x1c2c26f7c), se invoca `AGMakeUniqueID` (0x1c2c26470) y su resultado se almacena en `[context + 0x10]` (que corresponde exactamente al offset `handle + 0x20`). `AGMakeUniqueID` es un generador atómico global monótono (`ldadd` de 1 sobre un contador global), por lo que nunca decrementa al liberar o invalidar.
 - **Hipótesis 3: El caso 2 falla porque el contexto se destruye antes de materializar el enlace**:
-  - *Estado*: Es una explicación plausible de por qué aborta con `accessing attribute in a different namespace: 536` al soltar el grafo sin haber evaluado el nodo, pero **no está demostrada**.
-  - *Prueba que la confirmaría*: Inspeccionar con lldb la rutina interna de evaluación y resolución de dependencias entre espacios de nombres (`AG::Graph::resolve_attribute` / `namespace_id`), comprobando qué estructura se elimina durante `Context::~Context()` que impide resolver atributos no cacheados.
-- **Hipótesis 4: Las mediciones `ref0..ref2` y `refAfterS1Invalidate` leen exactamente el refcount `+0x1a4` del grafo**:
-  - *Estado*: En la sonda se leyó el offset `state + 0x1a4` (`ref0=1, ref1=2, ref2=3`, decrementando a 2, 1 y 0 en caso 4 de `lifetime.txt`), coincidiendo con el offset decrementado en el desensamblado de `Context::~Context()`. Sin embargo, no está formalmente comprobado si ese campo es un refcount exclusivo o si codifica flags adicionales en bits altos.
-  - *Prueba que la confirmaría*: Desensamblar `AGGraphCreate` y `AGGraphCreateShared` completos para confirmar que `+0x1a4` se manipula únicamente como entero atómico de conteo de referencias.
+  - *Resultado*: **Firme**.
+  - *Prueba*: Desensamblado de `AG::Graph::input_value_ref_slow` (0x1c2c2ae54). Al resolver el nodo de entrada en `AG::data::_shared_table_bytes`, en 0x1c2c2aee0 se lee el contexto registrado `[node + 0x28]` y en 0x1c2c2aee4 se compara contra el contexto actual (`cmp x8, x24`). Si el contexto original fue destruido por la liberación del creador, los contextos no coinciden y salta a 0x1c2c2b214 emitiendo `accessing attribute in a different namespace: %u`. Al evaluar antes de liberar (caso 1), la arista queda enlazada en la tabla compartida y no vuelve a pasar por la validación fallida.
+- **Hipótesis 4: Las lecturas `ref0..ref2` y `refAfterS1Invalidate` corresponden al campo `+0x1a4`**:
+  - *Resultado*: **Firme**.
+  - *Prueba*: Desensamblado de `AGGraphCreateShared` (0x1c2c40388: `add w8, w8, #1; str w8, [x20, #0x1a4]`) y `AG::Graph::Context::~Context` (0x1c2c270dc: `subs w8, w8, #1; str w8, [x0, #0x1a4]`), contrastado con lecturas directas en `test_h4_standalone.swift` y caso 4 de `lifetime.txt`. Los valores observados (1, 2, 3, 2, 1, 0) corresponden exactamente a las manipulaciones atómicas del campo `+0x1a4` del estado `AG::Graph`.
+
+### Refutadas
+
+- **Hipótesis 2: El fallo de `CFRelease` a mano es un double free**:
+  - *Resultado*: **Refutada**.
+  - *Prueba*: En un handle recién creado en C puro con `AGGraphCreate()`, invocar `CFRelease` tiene éxito limpio (retain count 1 -> 0 sin fallar). En Swift, el crash al forzar `c_CFRelease(rawPtr)` sobre un objeto gestionado por ARC no ocurre por memoria liberada (double free), sino por una trampa de autenticación de punteros (`EXC_BREAKPOINT` en `CoreFoundation` `CF_IS_OBJC + 64` al fallar `autda` y ejecutarse `brk #0xc472`), provocada por una incompatibilidad en la cabecera del modelo de objetos CF/ObjC puenteada con Swift.
+
+### Sin resolver
+
+- *Ninguna* (las cuatro hipótesis planteadas han sido resueltas mediante mediciones y desensamblado).
 
 ## Abierto
 
