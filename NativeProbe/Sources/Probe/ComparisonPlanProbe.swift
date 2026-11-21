@@ -4,7 +4,7 @@ import AttributeGraph
 @_silgen_name("AGCompareValues")
 private func c_cmpPlan(_ lhs: UnsafeRawPointer, _ rhs: UnsafeRawPointer, _ type: Metadata, _ options: UInt32) -> Bool
 
-private func nativeEqual<T>(_ a: T, _ b: T, mode: UInt32) -> Bool {
+func nativeEqual<T>(_ a: T, _ b: T, mode: UInt32) -> Bool {
     var a = a, b = b
     return withUnsafePointer(to: &a) { pa in
         withUnsafePointer(to: &b) { pb in

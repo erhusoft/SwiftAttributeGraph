@@ -63,7 +63,7 @@ typealias WeakHandle<Value> = AttributeGraph.WeakAttribute<Value>
 typealias OptionalHandle<Value> = AttributeGraph.OptionalAttribute<Value>
 typealias IndirectHandle<Value> = AttributeGraph.IndirectAttribute<Value>
 
-private struct NativeRule<Value>: AttributeGraph.Rule {
+struct NativeRule<Value>: AttributeGraph.Rule {
     let body: () -> Value
     var value: Value { body() }
 }
@@ -727,6 +727,10 @@ runIndirectReadProbeIfRequested()
 runCurrentGraphContextProbeIfRequested()
 runOffsetAndTreeProbeIfRequested()
 runComparisonPlanProbeIfRequested()
+runComparisonTypesProbeIfRequested()
+runSharedGraphProbeIfRequested()
+runSharedGraphLifeProbeIfRequested()
+runSharedContextTopologyProbeIfRequested()
 runTreeEffectProbeIfRequested()
 runCreateAndClosureScenariosIfRequested()
 runIsolatedScenarioIfRequested()
