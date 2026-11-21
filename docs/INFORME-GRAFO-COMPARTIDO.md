@@ -196,23 +196,23 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
      `two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2`
      Y el caso de lectura cruzada no permitida entre grafos (`two-hosts-cross`) dispara el aborto de seguridad esperado de espacio de nombres (exit code 134).
 
-3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1 con repetición)**:
+3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1 con diez repeticiones)**:
    - **Estado**: Firme.
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt` y `Results/shared-graph-macos-15.8.3/e1-e0-repeats.txt`.
-   - **Control de Storage (E0, 3 repeticiones)**:
-     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`) en las 3 repeticiones (100 % estable).
-     - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`) en las 3 repeticiones (100 % estable).
-     - El modelo de almacenamiento central único compartido queda **sostenido con repetición**.
-   - **Matriz de Lectura Cruzada (E1, 3 repeticiones por celda en procesos aislados)**:
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0-repeats-10.txt` (y antecedentes en `e1-e0.txt`, `e1-e0-repeats.txt`).
+   - **Control de Storage (E0, 10 repeticiones)**:
+     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`) en las 10 repeticiones (100 % estable).
+     - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`) en las 10 repeticiones (100 % estable).
+     - El modelo de almacenamiento central único compartido queda sostenido con diez repeticiones.
+   - **Matriz de Lectura Cruzada (E1, 10 repeticiones por celda en procesos aislados)**:
      - Se evaluó una regla (`rule`) no evaluada antes de compartir (`hasValueBeforeShare=no`) y evaluada antes de compartir (`hasValueBeforeShare=yes`, verificado mediante `AGGraphHasValue`).
-     - **c4 (No evaluado + G vivo + leer por S)**: En las 3 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). Esto **descarta el modelo M1 con repetición** (el espacio de nombres no está restringido de forma estática al handle que lee).
-     - **c2 (Evaluado + G vivo + leer por S)**: En las 3 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=yes`).
-     - **c5 y c6 (G liberado + leer por S)**: En las 3 repeticiones abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`).
-     - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Con el objeto CF de G retenido en memoria (`CFRetain`) pero su contexto destruido vía `AGGraphInvalidate` (`gAlive=invalidated-retained` en la telemetría), en las 3 repeticiones abortan con `exit=134`.
+     - **c4 (No evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). **M1 descartado con diez repeticiones**.
+     - **c2 (Evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=yes`).
+     - **c5 y c6 (G liberado + leer por S)**: En las 10 repeticiones abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`).
+     - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Con el objeto CF de G retenido en memoria (`CFRetain`) pero su contexto destruido vía `AGGraphInvalidate` (`gAlive=invalidated-retained` en la telemetría), en las 10 repeticiones abortan con `exit=134`.
    - **Conclusión de Modelo**:
-     - Queda **respaldado con repetición el modelo M2** (sello y ciclo de vida ligado al `Context` del creador).
-     - La estabilidad es del 100 % (3 de 3 repeticiones idénticas en todas las celdas).
-     - No es la liberación del bloque de memoria de CoreFoundation lo que invalida el enlace entre grafos, sino la destrucción del `Context` (`AG::Graph::Context`) del handle creador. Mientras dicho contexto permanezca vivo, cualquier handle compartido derivado del mismo almacenamiento puede leer o evaluar perezosamente sus atributos.
+     - **M2 queda respaldado con diez repeticiones**.
+     - Estabilidad absoluta del 100 % (10 de 10 repeticiones idénticas en todas las celdas).
+     - Se confirma de manera concluyente que la vigencia del enlace entre handles compartidos depende estrictamente de la vida del `Context` (`AG::Graph::Context`) del handle que creó el atributo y no de la memoria física del handle CF envoltorio. Mientras el contexto creador siga activo, cualquier handle compartido del mismo almacenamiento puede leer o evaluar perezosamente sus atributos.
 
 ---
 
