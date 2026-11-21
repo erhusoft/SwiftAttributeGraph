@@ -433,6 +433,41 @@ func runSharedGraphLifetimeProbeIfRequested() {
         fflush(stdout)
         exit(0)
 
+    case "round5-case-a":
+        // Case A (control of failure): create A with AGGraphCreateShared, save rawA, execute a = nil without CFRetain, then call CFRelease(rawA)
+        let d = Driver()
+        var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a!, to: UnsafeRawPointer.self)
+        a = nil
+        print("round5-case-a|aboutToCallCFRelease=true")
+        fflush(stdout)
+        c_CFRelease(rawA)
+        print("round5-case-a|unexpectedSuccess=true")
+        fflush(stdout)
+        exit(0)
+
+    case "round5-case-b":
+        // Case B (contrast): create A with AGGraphCreateShared, save rawA, call CFRelease(rawA) without a = nil
+        let d = Driver()
+        let a: AttributeGraph.Graph = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a, to: UnsafeRawPointer.self)
+        c_CFRelease(rawA)
+        print("round5-case-b|cfReleaseCompleted=true")
+        fflush(stdout)
+        exit(0)
+
+    case "round5-case-c":
+        // Case C (contrast with ARC and retain): create A, CFRetain(rawA), a = nil, CFRelease(rawA)
+        let d = Driver()
+        var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a!, to: UnsafeRawPointer.self)
+        _ = c_CFRetain(rawA)
+        a = nil
+        c_CFRelease(rawA)
+        print("round5-case-c|cleanCompletion=true")
+        fflush(stdout)
+        exit(0)
+
     default:
         exit(2)
     }
