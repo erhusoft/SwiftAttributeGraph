@@ -149,3 +149,10 @@ en las importaciones. No está resuelto, y el handle reenviador sigue aplazado.
 Coincide con la lectura del desensamblado de Apple (sección 1 y la lectura de `AGGraphCreateShared`): otro handle sobre el mismo
 estado, con cuenta de referencias. Es una reimplementación de terceros: pista, no prueba. Su contador y su liberación están
 incompletos, así que no se copian sin medirlos en Apple.
+
+## 14. Rendimiento tras las funciones nuevas (2026-11-20, release, tres pasadas)
+
+- Lecturas de entrada, 10 M: 102,6 ms (línea base 103,4 ms, −0,8 %).
+- Lecturas de regla, 10 M: 106,5 ms (línea base 108,0 ms, −1,4 %).
+
+Sin regresión: las funciones añadidas (`setValue`, `valueAndFlags`, `changedValue`, observadores, etc.) no tocan el camino de lectura caliente.
