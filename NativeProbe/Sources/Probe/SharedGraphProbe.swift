@@ -30,6 +30,18 @@ private func c_AGGraphHasValue(_ attr: UInt32) -> Bool
 @_silgen_name("AGGraphGetAttributeGraph")
 private func c_AGGraphGetAttributeGraph(_ attr: UInt32) -> UnsafeRawPointer?
 
+@_silgen_name("AGGraphSetNeedsUpdate")
+private func c_AGGraphSetNeedsUpdate(_ graph: AttributeGraph.Graph)
+
+@_silgen_name("AGGraphSetUpdateCallback")
+private func c_AGGraphSetUpdateCallback(_ graph: AttributeGraph.Graph, _ fn: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?, _ ctx: UnsafeMutableRawPointer?)
+
+@_silgen_name("AGSubgraphUpdate")
+private func c_AGSubgraphUpdate(_ subgraph: AttributeGraph.Subgraph, _ flags: UInt32)
+
+@_silgen_name("AGGraphSetUpdate")
+private func c_AGGraphSetUpdate(_ update: UnsafeRawPointer?)
+
 /// `Probe share-probe`: behaviour of a shared graph reference, measured against the graph it shares.
 /// Prints one line per question. Identity is the raw reference bits.
 func runSharedGraphProbeIfRequested() {
@@ -947,6 +959,157 @@ func runSharedGraphLifetimeProbeIfRequested() {
         let countAfterSecondRead = evalCount
 
         print("coord-case|writeVia=\(subcase == "coord-write-G" ? "G" : "S")|firstVal=\(firstVal)|countAfterFirstRead=\(countAfterFirstRead)|countAfterWrite=\(countAfterWrite)|secondVal=\(secondVal)|countAfterSecondRead=\(countAfterSecondRead)")
+        exit(0)
+
+    case "coord-u1":
+        // U1: AGGraphSetNeedsUpdate() sobre G después de escribir, y luego leer desde S.
+        setbuf(stdout, nil)
+        var evalCount: Int = 0
+        var g = Driver()
+        let s = c_AGGraphCreateShared(g.graph)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let input: Handle<Int64> = g.input(100)
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                evalCount += 1
+                return input.value + 1
+            }))
+        }
+        _ = r.value // first read
+        input.value = 200 // write
+        let countAfterWrite = evalCount
+        c_AGGraphSetNeedsUpdate(g.graph) // update step on G
+        let countAfterUpdateStep = evalCount
+        let finalVal = r.value // read from S
+        let countAfterRead = evalCount
+        print("coord-u1|countAfterWrite=\(countAfterWrite)|countAfterUpdateStep=\(countAfterUpdateStep)|finalVal=\(finalVal)|countAfterRead=\(countAfterRead)")
+        exit(0)
+
+    case "coord-u2":
+        // U2: registrar AGGraphSetUpdateCallback en G, escribir, y anotar si el callback se dispara antes de cualquier lectura.
+        setbuf(stdout, nil)
+        var evalCount: Int = 0
+        final class CallbackBox {
+            var callbackFired = false
+            var callbackCount = 0
+        }
+        let box = CallbackBox()
+        let unmanaged = Unmanaged.passRetained(box)
+        let rawPtr = unmanaged.toOpaque()
+
+        var g = Driver()
+        let s = c_AGGraphCreateShared(g.graph)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let input: Handle<Int64> = g.input(100)
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                evalCount += 1
+                return input.value + 1
+            }))
+        }
+        _ = r.value // first read
+
+        let cCallback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { ctx in
+            guard let ctx = ctx else { return }
+            let b = Unmanaged<CallbackBox>.fromOpaque(ctx).takeUnretainedValue()
+            b.callbackFired = true
+            b.callbackCount += 1
+        }
+        c_AGGraphSetUpdateCallback(g.graph, cCallback, rawPtr)
+
+        input.value = 200 // write
+        let countAfterWrite = evalCount
+        let firedAfterWrite = box.callbackFired
+        let callbackCountAfterWrite = box.callbackCount
+
+        // Step: perform setNeedsUpdate or trigger update pass
+        c_AGGraphSetNeedsUpdate(g.graph)
+        let countAfterUpdateStep = evalCount
+        let firedAfterUpdateStep = box.callbackFired
+
+        let finalVal = r.value // read from S
+        let countAfterRead = evalCount
+        let firedAfterRead = box.callbackFired
+
+        unmanaged.release()
+        print("coord-u2|countAfterWrite=\(countAfterWrite)|firedAfterWrite=\(firedAfterWrite)|callbackCountAfterWrite=\(callbackCountAfterWrite)|countAfterUpdateStep=\(countAfterUpdateStep)|firedAfterUpdateStep=\(firedAfterUpdateStep)|finalVal=\(finalVal)|countAfterRead=\(countAfterRead)|firedAfterRead=\(firedAfterRead)")
+        exit(0)
+
+    case "coord-u3":
+        // U3: escribir dentro de una regla (un atributo que escribe en la entrada mientras se evalúa),
+        // y anotar si R se evalúa en el mismo ciclo o en el siguiente.
+        setbuf(stdout, nil)
+        var evalCountR: Int = 0
+        var evalCountWriter: Int = 0
+        var g = Driver()
+        let s = c_AGGraphCreateShared(g.graph)
+        let gRoot = AttributeGraph.Subgraph(graph: g.graph)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let input: Handle<Int64> = g.input(100)
+
+        // R reading input in S
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                evalCountR += 1
+                return input.value + 1
+            }))
+        }
+        _ = r.value // initial read of R, evalCountR = 1
+
+        // Writer attribute in G that mutates input during its evaluation inside withoutUpdate
+        let writerTrigger: Handle<Int64> = g.input(1)
+        let writerRule: Handle<Int64> = gRoot.apply {
+            Handle(NativeRule(body: {
+                evalCountWriter += 1
+                let trig = writerTrigger.value
+                g.withoutUpdate {
+                    input.value = trig * 50
+                }
+                return trig * 50
+            }))
+        }
+        _ = writerRule.value // evaluate writer rule once -> writes 50 into input
+
+        // Check if R was evaluated during/immediately after writer evaluation
+        let countAfterWriterRun = evalCountR
+
+        // Update step: evaluate writer again with new trigger
+        writerTrigger.value = 2
+        _ = writerRule.value // writes 100 into input
+        let countAfterSecondWriterRun = evalCountR
+
+        // Finally read R
+        let finalVal = r.value
+        let countAfterFinalRead = evalCountR
+        print("coord-u3|countAfterWriterRun=\(countAfterWriterRun)|countAfterSecondWriterRun=\(countAfterSecondWriterRun)|finalVal=\(finalVal)|countAfterFinalRead=\(countAfterFinalRead)")
+        exit(0)
+
+    case "coord-u4":
+        // U4: drenar el ciclo de actualización con AGSubgraphUpdate sobre un subgrafo (no sobre G),
+        // después de escribir, y luego leer desde S.
+        setbuf(stdout, nil)
+        var evalCount: Int = 0
+        var g = Driver()
+        let s = c_AGGraphCreateShared(g.graph)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let input: Handle<Int64> = g.input(100)
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                evalCount += 1
+                return input.value + 1
+            }))
+        }
+        _ = r.value // first read
+        input.value = 200 // write
+        let countAfterWrite = evalCount
+
+        // Drain update cycle with AGSubgraphUpdate on sRoot
+        c_AGSubgraphUpdate(sRoot, 1) // flags = 1 (.all)
+        let countAfterSubgraphUpdate = evalCount
+
+        let finalVal = r.value // read from S
+        let countAfterRead = evalCount
+        print("coord-u4|countAfterWrite=\(countAfterWrite)|countAfterSubgraphUpdate=\(countAfterSubgraphUpdate)|finalVal=\(finalVal)|countAfterRead=\(countAfterRead)")
         exit(0)
 
     default:
