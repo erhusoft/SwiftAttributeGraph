@@ -149,7 +149,8 @@ SCENARIOS = [
     "changed-value",
     "read-options-runs",
     "value-and-flags",
-]
+    "graph-on-invalidation",
+    "graph-on-invalidation-subgraph",]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
 

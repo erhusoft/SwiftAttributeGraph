@@ -3119,3 +3119,33 @@ func valueAndFlagsScenario() {
     _ = d.read(r)
     print("value-and-flags|outside=\(outside0),\(outside1)|inRule=\(inRule)")
 }
+
+/// `Graph.onInvalidation(_:)`: how many notices a change to an input sends, with the dependent rule read again or not.
+func graphOnInvalidationScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var notices = 0
+    d.onInvalidation { _ in notices += 1 }
+    let src: Handle<Int64> = d.input(1)
+    let r: Handle<Int64> = d.rule { d.read(src) + 1 }
+    _ = d.read(r)
+    d.write(2, to: src)
+    let afterWriteNoRead = notices
+    _ = d.read(r)
+    d.write(3, to: src)
+    let afterSecondWrite = notices
+    print("graph-on-invalidation|afterWriteNoRead=\(afterWriteNoRead)|afterSecondWrite=\(afterSecondWrite)")
+}
+
+/// `Graph.onInvalidation(_:)` on a subgraph invalidation: one notice per attribute that is freed?
+func graphOnInvalidationSubgraphScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var notices = 0
+    d.onInvalidation { _ in notices += 1 }
+    let sub = d.makeSubgraph()
+    _ = d.withSubgraph(sub) { d.input(1) }
+    _ = d.withSubgraph(sub) { d.input(2) }
+    sub.invalidate()
+    print("graph-on-invalidation-subgraph|notices=\(notices)")
+}
