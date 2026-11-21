@@ -1288,6 +1288,88 @@ func runSharedGraphLifetimeProbeIfRequested() {
         print("inv-routing|topo=\(topo)|writeVia=\(writeVia)|val1=\(val1)|cntG_init=\(cntGAfterFirstRead)|cntS_init=\(cntSAfterFirstRead)|cntG_afterWrite=\(cntGAfterWrite)|cntS_afterWrite=\(cntSAfterWrite)|val2=\(val2)|cntG_afterRead=\(cntGAfterSecondRead)|cntS_afterRead=\(cntSAfterSecondRead)")
         exit(0)
 
+    case "two-host-w1", "two-host-w2", "two-host-w12", "two-host-ctrl":
+        setbuf(stdout, nil)
+        let g = Driver()
+        let s1 = c_AGGraphCreateShared(g.graph)
+        let s2 = c_AGGraphCreateShared(g.graph)
+        let s1Root = AttributeGraph.Subgraph(graph: s1)
+        let s2Root = AttributeGraph.Subgraph(graph: s2)
+
+        var cntG = 0
+        var cnt1 = 0
+        var cnt2 = 0
+        g.graph.onInvalidation { _ in cntG += 1 }
+        s1.onInvalidation { _ in cnt1 += 1 }
+        s2.onInvalidation { _ in cnt2 += 1 }
+
+        let input1: Handle<Int64> = g.input(100)
+        let input2: Handle<Int64> = g.input(200)
+
+        let r1: Handle<Int64> = s1Root.apply {
+            Handle(NativeRule(body: { input1.value + 1 }))
+        }
+        let r1b: Handle<Int64> = s1Root.apply {
+            Handle(NativeRule(body: { r1.value + 1 }))
+        }
+
+        if subcase == "two-host-ctrl" {
+            // Tarea 2: Control de una sola cadena. S2 sin dependientes (solo input2 sin R2).
+            let v1_init = s1Root.apply { r1b.value }
+            let initCounts = "\(cnt1),\(cnt2),\(cntG)"
+            g.write(150, to: input1)
+            let afterWriteCounts = "\(cnt1),\(cnt2),\(cntG)"
+            let v1_final = s1Root.apply { r1b.value }
+            let afterReadCounts = "\(cnt1),\(cnt2),\(cntG)"
+            print("two-host|case=ctrl|v1_init=\(v1_init)|init=\(initCounts)|afterW1=\(afterWriteCounts)|v1_final=\(v1_final)|afterRead=\(afterReadCounts)")
+            exit(0)
+        }
+
+        let r2: Handle<Int64> = s2Root.apply {
+            Handle(NativeRule(body: { input2.value + 10 }))
+        }
+        let r2b: Handle<Int64> = s2Root.apply {
+            Handle(NativeRule(body: { r2.value + 10 }))
+        }
+
+        let v1_init = s1Root.apply { r1b.value }
+        let v2_init = s2Root.apply { r2b.value }
+        let initCounts = "\(cnt1),\(cnt2),\(cntG)"
+
+        switch subcase {
+        case "two-host-w1":
+            g.write(150, to: input1)
+            let afterW1 = "\(cnt1),\(cnt2),\(cntG)"
+            let v1_final = s1Root.apply { r1b.value }
+            let v2_final = s2Root.apply { r2b.value }
+            let afterRead = "\(cnt1),\(cnt2),\(cntG)"
+            print("two-host|case=w1|v1_init=\(v1_init)|v2_init=\(v2_init)|init=\(initCounts)|afterW1=\(afterW1)|v1_final=\(v1_final)|v2_final=\(v2_final)|afterRead=\(afterRead)")
+            exit(0)
+
+        case "two-host-w2":
+            g.write(250, to: input2)
+            let afterW2 = "\(cnt1),\(cnt2),\(cntG)"
+            let v1_final = s1Root.apply { r1b.value }
+            let v2_final = s2Root.apply { r2b.value }
+            let afterRead = "\(cnt1),\(cnt2),\(cntG)"
+            print("two-host|case=w2|v1_init=\(v1_init)|v2_init=\(v2_init)|init=\(initCounts)|afterW2=\(afterW2)|v1_final=\(v1_final)|v2_final=\(v2_final)|afterRead=\(afterRead)")
+            exit(0)
+
+        case "two-host-w12":
+            g.write(150, to: input1)
+            let afterW1 = "\(cnt1),\(cnt2),\(cntG)"
+            g.write(250, to: input2)
+            let afterW2 = "\(cnt1),\(cnt2),\(cntG)"
+            let v1_final = s1Root.apply { r1b.value }
+            let v2_final = s2Root.apply { r2b.value }
+            let afterRead = "\(cnt1),\(cnt2),\(cntG)"
+            print("two-host|case=w12|v1_init=\(v1_init)|v2_init=\(v2_init)|init=\(initCounts)|afterW1=\(afterW1)|afterW2=\(afterW2)|v1_final=\(v1_final)|v2_final=\(v2_final)|afterRead=\(afterRead)")
+            exit(0)
+
+        default:
+            exit(2)
+        }
+
     default:
         exit(2)
     }
