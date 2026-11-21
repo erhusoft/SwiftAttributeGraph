@@ -17,7 +17,9 @@ struct SubgraphTable {
     private var rawChildren: [[UInt32]] = []
     /// The child tag of each entry of `rawChildren`, in the same position: two bits (`AGSubgraphAddChild2`), zero when linked
     /// without a tag.
-    private var rawTags: [[UInt8]] = []
+    /// Child tags per parent, allocated only once a parent gets a non-zero tag (most links are untagged, so the common
+    /// case keeps no tag array). `nil` means every child of that parent has tag 0.
+    private var rawTags: [[UInt8]?] = []
     /// For each slot `c`, `positionInParents[c][k]` is the index of `c` inside `rawChildren[parents[c][k]]`, enabling
     /// O(1) tombstoning when `c` is unlinked or released.
     private var positionInParents: [[UInt32]] = []
@@ -54,7 +56,7 @@ struct SubgraphTable {
             members.append([])
             parents.append([])
             rawChildren.append([])
-            rawTags.append([])
+            rawTags.append(nil)
             positionInParents.append([])
             childTombstoneCount.append(0)
             contexts.append(SubgraphTable.defaultContext)
@@ -71,7 +73,7 @@ struct SubgraphTable {
             let p = Int(parent.index)
             let pos = UInt32(rawChildren[p].count)
             rawChildren[p].append(index)
-            rawTags[p].append(0)
+            if rawTags[p] != nil { rawTags[p]!.append(0) }
             parents[i].append(parent.index)
             positionInParents[i].append(pos)
         }
@@ -115,7 +117,7 @@ struct SubgraphTable {
         let p = Int(index)
         var result: [(child: UInt32, tag: UInt8)] = []
         for (position, child) in rawChildren[p].enumerated() where child != SubgraphTable.none {
-            result.append((child, rawTags[p][position]))
+            result.append((child, rawTags[p]?[position] ?? 0))
         }
         return result
     }
@@ -129,11 +131,11 @@ struct SubgraphTable {
         let total = rawChildren[p].count
         guard dead >= 64 && dead * 2 >= total else { return }
         var write = 0
-        var keptTags: [UInt8] = []
+        var keptTags: [UInt8]? = rawTags[p] == nil ? nil : []
         for read in 0..<total {
             let child = rawChildren[p][read]
             guard child != SubgraphTable.none else { continue }
-            keptTags.append(rawTags[p][read])
+            keptTags?.append(rawTags[p]?[read] ?? 0)
             if write != read {
                 rawChildren[p][write] = child
                 let c = Int(child)
@@ -177,7 +179,10 @@ struct SubgraphTable {
         if !parents[c].contains(parent) {
             let pos = UInt32(rawChildren[p].count)
             rawChildren[p].append(child)
-            rawTags[p].append(tag & 0x3)
+            if rawTags[p] == nil && tag & 0x3 != 0 {
+                rawTags[p] = [UInt8](repeating: 0, count: rawChildren[p].count - 1)
+            }
+            if rawTags[p] != nil { rawTags[p]!.append(tag & 0x3) }
             parents[c].append(parent)
             positionInParents[c].append(pos)
         }
@@ -299,7 +304,7 @@ struct SubgraphTable {
         parents[i] = []
         positionInParents[i] = []
         rawChildren[i] = []
-        rawTags[i] = []
+        rawTags[i] = nil
         childTombstoneCount[i] = 0
         falling[i] = false
         members[i] = []
