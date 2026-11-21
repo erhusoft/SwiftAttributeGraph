@@ -23,22 +23,22 @@ extension Attribute {
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).
     public var valueState: ValueState {
-        graph.valueState(of: self)
+        graph.valueStateImpl(of: erased)
     }
 
     /// The subgraph that owns this attribute (`AGAttribute.subgraph`).
     public var subgraph: Subgraph {
-        graph.subgraph(of: self)
+        graph.subgraphImpl(of: erased)
     }
 
     /// The subgraph that owns this attribute, or `nil` if it was freed (`AGAttribute.subgraphOrNil`).
     public var subgraphOrNil: Subgraph? {
-        graph.subgraphOrNil(of: self)
+        graph.subgraphOrNilImpl(of: erased)
     }
 
     /// The source attribute if this is an indirect attribute (`AGAttribute.source`).
     public var source: Attribute<Value> {
-        get { graph.source(of: self) }
+        get { Attribute(id: graph.sourceImpl(of: erased).id) }
         nonmutating set { graph.setSource(newValue, for: self) }
     }
 }
@@ -66,22 +66,22 @@ extension AnyAttribute {
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).
     public var valueState: ValueState {
-        graph.valueState(of: self)
+        graph.valueStateImpl(of: self)
     }
 
     /// The subgraph that owns this attribute (`AGAttribute.subgraph`).
     public var subgraph: Subgraph {
-        graph.subgraph(of: self)
+        graph.subgraphImpl(of: self)
     }
 
     /// The subgraph that owns this attribute, or `nil` if it was freed (`AGAttribute.subgraphOrNil`).
     public var subgraphOrNil: Subgraph? {
-        graph.subgraphOrNil(of: self)
+        graph.subgraphOrNilImpl(of: self)
     }
 
     /// The source attribute if this is an indirect attribute (`AGAttribute.source`).
     public var source: AnyAttribute {
-        get { graph.source(of: self) }
+        get { graph.sourceImpl(of: self) }
         nonmutating set { graph.setSource(newValue, for: self) }
     }
 }

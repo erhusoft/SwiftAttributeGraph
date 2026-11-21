@@ -383,12 +383,19 @@ public final class Graph {
     }
 
     /// Returns the attribute that `indirect` currently redirects to.
+    @available(*, deprecated, message: "Use the Apple-named accessor on the attribute instead: `attribute.source`.")
     public func source<Value>(of indirect: Attribute<Value>) -> Attribute<Value> {
-        Attribute(id: source(of: indirect.erased).id)
+        Attribute(id: sourceImpl(of: indirect.erased).id)
     }
 
     /// Returns the attribute that `indirect` currently redirects to (untyped).
+    @available(*, deprecated, message: "Use the Apple-named accessor on the attribute instead: `attribute.source`.")
     public func source(of indirect: AnyAttribute) -> AnyAttribute {
+        sourceImpl(of: indirect)
+    }
+
+    /// The implementation behind ``source(of:)``, shared with `Attribute.source` (not deprecated).
+    func sourceImpl(of indirect: AnyAttribute) -> AnyAttribute {
         assertOwnThread()
         precondition(table.isLive(indirect.id), "source(of:): the indirect attribute is dead")
         precondition(table.state[Int(indirect.id.index)] & NodeState.indirect != 0,
