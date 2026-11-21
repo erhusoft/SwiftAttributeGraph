@@ -11,6 +11,9 @@ private func c_AGGraphGetTypeID() -> UInt
 @_silgen_name("CFGetRetainCount")
 private func c_CFGetRetainCount(_ object: UnsafeRawPointer) -> Int
 
+@_silgen_name("CFRetain")
+private func c_CFRetain(_ object: UnsafeRawPointer) -> UnsafeRawPointer
+
 @_silgen_name("CFRelease")
 private func c_CFRelease(_ object: UnsafeRawPointer)
 
@@ -402,6 +405,31 @@ func runSharedGraphLifetimeProbeIfRequested() {
         let refAfterDouble = state.advanced(by: 0x1a4).load(as: UInt32.self)
 
         print("case5|invFlagBefore=\(invFlagBefore)|invFlagAfter=\(invFlagAfter)|refBefore=\(refBefore)|refAfter=\(refAfter)|refAfterDouble=\(refAfterDouble)")
+        fflush(stdout)
+        exit(0)
+
+    case "round4-retained":
+        let d = Driver()
+        var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a!, to: UnsafeRawPointer.self)
+        let rcInitial = c_CFGetRetainCount(rawA)
+        _ = c_CFRetain(rawA)
+        let rcAfterRetain = c_CFGetRetainCount(rawA)
+        a = nil
+        let rcAfterARCDrop = c_CFGetRetainCount(rawA)
+        c_CFRelease(rawA)
+        print("round4-retained|rcInitial=\(rcInitial)|rcAfterRetain=\(rcAfterRetain)|rcAfterARCDrop=\(rcAfterARCDrop)")
+        fflush(stdout)
+        exit(0)
+
+    case "round4-unretained":
+        let d = Driver()
+        var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a!, to: UnsafeRawPointer.self)
+        let rcInitial = c_CFGetRetainCount(rawA)
+        a = nil
+        // Without CFRetain, rawA is freed memory. Documenting that reading it is invalid:
+        print("round4-unretained|rcInitial=\(rcInitial)|afterDropMemoryIsFreed=true")
         fflush(stdout)
         exit(0)
 

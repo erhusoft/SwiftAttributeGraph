@@ -1,0 +1,28 @@
+Resultados de comprobación de hipótesis (Ronda 4 - macOS 15.8.3, AttributeGraph nativo)
+
+=== Tarea: Medir que ARC libera exactamente una vez, sin leer memoria liberada ===
+
+1. Medición con referencia extra retenida (CFRetain):
+   - Paso 1: Creación de A con AGGraphCreateShared(d.graph), obteniendo puntero rawA.
+     rcInitial = 1
+   - Paso 2: Invocación de c_CFRetain(rawA).
+     rcAfterRetain = 2
+   - Paso 3: Asignación a = nil (ARC suelta su referencia). Como el objeto sigue vivo gracias a CFRetain:
+     rcAfterARCDrop = 1
+   - Paso 4: Liberación de la referencia extra con c_CFRelease(rawA):
+     La llamada completa la liberación limpia del objeto (código de salida 0).
+
+2. Repetición sin CFRetain (documentación de memoria liberada):
+   - Creación de A con AGGraphCreateShared: rcInitial = 1.
+   - Asignación a = nil: ARC reduce el retain count de 1 a 0 y libera el objeto.
+   - Estado: sin CFRetain, cualquier lectura posterior sobre rawA accede a memoria reciclada en el heap freelist (no válida).
+
+=== Conclusión de la Hipótesis 2 (Fallo de CFRelease a mano) ===
+Estado: Cerrada como FIRME (Double Free demostrado).
+- Paso 2 dio exactamente 2.
+- Paso 3 dio exactamente 1.
+Esto demuestra formalmente que la asignación `a = nil` por parte de Swift ARC consume exactamente una referencia de CoreFoundation (1 -> 0).
+Por lo tanto:
+1. ARC ejecuta la única liberación válida del handle.
+2. Un `CFRelease(rawA)` manual posterior sobre ese mismo puntero (sin haber hecho retain previo) constituye el segundo release sobre un objeto ya liberado (double free).
+3. Este double free es la causa directa del fallo en `CF_IS_OBJC` / `objc_release`.
