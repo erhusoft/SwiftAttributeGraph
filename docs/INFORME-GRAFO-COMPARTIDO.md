@@ -162,16 +162,39 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 ## 8. Lo que sigue abierto
 
-1. **Significado y ruta de error de la marca `+0x58`**:
-   - **Estado**: Abierto.
-   - Se sabe que actúa como flag de guardia (`0` = activo/no invalidado, `1` = invalidado) dentro de `AGGraphInvalidate`.
-   - Queda pendiente investigar si existen otras funciones de AttributeGraph que consulten este flag antes de acceder al contexto o qué código de error/trampa disparan si se intenta operar sobre un handle con marca `1`.
-2. **Dependencia cruzada entre ventanas a nivel directo de grafo**:
+1. **Dependencia cruzada entre ventanas a nivel directo de grafo**:
    - **Estado**: Abierto.
    - Las pruebas multicelular de SwiftUI con dos ventanas emplearon `ObservableObject` para la sincronización entre vistas (capa de binding de SwiftUI). Falta verificar y medir cómo reacciona un nodo de grafo puro dependiente conectado directamente a través de dos handles en distintos hilos de UI sin la intermediación de `Combine` / `ObservableObject`.
-3. **Fallo en la prueba de dos hosts con dos grafos independientes**:
-   - **Estado**: Abierto.
-   - En una sonda de prueba con dos hosts aislados asociados a dos grafos independientes, se produjo un fallo dentro de `AG::Graph::value_ref` (código 139) antes de alcanzar la verificación de espacio de nombres. No está determinado si se debió a un error de configuración de argumentos en la sonda nativa o a una precondición estricta no documentada del motor.
+
+---
+
+## 9. Puntos abiertos resueltos
+
+1. **Significado y ruta de error de la marca `+0x58`**:
+   - **Estado**: Firme.
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt` (`probe-58`, desensamblado LLDB).
+   - **Significado**: Es el campo booleano `is_invalidated` (1 byte) del handle `AGGraphStorage`.
+   - **Ciclo de vida medido**:
+     - Creado en `AGGraphCreateShared`: inicializado a `0` (`0x1c2c403f4: strb wzr, [x19, #0x58]`).
+     - Al invalidar (`AGGraphInvalidate`): pasa a `1` (`0x1c2c40480: strb w8, [x19, #0x58]`).
+     - En subsiguientes llamadas a `AGGraphInvalidate`: guardia de idempotencia (`0x1c2c4045c: tbnz w8, #0x0`), retorna de inmediato sin destruir el contexto de nuevo.
+   - **Guardia de finalización**: El finalizador CoreFoundation de la clase (`klass->finalize`, `0x1c2c42eac`) comprueba `ldrb w8, [x0, #0x58]`. Si es `1` (ya invalidado), retorna inmediatamente sin destruir el contexto; si es `0`, ejecuta `AG::Graph::Context::~Context()`. Esto previene dobles destrucciones de contexto entre `AGGraphInvalidate` y `CFRelease`.
+   - **Rutas de error**: Si `handle + 0x58 == 1`, las siguientes funciones saltan a su bloque frío y abortan el proceso con `AG::precondition_failure("invalidated graph")`:
+     - `AGGraphCreateShared` (`0x1c2c40378`)
+     - `AGGraphSetNeedsUpdate` (`0x1c2c406fc`)
+     - `AGGraphStopTracing` (`0x1c2c42d14`)
+     - `AGGraphSyncTracing` (`0x1c2c42d58`)
+     - `AGGraphCopyTracePath` (`0x1c2c42d9c`)
+     - `AGGraphDescription` (`0x1c2c42e00`)
+
+2. **Causa raíz del fallo en la prueba de dos hosts con dos grafos independientes**:
+   - **Estado**: Firme.
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt` (`two-hosts`, `two-hosts-cross`).
+   - **Causa raíz**: Error en el código de la sonda, **no** un bug de AttributeGraph ni un fallo por tener múltiples grafos en el proceso.
+   - **Mecanismo**: La sonda original evaluó `AttributeGraph.Subgraph(graph: s1).apply { ... }` sin retener la instancia de `Subgraph` en una variable local viva. Al terminar la sentencia, ARC destruyó el `Subgraph` (`AG::Subgraph::clear_object()`), disociando el contexto del nodo (`[node + 0x28] = 0`). Al leer `.value`, `AGGraphGetValue` pasó un contexto nulo `0x0` a `AG::Graph::value_ref`, intentando desreferenciar `[0x0 + 0x1e0]` (`SIGSEGV` / exit code 139).
+   - **Verificación**: Reteniendo el `Subgraph` en una variable (`let root1 = AttributeGraph.Subgraph(graph: s1)`), `two-hosts` ejecuta 100 % limpio (exit code 0):
+     `two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2`
+     Y el caso de lectura cruzada no permitida entre grafos (`two-hosts-cross`) dispara el aborto de seguridad esperado de espacio de nombres (exit code 134).
 
 ---
 
