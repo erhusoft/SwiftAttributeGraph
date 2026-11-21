@@ -27,8 +27,8 @@ In SwiftUI.framework, the initializer sets up scene attributes and delegates gra
   Invokes super.init(data: data) to bind the newly created GraphHost.Data to the AppGraph instance.
 
 3. Direct Graph Creation Calls:
-- Calls to _AGGraphCreate in SwiftUI.framework: 0 (undefined symbol not imported in SwiftUI.framework; imported only as AGGraphCreateIndirectAttribute and AGGraphCreateOffsetAttribute2).
-- Calls to _AGGraphCreateShared in SwiftUI.framework: 0 (not imported directly in SwiftUI.framework).
+- Calls to _AGGraphCreate in SwiftUI.framework: 0 (_AGGraphCreate is not imported in SwiftUI.framework; verified via nm -u ext/SwiftUI).
+- Calls to _AGGraphCreateShared in SwiftUI.framework: 0 (_AGGraphCreateShared is not imported in SwiftUI.framework; verified via nm -u ext/SwiftUI).
 - AppGraph does NOT call AGGraphCreate or AGGraphCreateShared directly; it delegates entirely to GraphHost.Data.init() in SwiftUICore.
 
 4. Verdict:
