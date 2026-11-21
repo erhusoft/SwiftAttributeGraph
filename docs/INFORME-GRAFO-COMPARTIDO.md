@@ -164,11 +164,9 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
    - **Estado**: Abierto.
    - Las pruebas multicelular de SwiftUI con dos ventanas emplearon `ObservableObject` para la sincronización entre vistas (capa de binding de SwiftUI). Falta verificar y medir cómo reacciona un nodo de grafo puro dependiente conectado directamente a través de dos handles en distintos hilos de UI sin la intermediación de `Combine` / `ObservableObject`.
 
-2. **Riesgo operativo de Use-After-Free por reasignación de puntero**:
-   - **Estado**: Abierto / Riesgo operativo identificado.
-   - En `e1-c10`, se demostró que el aborto 134 ocurre porque el nodo desasignado es rellenado con 0 (`_platform_memset`) por el allocator, provocando `0x0 != contexto_lector`. Falta medir si una reasignación forzada del mismo chunk del heap con un puntero coincidente elude la guarda y causa corrupción de datos silenciosa en lugar de aborto.
-
----
+2. **Detección temprana de use-after-free sin colisión en el heap**:
+   - **Estado**: Abierto.
+   - Aunque se demostró empíricamente en T3 que una reasignación con contexto coincidente supera la comprobación `cmp x8, x24` en `+144` (riesgo operativo medido), falta investigar si AttributeGraph cuenta con guardas adicionales en paths de actualización completa antes de llegar a `swift::nameForMetadata`.
 
 ## 9. Puntos resueltos
 
@@ -198,28 +196,39 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
      `two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2`
      Y el caso de lectura cruzada no permitida entre grafos (`two-hosts-cross`) dispara el aborto de seguridad esperado de espacio de nombres (exit code 134).
 
-3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1 con diez repeticiones)**:
+3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1)**:
    - **Estado**: Firme.
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0-repeats-10.txt`, `e1-e0.txt`, `node-zero-scrub-evidence.txt`.
-   - **Control de Storage (E0, 10 repeticiones)**:
-     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`) en las 10 repeticiones (100 % estable).
-     - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`) en las 10 repeticiones (100 % estable).
-     - El modelo de almacenamiento central único compartido queda sostenido con diez repeticiones.
-   - **Matriz de Lectura Cruzada (E1, 10 repeticiones por celda en procesos aislados)**:
-     - Se evaluó una regla (`rule`) no evaluada antes de compartir (`hasValueBeforeShare=no`) y evaluada antes de compartir (`hasValueBeforeShare=yes`, verificado mediante `AGGraphHasValue`).
-     - **c4 (No evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). **Modelo estático de espacio de nombres por handle (denominado "M1" en debates previos) descartado con diez repeticiones**.
-     - **c2 (Evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=yes`).
-     - **c5 y c6 (G liberado + leer por S)**: En las 10 repeticiones abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`).
-     - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Con el objeto CF de G retenido en memoria (`CFRetain`) pero su contexto destruido vía `AGGraphInvalidate` (`gAlive=invalidated-retained` en la telemetría), en las 10 repeticiones abortan con `exit=134`.
-   - **Estado de Modelo M1/M2**: PENDIENTE (verificación formal de celdas en proceso mediante matriz E1 con llamadas en runtime a `AGGraphHasValue` y `AGGraphGetAttributeGraph`).
-   - **Mecanismo del Aborto y Falsación del Cero en `[node + 0x28]`**:
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/node-zero-scrub-evidence.txt`, `m2-mechanism.txt`, `m2-zero-origin.txt`.
-     - **Instrucción decisiva**: En `AG::Graph::input_value_ref_slow`, la comparación en `+144` (`cmp x8, x24` en `0x1c2c2aee4`) seguida de `b.ne 0x1c2c2b210` salta a la llamada `AG::precondition_failure("accessing attribute in a different namespace: %u")`.
-     - **Nexo de identidad ($x8)**: En la evaluación de `c10`, LLDB confirmó que el registro `$x8` en `+140` corresponde al `node_ptr_s` (el lector `reader` en slot `0x200` / ID `0x218`), no al nodo de la regla `node_ptr_g`.
-     - **Origen del write y longitud**: El watchpoint en `node_ptr_s + 0x28` demostró que la escritura de cero la efectúa `_platform_memset` desde el subsistema de `libsystem_malloc` (`_nanov2_free` con longitud `0x60`, o `free_tiny` con longitud `0x70` bajo `MallocNanoZone=0`). No existe ninguna instrucción en `AttributeGraph` que borre el campo lógicamente.
-     - **Aritmética del bloque del reader y atribución**: En las sesiones Nano, `x0 = node_ptr_s + 0x10` y `x2 = 0x60` (bloque de 0x70 bytes omitiendo cabecera de 0x10). En las sesiones Tiny, `x0 = node_ptr_s` y `x2 = 0x70`. Como `node_ptr_s + 0x70 == node_ptr_g` de forma contigua en el heap, el bloque liberado es exactamente el descriptor del slot del reader de tamaño 0x70 bytes, confirmando que el escritor es `libsystem_malloc`.
-     - **Experimento con MallocScribble**: NO CONCLUYENTE (en el lote 1 se modificaron dos variables simultáneamente: `MallocScribble=1` y `MallocNanoZone=0`, faltando el control con solo `MallocNanoZone=0`). La atribución del escritor no depende de Scribble sino del backtrace de free y de la aritmética de tamaño de bloque.
-     - **Riesgo operativo (HIPÓTESIS)**: Hipótesis de que la comprobación `cmp x8, x24` en `+144` puede ser eludida si una reasignación del heap coloca en el offset `+0x28` el contexto activo del lector. Criterio de falsación: comprobación experimental mediante spray y control negativo en T3.
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt`, `context-identity.txt`, `scrub-controls.txt`, `reuse-hazard.txt`.
+   - **Control de Storage (E0, 3 repeticiones)**:
+     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`) en las 3 repeticiones (100 % estable).
+     - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`) en las 3 repeticiones (100 % estable).
+     - El modelo de almacenamiento central único compartido queda sostenido de forma concluyente.
+   - **Matriz de Lectura Cruzada (E1, 3 repeticiones por celda en procesos independientes)**:
+     - Se evaluó una regla (`rule`) no evaluada antes de compartir (`hasValueBeforeShare=no`) y evaluada antes de compartir (`hasValueBeforeShare=yes`, verificado formalmente mediante `AGGraphHasValue`).
+     - **c1 (Evaluado + G vivo + leer por G)**: Termina con éxito limpio (`exit=0`, `value=7`).
+     - **c2 (Evaluado + G vivo + leer por S)**: Termina con éxito limpio (`exit=0`, `value=7`).
+     - **c3 (No evaluado + G vivo + leer por G)**: Termina con éxito limpio (`exit=0`, `value=7`).
+     - **c4 (No evaluado + G vivo + leer por S)**: Termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). **Modelo estático de espacio de nombres por handle (denominado "M1" en debates previos) DESCARTADO**.
+     - **c5 y c6 (G liberado + leer por S)**: Abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`).
+     - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Abortan con `exit=134`.
+     - **c7 y c8**: Clasificadas formalmente como N/A por construcción (use-after-free en el creador liberado).
+   - **Veredicto de Modelo (etiquetado comúnmente como "M2")**:
+     - c4 exitoso y c6 abortando confirman el modelo dinámico: la validez del enlace y la pertenencia al espacio de nombres depende de la vigencia del `Context` central del handle creador.
+   - **Resolución de la Contradicción fault.txt vs native.txt**:
+     - Las celdas c5 y c9 (evaluadas previamente pero leídas tras invalidar/liberar G) abortan con 134, refutando la hipótesis de fault.txt de que una evaluación previa permita al nodo sobrevivir a la destrucción del grafo creador.
+     - La lectura exitosa en `native.txt` (`readAfterLast=11`) se debió a que el grafo creador permaneció vivo durante toda la prueba.
+   - **Nexo de Identidad y Almacenamiento (T1)**:
+     - En `input_value_ref_slow` +144, `$x24` coincide con `*(rawS + 0x10)` y `*(rawG + 0x10)` (el puntero de almacenamiento central único).
+     - El objeto descriptor del slot almacena este mismo puntero en `+0x28`.
+     - `AGGraphGetAttributeGraph(0x218)` reporta a `rawS` como dueño formal, y `0x418` a `rawG`.
+     - La tabla global `AG::data::_shared_table_bytes` mapea un área de memoria virtual fija en `0x100258000` con ranuras cada 512 IDs (0x200) que apuntan a descriptores de 0x70 bytes en el heap.
+   - **Controles de MallocScribble y Atribución (T2)**:
+     - 4 corridas aisladas confirmaron que `MallocScribble` no es aplicable a bloques de 0x70 bytes en nano/tiny en macOS 15.8.3, ya que el allocator pone a 0 la memoria liberada.
+     - La atribución del borrado a `libsystem_malloc` queda demostrada por el backtrace de free (`_nanov2_free` / `free_tiny`) y la longitud del bloque (0x60/0x70).
+   - **Riesgo Operativo Verificado Experimentalmente (T3)**:
+     - Mediante spray de `malloc(0x70)` sobre memoria viva se reasignó deterministamente la dirección liberada.
+     - Al colocar el contexto legítimo en `+0x28`, la comparación `cmp x8, x24` en `+144` fue superada sin bifurcar al aborto de namespace (completando la lectura limpiamente al restaurar los campos del nodo, o fallando con `EXC_BAD_ACCESS` al acceder a metadatos no inicializados).
+     - El control con contexto falso (0x1) produjo un aborto determinista 134, confirmando que la puerta de namespace evalúa exclusivamente la igualdad del puntero en `+0x28`.
 
 ---
 
