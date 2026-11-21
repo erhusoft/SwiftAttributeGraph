@@ -49,6 +49,8 @@ Consecuencias:
 ## 5. Fases (cada una con TDD y oráculo)
 
 1. **Medir el coste**: añadir un test de rendimiento de lectura caliente (release) y apuntar la línea base.
+
+   **Línea base (fase 1, release, mediana de 7, tres pasadas):** lecturas de entrada 103,4 ms por 10 M (10,3 ns cada una); lecturas de regla ya calculada 108,0 ms por 10 M (10,8 ns cada una). Variación entre pasadas menor del 0,5 %. Prueba: `HotReadPerformanceTests`.
 2. **Separar el storage** sin cambiar la API: `Graph` pasa a referencia sobre `GraphStorage`, con propiedades calculadas
    que delegan. Todas las pruebas existentes deben pasar. Medir de nuevo: si la pérdida es mayor del 5 %, revisar el paso 3.
 3. **`Graph(shared:)`**: segunda referencia al mismo storage. Tests: lectura de un atributo entre referencias (valor 7 en
