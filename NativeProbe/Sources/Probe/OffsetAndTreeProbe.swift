@@ -6,6 +6,14 @@ import AttributeGraph
 private func c_AGGraphCreateOffsetAttribute(_ attribute: AnyAttribute, _ offset: Int) -> AnyAttribute
 @_silgen_name("AGSubgraphShouldRecordTree")
 private func c_AGSubgraphShouldRecordTree() -> Bool
+@_silgen_name("AGGraphArchiveJSON")
+private func c_AGGraphArchiveJSON(_ name: UnsafePointer<CChar>?)
+@_silgen_name("AGSubgraphBeginTreeElement")
+private func c_AGSubgraphBeginTreeElement(_ attribute: AnyAttribute, _ type: Metadata, _ flags: UInt32)
+@_silgen_name("AGSubgraphAddTreeValue")
+private func c_AGSubgraphAddTreeValue(_ attribute: AnyAttribute, _ type: Metadata, _ key: UnsafePointer<CChar>, _ flags: UInt32)
+@_silgen_name("AGSubgraphEndTreeElement")
+private func c_AGSubgraphEndTreeElement(_ attribute: AnyAttribute)
 @_silgen_name("AGSubgraphSetShouldRecordTree")
 private func c_AGSubgraphSetShouldRecordTree()
 
@@ -54,6 +62,35 @@ private func offsetReaderRerunsAfterWrite(offset: Int, size: UInt64? = nil, writ
     return counter.n - before
 }
 #endif
+
+/// When launched as `Probe tree-effect <record|skip>`: runs the tree calls with the recording flag on or off and prints
+/// the graph's state counters before and after. A change in counters would show that recording has an observable effect.
+func runTreeEffectProbeIfRequested() {
+    let arguments = CommandLine.arguments
+    guard arguments.count > 2, arguments[1] == "tree-effect" else { return }
+    #if NATIVE_ATTRIBUTE_GRAPH
+    let record = arguments[2] == "record"
+    let d = Driver()
+    let attribute: Handle<Int64> = d.input(7)
+    if record { d.currentSubgraph.apply { c_AGSubgraphSetShouldRecordTree() } }
+    let flagSeen = d.currentSubgraph.apply { c_AGSubgraphShouldRecordTree() }
+    let before = d.stateCounters()
+    d.currentSubgraph.apply {
+        c_AGSubgraphBeginTreeElement(attribute.identifier, Metadata(Int64.self), 0)
+        c_AGSubgraphAddTreeValue(attribute.identifier, Metadata(Int64.self), "key", 0)
+        c_AGSubgraphEndTreeElement(attribute.identifier)
+    }
+    let after = d.stateCounters()
+    let archiveName = arguments.count > 3 ? arguments[3] : "tree-effect-\(arguments[2])"
+    d.currentSubgraph.apply { c_AGGraphArchiveJSON(archiveName) }
+    print("tree-effect-archive|name=\(archiveName)")
+    print("tree-effect|mode=\(arguments[2])|flagSeen=\(flagSeen)|countersBefore=\(before)|countersAfter=\(after)|changed=\(before != after)")
+    d.close()
+    exit(0)
+    #else
+    exit(0)
+    #endif
+}
 
 /// When launched as `Probe offset-tree`, prints the measurements for the size-less offset default and for the subgraph
 /// tree-recording flag, then exits.
