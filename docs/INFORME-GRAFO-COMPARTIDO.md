@@ -37,25 +37,33 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 ## 3. Reglas de espacio de nombres
 
 - **Estado**: Firme.
-- **Referencia**: `rules.txt` (escenarios R1, R2, R3), `fault.txt`, `lifetime.txt` (caso 2), `hypotheses-round2.txt` (Tarea 1: desensamblado `AG::Graph::input_value_ref_slow`).
+- **Referencia**: `rules.txt` (escenarios R1, R2, R3), `fault.txt`, `lifetime.txt` (caso 2), `hypotheses-round2.txt` (Tarea 1: desensamblado `AG::Graph::input_value_ref_slow`), `node-zero-scrub-evidence.txt`.
 - **Descripción**:
   - **Grafos normales independientes (R2)**: Dos grafos creados independientemente mediante `AGGraphCreate` constituyen espacios de nombres completamente aislados. Intentar leer un atributo de un grafo desde el otro aborta con código 134 (`SIGABRT`):
     `accessing attribute in a different namespace: 536`.
   - **Grafos compartidos activos (R1)**: Un handle obtenido con `AGGraphCreateShared` pertenece al mismo espacio de nombres del grafo original; puede leer y enlazar atributos creados desde el otro handle sin error.
-  - **Acceso tras liberación de la referencia creadora (R3 / Caso 2)**:
-    - Si el nodo se evaluó al menos una vez antes de liberar la referencia creadora, el enlace queda materializado y el handle compartido sobrevive leyendo el valor sin problemas (`evaluatedBefore=42|readAfter=42`).
-    - Si el nodo **no** fue evaluado antes de liberar la referencia creadora, la lectura diferida desde el handle compartido aborta con código 134 (`accessing attribute in a different namespace: 536`).
+  - **Acceso tras liberación o invalidación de la referencia creadora (R3 / Casos E1 c5, c6, c9, c10)**:
+    - Si el nodo se evaluó al menos una vez antes de liberar la referencia creadora en un contexto donde el nodo mantiene su subgrafo vivo, el enlace queda materializado y el handle compartido lee el valor sin problemas (`evaluatedBefore=42|readAfter=42`).
+    - Si la referencia creadora se destruye o se invalida (`AGGraphInvalidate`) y su subgrafo es invalidado/destruido (`AG::Subgraph::invalidate_now`), el nodo es retornado al heap (`free`). La subsiguiente lectura diferida desde el handle compartido intenta resolver el nodo mediante `input_value_ref_slow`, encontrando que su memoria ha sido puesta a 0 (`[node + 0x28] = 0x0`) por el allocator, provocando la discrepancia de espacio de nombres (`0x0 != contexto_lector`) y abortando con código 134 (`accessing attribute in a different namespace: 536`).
   - **Causa a nivel de ensamblador**:
-    En `AG::Graph::input_value_ref_slow` (dirección base 0x1c2c2ae54):
+    En `AG::Graph::input_value_ref_slow` (dirección base `0x1c2c2ae54`, UUID `B8871E2F-044F-31C5-944E-9655E0979E9A`):
     ```asm
-    0x1c2c2aee0: ldr  x8, [x8, #0x28]  ; Carga el contexto dueño del nodo [node + 0x28]
-    0x1c2c2aee4: cmp  x8, x24          ; Compara contra x24 (contexto actual de la lectura)
-    0x1c2c2aee8: b.ne 0x1c2c2b210      ; Discrepancia -> bifurcación al aborto
-    0x1c2c2b210: str  x27, [sp]
-    0x1c2c2b214: adrp x0, "accessing attribute in a different namespace: %u"
-    0x1c2c2b21c: bl   AG::precondition_failure
+    0x1c2c2aed0 <+124>: and    x8, x27, #0xfffffe00
+    0x1c2c2aed4 <+128>: ldr    x9, [x21]               ; AG::data::_shared_table_bytes
+    0x1c2c2aed8 <+132>: ldr    x8, [x9, x8]            ; x8 = puntero al objeto del slot
+    0x1c2c2aedc <+136>: cbz    x8, 0x1c2c2b210
+    0x1c2c2aee0 <+140>: ldr    x8, [x8, #0x28]         ; Carga el contexto dueño del nodo [node + 0x28]
+    0x1c2c2aee4 <+144>: cmp    x8, x24                 ; Compara contra x24 (contexto actual del lector)
+    0x1c2c2aee8 <+148>: b.ne   0x1c2c2b210             ; Discrepancia -> bifurcación al aborto
+    0x1c2c2b210 <+956>: str    x27, [sp]
+    0x1c2c2b214 <+960>: adrp   x0, "accessing attribute in a different namespace: %u"
+    0x1c2c2b21c <+968>: bl     AG::precondition_failure
     ```
-    Al destruirse la primera referencia sin evaluar el nodo, el contexto registrado en el nodo (`[node + 0x28]`) deja de ser válido o no coincide con el contexto activo `x24` del lector, disparando la trampa `b.ne`.
+    Al destruirse o invalidarse la referencia creadora, su subgrafo se destruye y el nodo se libera; el allocator pone a 0 el bloque de memoria, por lo que `[node + 0x28]` vale `0x0`. Como `0x0 != x24`, la instrucción `b.ne` bifurca al aborto determinista.
+
+- **Conciliación de la aparente contradicción entre `fault.txt` y `native.txt`**:
+  - En `fault.txt` (`read-after-first-freed`), una regla `reader` en `S` leía un `input` creado en `G`, pero la lectura se produjo tras liberar `G` (`d = nil`). Como el reader no se evaluó mientras `G` estaba vivo, al liberarse `G` se destruyó su contexto, desencadenando el aborto 134.
+  - En `native.txt` (`readAfterLast=11`), el grafo `G` (`d`) **permaneció vivo** durante toda la secuencia de invalidaciones y escrituras (`d.write(10, ...)`, `d.write(11, ...)`). Además, `reader.value` ya había sido evaluado repetidas veces antes de registrar `readAfterLast`. Por tanto, no hubo liberación de `G` ni use-after-free, completándose la lectura limpiamente.
 
 ---
 
@@ -98,27 +106,17 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
   - La variable envoltorio de Swift (`AttributeGraph.Graph`) asume la posesión de esa referencia única.
   - Al ejecutar `a = nil`, Swift ARC libera exactamente **una** referencia de CoreFoundation (1 $\rightarrow$ 0):
     - *Comprobación en vivo*: Si se incrementa con `CFRetain(rawA)` a 2, tras `a = nil` el retain count pasa limpiamente a 1 (`rcAfterARCDrop = 1`), y un `CFRelease` posterior completa la destrucción limpia (código de salida 0).
-  - **Reproducción del fallo de `CFRelease` manual (Ronda 5, 3 repeticiones)**:
-    - **Caso A (Control de fallo)**: Crear handle con `AGGraphCreateShared`, ejecutar `a = nil` (sin retain previo) y después llamar a `CFRelease(rawA)`.
-      - Repeticiones 1, 2 y 3: **Falla 100 % de forma estable con exit=139** (`SIGSEGV` en `CF_IS_OBJC` / `objc_release`).
-    - **Caso B (Contraste sin ARC)**: Crear handle con `AGGraphCreateShared` y llamar a `CFRelease(rawA)` directamente sin `a = nil`.
-      - Repeticiones 1, 2 y 3: **Termina 100 % limpio con exit=0**. Demuestra que el handle de `AGGraphCreateShared` soporta `CFRelease` como cualquier objeto CoreFoundation válido.
-    - **Caso C (Contraste balanceado con retain)**: Crear handle, `CFRetain`, `a = nil`, y `CFRelease`.
-      - Repeticiones 1, 2 y 3: **Termina 100 % limpio con exit=0**.
-    - *Conclusión*: El fallo fatal al invocar `CFRelease` tras soltar la variable Swift es inequívocamente un **segundo release sobre un objeto ya destruido (Double Free)**.
-- **Mecanismo de invalidación (`AGGraphInvalidate`)**:
-  - Desensamblado en `lldb`:
-    1. Lee la marca de 1 byte en `handle + 0x58`. Si no es cero, retorna inmediatamente (`tbnz w8, #0x0`).
-    2. Si es 0, invoca `AG::Graph::Context::~Context()` pasando el puntero al contexto en `handle + 0x10`:
-       ```asm
-       add x0, x0, #0x10
-       bl  AG::Graph::Context::~Context()
-       ```
-    3. Al volver del destructor, escribe `1` en `handle + 0x58`:
-       ```asm
-       mov  w8, #0x1
-       strb w8, [x19, #0x58]
-       ```
+  - **Caso de control de fallo de liberación**: Un `CFRelease` manual adicional ejecutado tras `a = nil` sin un `CFRetain` previo produce una doble liberación fatal en CoreFoundation, confirmando que ARC posee y libera exactamente una referencia.
+- **Invalidación explícita (`AGGraphInvalidate`)**:
+  - Lee el byte en `handle + 0x58` (`is_invalidated`). Si vale 1, retorna inmediatamente sin efecto (operación idempotente).
+  - Si vale 0, destruye el contexto invocando a `AG::Graph::Context::~Context()` y fija el byte a 1:
+    ```asm
+    0x1c2c4045c: tbnz w8, #0x0, 0x1c2c40488 ; Si ya invalidado, retorna
+    ...
+    0x1c2c40474: bl   AG::Graph::Context::~Context()
+    0x1c2c40480: mov  w8, #0x1
+    0x1c2c40484: strb w8, [x19, #0x58]
+    ```
 - **Destrucción del contexto (`AG::Graph::Context::~Context()`)**:
   - Obtiene el puntero `AG::Graph*` en `[handle + 0x10]` y decrementa atómicamente el contador en `state + 0x1a4`:
     ```asm
@@ -166,9 +164,13 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
    - **Estado**: Abierto.
    - Las pruebas multicelular de SwiftUI con dos ventanas emplearon `ObservableObject` para la sincronización entre vistas (capa de binding de SwiftUI). Falta verificar y medir cómo reacciona un nodo de grafo puro dependiente conectado directamente a través de dos handles en distintos hilos de UI sin la intermediación de `Combine` / `ObservableObject`.
 
+2. **Riesgo operativo de Use-After-Free por reasignación de puntero**:
+   - **Estado**: Abierto / Riesgo operativo identificado.
+   - En `e1-c10`, se demostró que el aborto 134 ocurre porque el nodo desasignado es rellenado con 0 (`_platform_memset`) por el allocator, provocando `0x0 != contexto_lector`. Falta medir si una reasignación forzada del mismo chunk del heap con un puntero coincidente elude la guarda y causa corrupción de datos silenciosa en lugar de aborto.
+
 ---
 
-## 9. Puntos abiertos resueltos
+## 9. Puntos resueltos
 
 1. **Significado y ruta de error de la marca `+0x58`**:
    - **Estado**: Firme.
@@ -198,27 +200,27 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1 con diez repeticiones)**:
    - **Estado**: Firme.
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0-repeats-10.txt` (y antecedentes en `e1-e0.txt`, `e1-e0-repeats.txt`).
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0-repeats-10.txt`, `e1-e0.txt`, `node-zero-scrub-evidence.txt`.
    - **Control de Storage (E0, 10 repeticiones)**:
      - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`) en las 10 repeticiones (100 % estable).
      - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`) en las 10 repeticiones (100 % estable).
      - El modelo de almacenamiento central único compartido queda sostenido con diez repeticiones.
    - **Matriz de Lectura Cruzada (E1, 10 repeticiones por celda en procesos aislados)**:
      - Se evaluó una regla (`rule`) no evaluada antes de compartir (`hasValueBeforeShare=no`) y evaluada antes de compartir (`hasValueBeforeShare=yes`, verificado mediante `AGGraphHasValue`).
-     - **c4 (No evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). **M1 descartado con diez repeticiones**.
+     - **c4 (No evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). **Modelo estático de espacio de nombres por handle (denominado "M1" en debates previos) descartado con diez repeticiones**.
      - **c2 (Evaluado + G vivo + leer por S)**: En las 10 repeticiones termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=yes`).
      - **c5 y c6 (G liberado + leer por S)**: En las 10 repeticiones abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`).
      - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Con el objeto CF de G retenido en memoria (`CFRetain`) pero su contexto destruido vía `AGGraphInvalidate` (`gAlive=invalidated-retained` en la telemetría), en las 10 repeticiones abortan con `exit=134`.
-   - **Conclusión de Modelo**:
-     - **M2 queda respaldado con diez repeticiones**.
+   - **Conclusión de Modelo (comúnmente etiquetado como "M2")**:
      - Estabilidad absoluta del 100 % (10 de 10 repeticiones idénticas en todas las celdas).
      - Se confirma de manera concluyente que la vigencia del enlace entre handles compartidos depende estrictamente de la vida del `Context` (`AG::Graph::Context`) del handle que creó el atributo y no de la memoria física del handle CF envoltorio. Mientras el contexto creador siga activo, cualquier handle compartido del mismo almacenamiento puede leer o evaluar perezosamente sus atributos.
-   - **Mecanismo del Aborto (desensamblado y verificación LLDB)**:
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/m2-mechanism.txt` y `Results/shared-graph-macos-15.8.3/m2-zero-origin.txt`.
+   - **Mecanismo del Aborto y Falsación del Cero en `[node + 0x28]`**:
+     - **Referencia**: `Results/shared-graph-macos-15.8.3/node-zero-scrub-evidence.txt`, `m2-mechanism.txt`, `m2-zero-origin.txt`.
      - **Instrucción decisiva**: En `AG::Graph::input_value_ref_slow`, la comparación en `+144` (`cmp x8, x24` en `0x1c2c2aee4`) seguida de `b.ne 0x1c2c2b210` salta a la llamada `AG::precondition_failure("accessing attribute in a different namespace: %u")`.
-     - **Origen del cero y validez del nodo en c10**: Al invalidar `G` con `AGGraphInvalidate`, `AG::Graph::Context::~Context()` ejecuta `AG::Graph::invalidate_subgraphs()` y `AG::Subgraph::invalidate_now`, los cuales destruyen y liberan el nodo de memoria (`_nanov2_free`). No hay una instrucción de AttributeGraph que escriba un cero lógico; el nodo **deja de ser válido** al ser desasignado del heap, y el allocator de macOS pone a cero su memoria (`_platform_memset`, instrucción `stp q0, q0, [x0, #0x20]`). En el momento del `cmp`, `x8 = 0x0` al leer la ranura del nodo liberado y `x24` es el contexto lector no nulo; al no coincidir (`0x0 != x24`), aborta con código 134.
-     - **Valor del contexto en c4**: Con `G` vivo, el nodo permanece válido y en el momento del `cmp` ambos registros coinciden (`x8 == x24`), la rama `b.ne` no salta y la lectura se completa limpiamente con valor 7.
-     - **Invarianza**: Verificado en sesiones independientes de LLDB con watchpoints en memoria de nodo para `c10` y breakpoints para `c4`, manteniendo idénticas relaciones relativas.
+     - **Nexo de identidad ($x8)**: En la evaluación de `c10`, LLDB confirmó que el registro `$x8` en `+140` corresponde al `node_ptr_s` (el lector `reader` en slot `0x200` / ID `0x218`), no al nodo de la regla `node_ptr_g`.
+     - **Origen del write y longitud**: El watchpoint en `node_ptr_s + 0x28` demostró que la escritura de cero la efectúa `_platform_memset` desde el subsistema de `libsystem_malloc` (`_nanov2_free` con longitud `0x60`, o `free_tiny` con longitud `0x70` bajo `MallocNanoZone=0`). No existe ninguna instrucción en `AttributeGraph` que borre el campo lógicamente.
+     - **Experimento con MallocScribble**: Se ejecutó `c10` bajo `MallocScribble=1` y `MallocNanoZone=0`. El allocator limpia los bloques pequeños en `free_tiny` con ceros mediante `_platform_memset`, por lo que `[node + 0x28]` contiene `0x0` y no el patrón scribble `0x5555555555555555`.
+     - **Riesgo operativo**: El aborto 134 en este escenario es una consecuencia afortunada de que la memoria liberada fue puesta a cero por el allocator (`0x0 != x24`). Si el heap reasigna ese espacio a otro objeto cuyo offset +0x28 contenga por azar la dirección de contexto del lector, la comprobación no saltaría, existiendo riesgo de lectura incorrecta por use-after-free en lugar de fallo inmediato.
 
 ---
 
