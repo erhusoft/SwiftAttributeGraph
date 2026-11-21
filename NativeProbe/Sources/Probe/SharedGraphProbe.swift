@@ -1231,6 +1231,63 @@ func runSharedGraphLifetimeProbeIfRequested() {
         print("interop-i2|v1=\(v1)")
         exit(0)
 
+    case "inv-routing-G", "inv-routing-S", "inv-routing-chain-G", "inv-routing-chain-S":
+        setbuf(stdout, nil)
+        // 1. Crea G y S = AGGraphCreateShared(G). Asigna a cada handle un callback de invalidación distinto.
+        let g = Driver()
+        let s = c_AGGraphCreateShared(g.graph)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+
+        var cntG = 0
+        var cntS = 0
+        g.graph.onInvalidation { _ in cntG += 1 }
+        s.onInvalidation { _ in cntS += 1 }
+
+        // 2. Crea una entrada en G y una regla R en S que la lea.
+        let input: Handle<Int64> = g.input(100)
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                input.value + 1
+            }))
+        }
+
+        let isChain = subcase.contains("chain")
+        var r2: Handle<Int64>? = nil
+        if isChain {
+            r2 = sRoot.apply {
+                Handle(NativeRule(body: {
+                    r.value + 1
+                }))
+            }
+        }
+
+        // Evalúa R (o R2 -> R) una vez (leer desde S).
+        let val1 = isChain ? sRoot.apply { r2!.value } : sRoot.apply { r.value }
+        let cntGAfterFirstRead = cntG
+        let cntSAfterFirstRead = cntS
+
+        // 3 & 4. Escribe en la entrada desde G o desde S. Sin leer R, registra cntG y cntS.
+        let writeFromG = subcase.hasSuffix("-G")
+        if writeFromG {
+            g.write(200, to: input)
+        } else {
+            sRoot.apply {
+                input.value = 200
+            }
+        }
+        let cntGAfterWrite = cntG
+        let cntSAfterWrite = cntS
+
+        // Después lee R (o R2 -> R) desde S y registra de nuevo ambos contadores.
+        let val2 = isChain ? sRoot.apply { r2!.value } : sRoot.apply { r.value }
+        let cntGAfterSecondRead = cntG
+        let cntSAfterSecondRead = cntS
+
+        let writeVia = writeFromG ? "G" : "S"
+        let topo = isChain ? "chain(input->R->R2)" : "single(input->R)"
+        print("inv-routing|topo=\(topo)|writeVia=\(writeVia)|val1=\(val1)|cntG_init=\(cntGAfterFirstRead)|cntS_init=\(cntSAfterFirstRead)|cntG_afterWrite=\(cntGAfterWrite)|cntS_afterWrite=\(cntSAfterWrite)|val2=\(val2)|cntG_afterRead=\(cntGAfterSecondRead)|cntS_afterRead=\(cntSAfterSecondRead)")
+        exit(0)
+
     default:
         exit(2)
     }

@@ -1,0 +1,101 @@
+# Medición de Enrutamiento de Extremo a Extremo de la Invalidación (AGGraphSetInvalidationCallback)
+# Fecha: 2026-11-21
+# Sistema: macOS 15.8.3 (Darwin 24.3.0 arm64)
+# Módulo AttributeGraph UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+
+================================================================================
+DISEÑO EXPERIMENTAL
+================================================================================
+Configuración base:
+  1. Grafo creador G y handle compartido S = AGGraphCreateShared(G).
+  2. Callbacks de invalidación independientes asignados a cada handle (`AGGraphSetInvalidationCallback` / `onInvalidation`):
+     - `cntG`: contador de invocaciones en el callback de G.
+     - `cntS`: contador de invocaciones en el callback de S.
+  3. Entrada `input` creada en G (valor inicial 100).
+  4. Dos topologías en S:
+     - Topología A (1 regla hojera sin salidas, `input -> R`): R creada en S lee `input.value + 1`.
+     - Topología B (cadena con arista de salida en S, `input -> R -> R2`): R y R2 creadas en S, donde R2 lee `r.value + 1` (R tiene un lector `outputs` no vacío).
+  5. Secuencia de medición por proceso aislado (10 repeticiones por caso):
+     - Momento 1 (tras primera evaluación desde S): registra `cntG_init`, `cntS_init` y `val1`.
+     - Momento 2 (tras escribir 200 en `input`, sin leer R): registra `cntG_afterWrite` y `cntS_afterWrite`.
+     - Momento 3 (tras leer de nuevo desde S): registra `cntG_afterRead`, `cntS_afterRead` y `val2`.
+  6. Dos orígenes de escritura probados para cada topología:
+     - Escritura hecha desde G (`g.write(200, to: input)`).
+     - Escritura hecha desde S (`sRoot.apply { input.value = 200 }`).
+
+================================================================================
+TABLAS DE RESULTADOS (10 REPETICIONES POR CASO EN PROCESOS AISLADOS)
+================================================================================
+
+--- CASO 1A: Topología simple (`input -> R` sin salidas en R), escritura desde G ---
+Rep | exit | val1 | cntG_init | cntS_init | cntG_afterWrite | cntS_afterWrite | val2 | cntG_afterRead | cntS_afterRead
+----+------+------+-----------+-----------+-----------------+-----------------+------+----------------+---------------
+ 1  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 2  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 3  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 4  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 5  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 6  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 7  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 8  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 9  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+10  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+
+--- CASO 1B: Topología simple (`input -> R` sin salidas en R), escritura desde S ---
+Rep | exit | val1 | cntG_init | cntS_init | cntG_afterWrite | cntS_afterWrite | val2 | cntG_afterRead | cntS_afterRead
+----+------+------+-----------+-----------+-----------------+-----------------+------+----------------+---------------
+ 1  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 2  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 3  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 4  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 5  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 6  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 7  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 8  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+ 9  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+10  |    0 |  101 |         0 |         0 |               0 |               0 |  201 |              0 |              0
+
+--- CASO 2A: Topología en cadena (`input -> R -> R2`, con salida en R), escritura desde G ---
+Rep | exit | val1 | cntG_init | cntS_init | cntG_afterWrite | cntS_afterWrite | val2 | cntG_afterRead | cntS_afterRead
+----+------+------+-----------+-----------+-----------------+-----------------+------+----------------+---------------
+ 1  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 2  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 3  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 4  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 5  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 6  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 7  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 8  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 9  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+10  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+
+--- CASO 2B: Topología en cadena (`input -> R -> R2`, con salida en R), escritura desde S ---
+Rep | exit | val1 | cntG_init | cntS_init | cntG_afterWrite | cntS_afterWrite | val2 | cntG_afterRead | cntS_afterRead
+----+------+------+-----------+-----------+-----------------+-----------------+------+----------------+---------------
+ 1  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 2  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 3  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 4  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 5  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 6  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 7  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 8  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+ 9  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+10  |    0 |  102 |         0 |         0 |               0 |               1 |  202 |              0 |              1
+
+================================================================================
+INTERPRETACIÓN Y VEREDICTO DEL ENRUTAMIENTO
+================================================================================
+1. Con una única regla hoja `R` en S sin salidas (`input -> R`, Casos 1A y 1B):
+   - En 10/10 repeticiones (escribiendo tanto desde G como desde S), `cntG == 0` y `cntS == 0` tanto después de escribir como después de releer.
+   - En la implementación nativa de AttributeGraph, una regla terminal que no tiene ninguna arista de salida (`outputs` vacío) no dispara `AGGraphSetInvalidationCallback`. Por tanto, en la topología de una sola regla sin salidas no se dispara ningún callback (ni antes ni después de leer).
+
+2. Con cadena de salida en S (`input -> R -> R2`, Casos 2A y 2B):
+   - En 10/10 repeticiones escribiendo desde G (Caso 2A) y en 10/10 repeticiones escribiendo desde S (Caso 2B):
+     * Justo después de escribir (sin leer): **`cntS` sube a 1 y `cntG` permanece en 0**.
+     * Después de releer desde S: `cntS` se mantiene en 1 y `cntG` permanece en 0.
+   - El disparo depende del contexto dueño de la entrada modificada (`G`) frente al contexto dueño del atributo invalidado con salidas (`S`), independientemente de por qué handle se invoque la escritura.
+
+3. Veredicto formal:
+   - **En topología simple (`input -> R` sin salidas)**: **No se confirma / no dispara** (ningún contador sube ni al escribir ni al leer, `cntG=0, cntS=0`).
+   - **En topología con salida (`input -> R -> R2`)**: **Enrutamiento confirmado (10/10)**: `cntS` sube a 1 inmediatamente al escribir y `cntG` permanece en 0, tanto si la escritura se realiza desde G como desde S. El aviso de invalidación se enruta exclusivamente al callback del handle consumidor S y no al de G.
