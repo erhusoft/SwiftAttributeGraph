@@ -219,6 +219,15 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
    - **Veredicto de Modelo: Descarte de M1 y M2-mecanismo, Adopción del Modelo M3**:
      - **Conducta**: El grafo creador debe permanecer vivo (o sus dependencias haber sido materializadas en vivo) para que el enlace entre handles sea navegable.
      - **Mecanismo F1 y F2 (M2-mecanismo REFUTADO)**: Se midió que `$x24 == *(rawS + 0x10) == *(rawG + 0x10)` (`0x130f05c70`) es el puntero al STORAGE central compartido, y `*(uintptr_t*)(desc + 0x28)` almacena ese mismo puntero central tanto para descriptores originados en G como en S (`descS + 0x28 == descG + 0x28 == x24`). Por tanto, `+0x28` NO es un sello de creador ni discrimina entre handles compartidos.
+     - **Dependencia granular de Subgrafo (Prueba de Aislamiento Subgraph-Rule)**:
+       - **Referencia**: `Results/shared-graph-macos-15.8.3/subgraph-rule-dependency.txt` (10 repeticiones por celda en procesos aislados, 100 % estables).
+       - **Hipótesis comprobada**: Una regla depende del subgrafo que la contiene.
+       - **Medición**:
+         - `c1` (Invalidar `SG1` con `sg1.invalidate()`, leer `R1` desde `S`): Aborta con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`) en 10/10 repeticiones (`sg1Valid=false`, `sg2Valid=true`).
+         - `c2` (Invalidar `SG1` con `sg1.invalidate()`, leer `R2` en `SG2` desde `S`): Termina con éxito limpio `exit=0` (`value=12`) en 10/10 repeticiones (`sg1Valid=false`, `sg2Valid=true`).
+         - `c3` (Control sin invalidar, leer `R1` desde `S`): Éxito limpio `exit=0` (`value=11`) en 10/10 repeticiones (`sg1Valid=true`, `sg2Valid=true`).
+         - `c4` (Control en creador: invalidar `SG1`, leer `R1` desde `G`): Falla con `exit=139` (`SIGSEGV` / `EXC_BAD_ACCESS` al acceder al puntero de subgrafo liberado `[0x0 + 0x1e0]`) en 10/10 repeticiones.
+       - **Conclusión de mecanismo**: Una regla depende de su subgrafo. La invalidación granular de `SG1` invalida solo `R1` (c1 aborta con 134) mientras `R2` en `SG2` sigue funcionando en `S` (c2 exit 0). Queda descartado que el mecanismo dependa del contexto completo del handle; opera a nivel del ciclo de vida granular del `Subgraph`.
      - **Modelo M3 (Storage-Paging / Subgraph Lifetime)**: Los atributos se agrupan en descriptores de rango ("páginas") de 512 IDs indexados en la tabla compartida `_shared_table_bytes`. Cuando un handle es invalidado (`AGGraphInvalidate`), sus subgrafos son destruidos y los descriptores liberados al heap; el allocator de macOS pone a cero su memoria. La compuerta `cmp x8, x24` en `+144` evalúa `0x0 != x24` y aborta porque el descriptor está muerto en el heap, no por un choque entre identidades de handles vivos.
      - **Identidad de Creador (F2)**: La verdadera identidad de pertenencia reportada por `AGGraphGetAttributeGraph` reside en un mapa hash central en `storage + 0x90`, indexado por el `context_id` monótono guardado en `desc + 0x30`.
    - **Granularidad de Rango y Radio de Impacto (F3)**:
