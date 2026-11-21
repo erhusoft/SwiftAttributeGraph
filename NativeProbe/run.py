@@ -145,6 +145,7 @@ SCENARIOS = [
     "subgraph-observers",
     "subgraph-or-nil",
     "prefetch",
+    "set-value-result",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 

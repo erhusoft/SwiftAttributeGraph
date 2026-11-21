@@ -3063,3 +3063,14 @@ func prefetchValueScenario() {
     let value = d.read(r)
     print("prefetch|runsBefore=\(before)|runsAfterPrefetch=\(afterPrefetch)|runsAfterRead=\(runs)|value=\(value)")
 }
+
+/// `Attribute.setValue(_:) -> Bool`: a new value is a change, the same value is not, a different value is.
+func setValueResultScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let input: Handle<Int64> = d.input(1)
+    let first = d.setValueResult(input, 2)
+    let same = d.setValueResult(input, 2)
+    let changed = d.setValueResult(input, 3)
+    print("set-value-result|first=\(first)|same=\(same)|changed=\(changed)")
+}
