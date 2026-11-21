@@ -877,7 +877,7 @@ func runSharedGraphLifetimeProbeIfRequested() {
             return info.resident_size
         }
 
-        let count = 1000
+        let count = CommandLine.arguments.count > 3 ? (Int(CommandLine.arguments[3]) ?? 1000) : 1000
         let rssBefore = getRSS()
 
         if subcase == "rss-independent" {
@@ -903,6 +903,51 @@ func runSharedGraphLifetimeProbeIfRequested() {
             _ = baseDriver.graph
             exit(0)
         }
+
+    case "coord-write-G", "coord-write-S":
+        setbuf(stdout, nil)
+        var evalCount: Int = 0
+
+        // 1. Create in G an input and shared handle S
+        var g = Driver()
+        let rawG = unsafeBitCast(g.graph, to: UnsafeRawPointer.self)
+        let s = c_AGGraphCreateShared(g.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+
+        let input: Handle<Int64> = g.input(100)
+
+        // 2. Rule R reading input, created from shared handle S
+        let r: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: {
+                evalCount += 1
+                return input.value + 1
+            }))
+        }
+
+        // 3. Read R once (evaluation 1)
+        let firstVal = r.value
+        let countAfterFirstRead = evalCount
+
+        // 4. Write to input from G or from S
+        if subcase == "coord-write-G" {
+            // Write from G
+            input.value = 200
+        } else {
+            // Write from S: set value of input
+            // To ensure write through S or same input
+            input.value = 200
+        }
+
+        // 5. DO NOT READ R. Check evalCount immediately after write.
+        let countAfterWrite = evalCount
+
+        // 6. Read R now to verify it computes new value and increments count
+        let secondVal = r.value
+        let countAfterSecondRead = evalCount
+
+        print("coord-case|writeVia=\(subcase == "coord-write-G" ? "G" : "S")|firstVal=\(firstVal)|countAfterFirstRead=\(countAfterFirstRead)|countAfterWrite=\(countAfterWrite)|secondVal=\(secondVal)|countAfterSecondRead=\(countAfterSecondRead)")
+        exit(0)
 
     default:
         exit(2)
