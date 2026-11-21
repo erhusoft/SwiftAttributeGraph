@@ -241,66 +241,82 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 ---
 
-## Función de diseño (hipótesis)
+## Función de diseño (hipótesis y hechos)
 
 > [!NOTE]
-> Esta sección analiza las razones de diseño por las cuales Apple diseñó `AGGraphCreateShared` para usar múltiples entradas a un único grafo central en lugar de un grafo independiente por anfitrión (`Host`). Distingue explícitamente entre indicios estáticos de nombres, hipótesis de diseño y hechos medidos en runtime.
+> Esta sección analiza las razones de diseño por las cuales Apple implementó `AGGraphCreateShared` para usar múltiples entradas a un único grafo central en lugar de un grafo independiente por anfitrión (`Host`). La información está rigurosamente categorizada en tres bloques: **Firme** (hechos medidos de forma reproducible o desensamblados citados con dirección), **Inferencia de diseño** (interpretaciones arquitectónicas) y **Pendiente** (casos de prueba y fuentes no comprobadas).
 
-1. **Indicios en símbolos y llamadores (SwiftUI / SwiftUICore)**:
-   - **Instancia raíz única (`AGGraphCreate`)**: En SwiftUI existe un único punto de creación del grafo base por proceso, inicializado de forma perezosa y única en `closure #1 in variable initialization expression of static SwiftUI.GraphHost.(sharedGraph in _F9F204BD2F8DB167A76F17F3FB1B3335) : __C.AGGraphRef` (`0x1e767bf4c`). *[INDICIO]*: Sugiere centralización de la memoria reactiva a nivel de aplicación.
-   - **Múltiples entradas compartidas (`AGGraphCreateShared`)**: Invocado directamente en `SwiftUI.GraphHost.Data.init() -> SwiftUI.GraphHost.Data` (`0x1e7679388`), que obtiene un handle compartido de `GraphHost.sharedGraph` y crea inmediatamente su propio `_AGSubgraphCreate` (`rootSubgraph`). *[INDICIO]*: Cada subsistema (`ViewGraph`, `GestureGraph`, `CAHostingLayer`) opera como un host con su propia jerarquía de subgrafos locales montada sobre la misma base.
-   - **Menciones a reciclaje y control de hosts**: Símbolos como `isHiddenForReuse` (`SwiftUI.GraphHost.isHiddenForReuseDidChange()`), `blockedGraphHosts` (`SwiftUI.(blockedGraphHosts in _F9F204BD2F8DB167A76F17F3FB1B3335)`) y `setNeedsUpdate(mayDeferUpdate:values:)`. *[INDICIO]*: Sugieren mecanismos de reciclaje de anfitriones y coordinación centralizada de transacciones.
+### 1. Firme (Hechos medidos y desensamblados)
 
-2. **Evaluación de hipótesis frente a medidas directas**:
-   - **Hipótesis A (Aislamiento — un host no ve los cambios de otro)**:
-     - **Estado**: *Descartada / refutada a nivel de datos*.
-     - **Fundamento**: Las mediciones directas (E1/c4 y F1/F2) demostraron que los atributos creados en un handle son legibles y evaluables desde otro handle compartido a través del mismo storage central. No existe aislamiento estático de namespace; el aislamiento observable es únicamente estructural a nivel de subgrafos (`rootSubgraph`).
-   - **Hipótesis B (Coordinación — los hosts comparten el ciclo de actualización)**:
-     - **Estado**: *No se observa propagación eager con el patrón medido (coordinación abierta / delegada)*.
-     - **Referencias**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (escritura simple desde G y S) y `Results/shared-graph-macos-15.8.3/coordination-update-paths.txt` (caminos de actualización U1–U4, 10 repeticiones por caso en procesos aislados).
-     - **Medición con contador de evaluaciones en caminos de actualización**:
-       * **Caso U1 (`AGGraphSetNeedsUpdate` sobre G tras escribir)**: Tras escribir e invocar `SetNeedsUpdate(G)`, `evalCount` permanece en 1; asciende a 2 solo al leer explícitamente desde S.
-       * **Caso U2 (`AGGraphSetUpdateCallback` registrado en G)**: Tras escribir y tras `SetNeedsUpdate(G)`, `evalCount` permanece en 1 y el callback no se dispara (0 disparos); asciende a 2 solo al leer.
-       * **Caso U3 (Escritura en regla con mutación en evaluación)**: Tras la ejecución de la regla escritora en G, `evalCount` de la regla lectora R en S permanece en 1; asciende a 2 solo al leer explícitamente.
-       * **Caso U4 (`AGSubgraphUpdate` sobre el subgrafo lector en S)**: Tras escribir e invocar `AGSubgraphUpdate`, `evalCount` permanece en 1; asciende a 2 solo al leer.
-     - **Conclusión de lo medido**: En todos los caminos medidos (escritura directa y casos U1–U4), la propagación en AttributeGraph es estrictamente bajo demanda (pull / lazy); no se observa propagación eager automática entre handles a nivel del grafo.
-     - **[INFERENCIA (no medida directamente en AttributeGraph)]**: La coordinación del ciclo de renderizado y transacciones entre múltiples hosts vive por encima, en la capa de `SwiftUI` (mediante `ViewRendererHost`, `CAHostingLayer`, transacciones de runloop y `ObservableObject`), y no como un mecanismo intrínseco de despacho eager dentro de `AttributeGraph`.
-   - **Hipótesis C (Reutilización de memoria — los hosts reducen el coste de memoria por host)**:
-     - **Estado**: *Apoyada y cuantificada mediante pendiente de regresión lineal*.
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt` (10 repeticiones por escala con N = 1.000, 10.000 y 100.000 instancias en procesos aislados).
-     - **Medida (Pendiente OLS de RSS)**:
-       - Grafos independientes (`AGGraphCreate`): pendiente de **9.068,47 ± 1,19 bytes / grafo** ($R^2 = 1,000000$).
-       - Handles compartidos (`AGGraphCreateShared`): pendiente de **144,02 ± 0,76 bytes / handle** ($R^2 = 0,999987$).
-     - **Conclusión**: El coste incremental real de un handle compartido es de solo ~144 bytes frente a ~9,07 KB por grafo independiente (**98,41 % de ahorro marginal de memoria**, una reducción de ~63x). Esto confirma que el propósito primario del diseño es permitir la creación masiva de puntos de entrada ligeros compartiendo el almacenamiento reactivo central (`_shared_table_bytes`, hash tables y buffers de ejecución).
+- **Instancia raíz única (`AGGraphCreate`) en SwiftUICore**:
+  Existe un único punto de creación del grafo base por proceso en SwiftUICore, inicializado en `closure #1 in variable initialization expression of static SwiftUI.GraphHost.(sharedGraph in _F9F204BD2F8DB167A76F17F3FB1B3335) : __C.AGGraphRef` (`0x1e767bf4c`), ubicado en memoria `__DATA` en `0x1ee15b7c8`. El desensamblado en `0x1e767bf6c` ejecuta la llamada directa a `bl 0x1e7a55304` (`_AGGraphCreate`).
+- **Punto único de creación compartida (`AGGraphCreateShared`)**:
+  En todo el binario de SwiftUICore sólo existe una invocación a `_AGGraphCreateShared` (`0x1e7a55344`), ubicada en `SwiftUI.GraphHost.Data.init() -> SwiftUI.GraphHost.Data` (`0x1e7679388`):
+  * Carga `static GraphHost.sharedGraph` (`0x1e76793d4: ldr x0, [x8, #0x7c8]`).
+  * Llama a `_AGGraphCreateShared` (`0x1e76793d8: bl 0x1e7a55344`).
+  * Crea el `globalSubgraph` (`0x1e76793e0: bl 0x1e7a574a4`).
+  * Crea el `rootSubgraph` (`0x1e7679404: bl 0x1e7a574a4`).
+- **Delegación total de las subclases de `GraphHost` en `Data.init`**:
+  Las dos únicas subclases nativas de `GraphHost` en `SwiftUICore` (`ViewGraph` y `GestureGraph`) delegan incondicionalmente la creación de su grafo a `GraphHost.Data.init()`, sin llamar directamente a `AGGraphCreate` ni a `AGGraphCreateShared` (verificado en `Results/shared-graph-macos-15.8.3/graphhost-subclasses.txt`):
+  * `SwiftUI.ViewGraph.init<A>(rootViewType:requestedOutputs:)` (`0x1e7a39d9c`): llama a `GraphHost.Data.init` en `0x1e7a39eb8: bl 0x1e7679388`, y luego invoca al super-inicializador `GraphHost.init(data:)` en `0x1e7a3a6fc: bl 0x1e7679888`. Su especialización para `EmptyView` (`0x1e7a34900`) llama análogamente a `GraphHost.Data.init` en `0x1e7a34a14`.
+  * `SwiftUI.GestureGraph.init(rootResponder:)` (`0x1e70f802c`): llama a `GraphHost.Data.init` en `0x1e70f814c: bl 0x1e7679388`, y al super-inicializador en `0x1e70f83f0: bl 0x1e7679888`. Su especialización para `StyledTextResponder` (`0x1e747c8a0`) llama análogamente a `GraphHost.Data.init` en `0x1e747c9c4`.
+  * Los inicializadores directos `ViewGraph.init(data:)` (`0x1e7a4f620` / `0x1e7a3cb10`) y `GestureGraph.init(data:)` (`0x1e70f864c` / `0x1e70f77c4`) contienen trampas de ejecución (`fatalError` / `brk #0x1`) para impedir la instanciación sin pasar por sus inicializadores de dominio.
+- **Interoperabilidad de espacio de nombres (`I1` vs `I2`)**:
+  * **Caso I1 (Dos handles compartidos `S1` y `S2` sobre el storage de `G`)**: Una regla en `S2` lee entradas de `G` y `S1` (`v1=30`), se modifican las entradas y se relee (`v2=300`), completando con `exit=0` en 10/10 repeticiones (`Results/shared-graph-macos-15.8.3/routing-and-interop.txt`).
+  * **Caso I2 (Control con dos grafos independientes `G1` y `G2`)**: Una regla en `G2` intenta leer una entrada de `G1` y aborta en las 10 repeticiones (10/10) con código de salida `134` (`SIGABRT`) y mensaje idéntico: `precondition failure: accessing attribute in a different namespace: 536` (auditado fila a fila en `Results/shared-graph-macos-15.8.3/i2-check.txt`).
+- **Reutilización y pendiente de memoria (144 B frente a 9 KB)**:
+  * Medido mediante regresión OLS sobre el RSS con 10 repeticiones por escala para N = 1.000, 10.000 y 100.000 instancias en procesos aislados (`Results/shared-graph-macos-15.8.3/memory-slope-and-coordination.txt`):
+    - Grafos independientes (`AGGraphCreate`): pendiente de **9.068,47 ± 1,19 bytes / grafo** ($R^2 = 1,000000$).
+    - Handles compartidos (`AGGraphCreateShared`): pendiente de **144,02 ± 0,76 bytes / handle** ($R^2 = 0,999972$).
+  * Un handle compartido reduce el coste incremental de memoria en un **98,41 %** respecto a un grafo independiente.
+- **Evaluación lazy y caminos de actualización (U1–U4)**:
+  * Medido con contador de evaluaciones en 10 repeticiones por caso en procesos aislados (`Results/shared-graph-macos-15.8.3/coordination-update-paths.txt`):
+    - Caso U1 (`AGGraphSetNeedsUpdate(G)` tras escribir): `evalCount` permanece en 1 tras la escritura; sube a 2 solo tras lectura explícita en `S`.
+    - Caso U2 (`AGGraphSetUpdateCallback` en `G`): `evalCount` permanece en 1 y el callback registra 0 disparos; sube a 2 solo tras leer en `S`.
+    - Caso U3 (Escritura en regla con mutación en evaluación): `evalCount` de la regla lectora en `S` permanece en 1 tras evaluar la regla escritora en `G`; sube a 2 solo al leer en `S`.
+    - Caso U4 (`AGSubgraphUpdate` sobre el subgrafo lector en `S`): `evalCount` permanece en 1; sube a 2 solo al leer.
+  * La propagación de valores entre handles en AttributeGraph es estrictamente bajo demanda (pull / lazy); no hay evaluación eager automática entre handles a nivel del motor.
+- **Enrutamiento de contexto y recuperación (`W1`, `W2`, `W12`, `CTRL`)**:
+  * Medido en 10 repeticiones por caso en procesos aislados (`Results/shared-graph-macos-15.8.3/routing-and-interop.txt`):
+    - `AGGraphGetAttributeGraph(attr)` aplicado sobre un atributo creado en `S` devuelve el puntero exacto del handle `S` creador (coincide 10/10).
+    - `AGGraphGetContext(handle)` devuelve el puntero de usuario exacto asignado a ese handle con `AGGraphSetContext` (coincide 10/10).
+- **Enrutamiento selectivo de invalidación de extremo a extremo**:
+  * **Topología simple de regla hoja sin salidas (`input -> R`)**: Escribiendo en `input` desde `G` o `S`, ningún contador sube antes ni después de leer (`cntG=0, cntS=0` en 10/10 repeticiones; `Results/shared-graph-macos-15.8.3/invalidation-routing.txt`). Un nodo terminal sin salidas no dispara el callback de invalidación.
+  * **Topología con cadena de dependientes en `S` (`input -> R -> R2`)**: Escribiendo en `input` desde `G` (10/10) o `S` (10/10), `cntS` se incrementa a 1 inmediatamente tras la escritura (sin leer `R`) y `cntG` permanece en 0.
+  * **Enrutamiento concurrente con dos hosts (`S1`, `S2`)**: Medido en 10 repeticiones por caso en procesos aislados (`Results/shared-graph-macos-15.8.3/two-host-routing.txt`):
+    - Escribir `input1` desde `G` (10/10): `(cnt1, cnt2, cntG)` pasa inmediatamente a `(1, 0, 0)` sin leer.
+    - Escribir `input2` desde `G` (10/10): `(cnt1, cnt2, cntG)` pasa inmediatamente a `(0, 1, 0)` sin leer.
+    - Escribir secuencialmente `input1` y luego `input2` (10/10): contadores pasan a `(1, 0, 0)` tras la primera y a `(1, 1, 0)` tras la segunda.
+    - Control de host sin dependientes (`S2` con callback pero sin reglas): escribir `input1` pasa a `(1, 0, 0)`; `cnt2` no se incrementa.
+  * El aviso de invalidación es selectivo y específico del host dependiente: notifica exclusivamente al handle cuyos nodos dependientes quedan invalidados.
 
-3. **Medición de enrutamiento e interoperabilidad (Soporte a las hipótesis de diseño)**:
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/routing-and-interop.txt` (10 repeticiones por caso en procesos aislados, 100 % estables).
-   - **Cadena de enrutamiento medida (`AGGraphGetAttributeGraph` $\rightarrow$ `AGGraphGetContext`)**:
-     - En el desensamblado de `SwiftUI.GraphHost.graphInvalidation(from:)` (`0x1e767b934`) se observó la secuencia de llamadas `_AGGraphGetAttributeGraph` (`+0x1c`), `_AGGraphGetContext` (`+0x2c`) y `_AGGraphGetValue` (`+0x98`).
-     - **Hecho medido en runtime**: Asignando punteros de contexto distintos con `AGGraphSetContext` (`0xdead1111` en `G` y `0xbeef2222` en `S`), en 10/10 repeticiones (`exit=0`):
-       * Para la entrada creada en `G` (`ID 536`), `AGGraphGetAttributeGraph` devuelve `rawG` y `AGGraphGetContext` devuelve `0xdead1111` (tanto dentro de la regla lectora, como fuera y en el callback `onInvalidation`).
-       * Para la regla `R` creada en `S` (`ID 1048`), `AGGraphGetAttributeGraph` devuelve `rawS` y `AGGraphGetContext` devuelve `0xbeef2222` (tanto antes como después de invalidar).
-     - Esto confirma que cada atributo conserva su vínculo con el handle específico que lo creó y permite recuperar sin ambigüedad el contexto de usuario asociado a ese handle.
-   - **Enrutamiento de extremo a extremo de la invalidación (`AGGraphSetInvalidationCallback`, `cntG` vs `cntS`)**:
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/invalidation-routing.txt` (10 repeticiones por caso en procesos aislados, `exit=0`).
-     - **Topología simple de una sola regla hoja sin salidas (`input -> R`)**: Escribiendo en `input` tanto desde `G` como desde `S`, ningún contador sube ni antes ni después de leer (`cntG=0, cntS=0` en 10/10 repeticiones). En nativo, un nodo terminal sin aristas de salida (`outputs` vacío) no dispara el callback de invalidación. En este caso puntual el enrutamiento no se activa.
-     - **Topología con arista de salida en `S` (`input -> R -> R2`)**: Escribiendo en `input` tanto desde `G` (10/10) como desde `S` (10/10), **`cntS` sube a `1` inmediatamente tras la escritura (sin leer `R`) y `cntG` permanece en `0`**; tras la lectura posterior desde `S`, los contadores se mantienen en `cntS=1, cntG=0`. **Enrutamiento confirmado**: cuando el atributo en el handle consumidor tiene salidas dependientes, el aviso de invalidación se entrega de forma inmediata y exclusiva al callback del handle `S` que contiene la regla lectora, sin disparar el de `G`.
-   - **Enrutamiento selectivo con dos hosts concurrentes (`S1`, `S2`) y control sin dependientes**:
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/two-host-routing.txt` (10 repeticiones por caso en procesos aislados, `exit=0`).
-     - **Dos hosts con dependientes (`input1 -> R1 -> R1b` en `S1`, `input2 -> R2 -> R2b` en `S2`)**:
-       * Al escribir solo `input1` desde `G` (10/10): `(cnt1, cnt2, cntG)` pasa inmediatamente a `(1, 0, 0)` sin leer, y se mantiene en `(1, 0, 0)` tras leer `R1b` y `R2b`.
-       * Al escribir solo `input2` desde `G` (10/10): `(cnt1, cnt2, cntG)` pasa inmediatamente a `(0, 1, 0)` sin leer, y se mantiene en `(0, 1, 0)` tras leer.
-       * Al escribir `input1` y luego `input2` en la misma sesión (10/10): `(cnt1, cnt2, cntG)` pasa de `(0, 0, 0)` a `(1, 0, 0)` tras la primera escritura, y a `(1, 1, 0)` tras la segunda.
-     - **Control de una sola cadena (`S2` con callback registrado pero sin reglas dependientes)**: Al escribir `input1` desde `G` (10/10), `(cnt1, cnt2, cntG)` pasa a `(1, 0, 0)`; `cnt2` permanece en `0`.
-     - **Veredicto**: **Enrutamiento específico del host dependiente confirmado**. El aviso de invalidación no es un broadcast a todos los handles compartidos ni un artefacto de tener un único callback: se entrega selectivamente únicamente al handle cuyos atributos dependientes son invalidados por la entrada modificada.
-   - **Interoperabilidad medida entre hosts (`I1` vs `I2`)**:
-     - **Caso I1 (Dos handles compartidos `S1` y `S2` sobre el mismo storage de `G`)**: Una regla en `S2` lee entradas de `G` y `S1` (`v1=30`), se modifican las entradas y se relee (`v2=300`), terminando con `exit=0` en 10/10 repeticiones.
-     - **Caso I2 (Control con dos grafos independientes `G1` y `G2`)**: Una regla en `G2` intenta leer una entrada de `G1` y aborta en las 10 repeticiones (10/10) con código de salida `134` (`SIGABRT`) y mensaje `precondition failure: accessing attribute in a different namespace: 536` (confirmado fila a fila en `Results/shared-graph-macos-15.8.3/routing-and-interop.txt` y `Results/shared-graph-macos-15.8.3/i2-check.txt`), validando la comparación controlada entre `I1` e `I2`.
-     - **Delimitación metodológica**: Lo medido apoya empíricamente que compartir el storage evita el aborto de espacio de nombres al cruzar lecturas entre handles. No obstante, que el motivo de diseño de Apple para `AGGraphCreateShared` sea permitir que varios hosts (AppKit, ventanas, gestos) lean el mismo namespace sin abortar se mantiene como **hipótesis de diseño**, no como hecho demostrado.
-   - **Hipótesis sobre fuentes externas (AppKit y OpenSwiftUI)**:
-     - La hipótesis sobre el choque de espacios de nombres entre AppKit y OpenSwiftUI por usar instancias separadas de `GraphHost.sharedGraph` queda registrada como **no verificada, pendiente de lectura de la fuente**.
+### 2. Inferencia de diseño (Lectura arquitectónica)
 
----
+> [!NOTE]
+> Las afirmaciones de esta sección son deducciones arquitectónicas derivadas del conjunto de medidas e indicios, no hechos medidos de forma aislada.
+
+- **Espacio de nombres unificado entre múltiples hosts de UI**:
+  La lectura empírica de la comparación `I1` (éxito en handles compartidos) frente a `I2` (aborto 134 con fallo de *different namespace* en grafos independientes), sumada a la existencia de un único `static GraphHost.sharedGraph`, sugiere que el propósito primario de `AGGraphCreateShared` es proveer un espacio de direcciones reactivo unificado para todo el proceso. Esto permite que valores de entorno (`@Environment`), preferencias y objetos compartidos crucen la frontera entre diferentes subsistemas sin violar los invariantes de namespace de `AttributeGraph`.
+- **Aislamiento de invalidaciones con bajo coste estructural**:
+  Cada anfitrión de interfaz (`ViewGraph` para jerarquías de vistas, `GestureGraph` para eventos y gestos) necesita ser notificado únicamente de los cambios que afectan a sus propios nodos para planificar su redibujado o procesamiento. `AGGraphCreateShared` permite este desacoplamiento: cada anfitrión posee su propio `context` (`GraphDelegate`) y callback de invalidación aislado, manteniendo un consumo incremental ínfimo (~144 bytes por host) en lugar de instanciar grafos completos (~9 KB).
+- **Coordinación externa en la capa de UI**:
+  Dado que las mediciones U1–U4 demuestran que `AttributeGraph` no ejecuta propagación *eager* entre handles, se infiere que la orquestación del ciclo de vida y los ciclos de renderizado de la UI reside enteramente en niveles superiores (`SwiftUI` / `SwiftUICore`), a través de protocolos como `ViewRendererHost`, `ViewGraphDelegate`, transacciones de runloop y `EventBindingManager`.
+- **Jerarquía de clases en proyectos derivados (OpenSwiftUI)**:
+  *En proyectos de re-implementación de código abierto como OpenSwiftUI*, la estructura modela formalmente `ViewGraph` y `GestureGraph` como subclases directas de `GraphHost`, y a `NSHostingView` / `UIHostingView` / `CAHostingLayer` como implementaciones de `ViewRendererHost` y `EventGraphHost`. Aunque esta abstracción refleja la misma distribución observada en los símbolos binarios de Apple, se clasifica estrictamente como referencia externa y modelo deductivo.
+
+### 3. Pendiente (No comprobado o fuera de alcance actual)
+
+- **Plataforma iOS y dispositivos embebidos**:
+  Todas las mediciones se han ejecutado sobre macOS (Darwin 24.6.0 / macOS 15.8.3, arquitectura ARM64). El comportamiento en iOS real (sin simulador), tvOS y watchOS permanece pendiente de validación física directa.
+- **Múltiples cadenas dependientes concurrentes por host**:
+  Se ha medido la entrega con una cadena dependiente por host (`input -> R -> R2`) y con dos hosts simultáneos. Queda pendiente caracterizar el comportamiento del callback ante grafos con topologías complejas de múltiples abanicos (*fan-out* / *fan-in*) dentro de un mismo handle compartido.
+- **Interacción con ventanas reales de SwiftUI / AppKit (`NSWindow` / `NSHostingView`)**:
+  Las sondas se han ejecutado como procesos independientes invocando la API de `AttributeGraph` directamente. Medir el ciclo de vida completo de un árbol de vistas real alojado en ventanas de `NSHostingView` cruzando eventos a través de `AppKit` no ha sido instrumentado en este lote.
+- **Motivo original e intención interna de los diseñadores de Apple**:
+  No se dispone de documentación interna ni de especificaciones de diseño propietarias de Apple. Cualquier afirmación sobre la intención original de los autores de `AttributeGraph` más allá del comportamiento observado se mantiene como hipótesis no demostrable.
+- **Choque de espacios de nombres entre frameworks desacoplados**:
+  La hipótesis de que vincular simultáneamente dos frameworks de UI desacoplados (como SwiftUI y una librería de terceros) genere un choque por instanciar múltiples `sharedGraph` permanece como no comprobada.
+
 
 ## Conclusiones para la arquitectura del motor
 
