@@ -50,12 +50,10 @@ Para verificar qué binarios llaman a estos símbolos o cómo se disparan:
      ```
    - Al activar el inspector de jerarquía de vistas (*Debug View Hierarchy*), el depurador interceptará la ejecución en `AGGraphArchiveJSON` y el backtrace mostrará las librerías inyectadas por Xcode (`libViewDebuggerSupport.dylib` / `DebuggerKit`).
 
-2. **Vía variables de entorno del motor nativo**:
-   - Al arrancar una app de prueba en terminal con:
-     ```bash
-     AG_GRAPH_DEBUG_SERVER=1 ./MiApp
-     ```
-     o `AG_TRACE=1`, `AttributeGraph` inicia automáticamente el servidor `AGDebugServer` e imprime en consola el puerto de conexión local.
+2. **Vía variables de entorno del motor nativo** (nombres comprobados en el binario de AttributeGraph):
+   - `AG_DEBUG_SERVER` existe en el binario. El nombre `AG_GRAPH_DEBUG_SERVER` que aparecía antes no existe.
+   - `AG_TRACE` existe, junto con `AG_TRACE_FILE`, `AG_TREE`, `AG_PROFILE` y `AG_PRINT_CYCLES`.
+   - **No verificado:** qué hace cada variable al arrancar un proceso (si activa el servidor, dónde escribe la traza). Solo se ha comprobado que el nombre existe en el binario; no se ha ejecutado ningún proceso con ellas.
 
 3. **Caché compartida del sistema (`dyld_shared_cache`)**:
    - En macOS, los frameworks del sistema residen consolidados en la dyld shared cache. Las referencias estáticas se constatan en los encabezados `.tbd` del SDK (`MacOSX.sdk/System/Library/PrivateFrameworks/AttributeGraph.framework/AttributeGraph.tbd`), donde los símbolos están exportados públicamente para ser consumidos por los dylibs de soporte de Xcode.
