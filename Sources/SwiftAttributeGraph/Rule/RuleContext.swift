@@ -53,6 +53,16 @@ public struct RuleContext<Value> {
         return (value, graph.inputChanged(of: node, source: attribute.id.index) ?? true)
     }
 
+    /// Runs `body` as part of this context's attribute: inside it the current attribute and the dependencies read are this
+    /// attribute's, even when the body runs from another rule (`RuleContext.update(body:)` in native AttributeGraph; measured
+    /// in two steps on macOS 15.8).
+    public func update(body: () -> Void) {
+        let previous = graph.evaluatingNode
+        graph.evaluatingNode = node
+        defer { graph.evaluatingNode = previous }
+        body()
+    }
+
     /// Reads `attribute` as a dependency of this rule and returns its value and flags (`RuleContext.valueAndFlags` in
     /// native AttributeGraph). The `changed` flag is the one ``changedValue(of:options:)`` reports.
     public func valueAndFlags<T>(of attribute: Attribute<T>, options: AGValueOptions = []) -> (value: T, flags: AGChangedValueFlags) {
