@@ -152,6 +152,45 @@ func runSharedGraphFaultProbeIfRequested() {
 func runSharedGraphStressProbeIfRequested() {
     guard CommandLine.arguments.count > 1 else { return }
     let mode = CommandLine.arguments[1]
+    if mode == "two-hosts" {
+        let g1 = Driver()
+        let g2 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        let a2: Handle<Int64> = g2.input(20)
+        let s1 = c_AGGraphCreateShared(g1.graph)
+        let s2 = c_AGGraphCreateShared(g2.graph)
+        let r1: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a1.value })) }
+        let r2: Handle<Int64> = AttributeGraph.Subgraph(graph: s2).apply { Handle(NativeRule(body: { a2.value })) }
+        print("two-hosts|s1ReadsG1=\(r1.value)|s2ReadsG2=\(r2.value)|nodesS1=\(s1.counter(for: .nodes))|nodesS2=\(s2.counter(for: .nodes))|nodesG1=\(g1.graph.counter(for: .nodes))|nodesG2=\(g2.graph.counter(for: .nodes))")
+        fflush(stdout)
+        exit(0)
+    }
+    if mode == "two-hosts-cross" {
+        let g1 = Driver()
+        let g2 = Driver()
+        let a2: Handle<Int64> = g2.input(20)
+        let s1 = c_AGGraphCreateShared(g1.graph)
+        let cross: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a2.value })) }
+        print("two-hosts-cross|s1ReadsG2=\(cross.value)")
+        fflush(stdout)
+        exit(0)
+    }
+    if mode == "inherit" {
+        let g = Driver()
+        let a: Handle<Int64> = g.input(1)
+        let shared = c_AGGraphCreateShared(g.graph)
+        let sRoot = AttributeGraph.Subgraph(graph: shared)
+        let seesA: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { a.value })) }
+        print("inherit|sharedSeesOlderInput=\(seesA.value)|nodesGraph=\(g.graph.counter(for: .nodes))|nodesShared=\(shared.counter(for: .nodes))")
+        let b: Handle<Int64> = g.input(2)
+        let seesB: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { b.value })) }
+        print("inherit|sharedSeesNewerInputFromGraph=\(seesB.value)")
+        let c: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { 3 })) }
+        let graphSeesC: Handle<Int64> = g.apply(g.scope) { Handle(NativeRule(body: { c.value })) }
+        print("inherit|graphSeesSharedAttribute=\(graphSeesC.value)|nodesGraphAfter=\(g.graph.counter(for: .nodes))|nodesSharedAfter=\(shared.counter(for: .nodes))")
+        fflush(stdout)
+        exit(0)
+    }
     if mode == "independent-read" {
         let first = Driver()
         let second = Driver()
@@ -236,4 +275,140 @@ func runSharedGraphStressProbeIfRequested() {
     print("\(mode)|n=\(n)|time=\(elapsed)|lastReads=\(reader.value)")
     exit(0)
 }
+
+#if NATIVE_ATTRIBUTE_GRAPH
+@_silgen_name("AGGraphInvalidate")
+private func c_AGGraphInvalidate(_ graph: UnsafeRawPointer)
+
+/// `Probe share-lifetime <case>`: measures native lifetime, ownership, and release rules.
+func runSharedGraphLifetimeProbeIfRequested() {
+    guard CommandLine.arguments.count > 2, CommandLine.arguments[1] == "share-lifetime" else { return }
+    let subcase = CommandLine.arguments[2]
+    switch subcase {
+    case "case1":
+        // Case 1: Create graph, create shared handle, evaluate a node, release original (Swift), read from shared.
+        var d: Driver? = Driver()
+        let shared = c_AGGraphCreateShared(d!.graph)
+        let input: Handle<Int64> = d!.input(42)
+        let root = AttributeGraph.Subgraph(graph: shared)
+        let reader: Handle<Int64> = root.apply { Handle(NativeRule(body: { input.value })) }
+        let evaluatedValue = reader.value
+        d = nil // release original Swift Graph
+        let readAfterDrop = reader.value
+        print("case1|evaluatedBefore=\(evaluatedValue)|readAfter=\(readAfterDrop)")
+        fflush(stdout)
+        exit(0)
+
+    case "case2":
+        // Case 2: Same as case 1, but without evaluating the node before releasing the original.
+        var d: Driver? = Driver()
+        let shared = c_AGGraphCreateShared(d!.graph)
+        let input: Handle<Int64> = d!.input(99)
+        let root = AttributeGraph.Subgraph(graph: shared)
+        let reader: Handle<Int64> = root.apply { Handle(NativeRule(body: { input.value })) }
+        d = nil // release original Swift Graph WITHOUT evaluating reader first
+        // Attempting to evaluate reader after the original was released without evaluation:
+        let readAfterDrop = reader.value
+        print("case2|unexpectedSuccess=\(readAfterDrop)")
+        fflush(stdout)
+        exit(0)
+
+    case "case3a":
+        // Case 3a: Shared-of-shared, order: release g1, then s1, read from s2.
+        var g1: Driver? = Driver()
+        let input: Handle<Int64> = g1!.input(101)
+        var s1: AttributeGraph.Graph? = c_AGGraphCreateShared(g1!.graph)
+        let s2 = c_AGGraphCreateShared(s1!)
+        let root = AttributeGraph.Subgraph(graph: s2)
+        let reader: Handle<Int64> = root.apply { Handle(NativeRule(body: { input.value })) }
+        _ = reader.value
+        g1 = nil
+        let afterG1 = reader.value
+        s1 = nil
+        let afterS1 = reader.value
+        print("case3a|afterG1Drop=\(afterG1)|afterS1Drop=\(afterS1)")
+        fflush(stdout)
+        exit(0)
+
+    case "case3b":
+        // Case 3b: Shared-of-shared, order: release s1 first, then g1, read from s2.
+        var g1: Driver? = Driver()
+        let input: Handle<Int64> = g1!.input(202)
+        var s1: AttributeGraph.Graph? = c_AGGraphCreateShared(g1!.graph)
+        let s2 = c_AGGraphCreateShared(s1!)
+        let root = AttributeGraph.Subgraph(graph: s2)
+        let reader: Handle<Int64> = root.apply { Handle(NativeRule(body: { input.value })) }
+        _ = reader.value
+        s1 = nil
+        let afterS1 = reader.value
+        g1 = nil
+        let afterG1 = reader.value
+        print("case3b|afterS1Drop=\(afterS1)|afterG1Drop=\(afterG1)")
+        fflush(stdout)
+        exit(0)
+
+    case "case4":
+        // Case 4: Measure when +0x20 changes (if at all) and when state refcount (+0x1a4) changes.
+        var g1: Driver? = Driver()
+        let rawG1 = unsafeBitCast(g1!.graph, to: UnsafeRawPointer.self)
+        let stateG1 = rawG1.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let idG1 = rawG1.advanced(by: 0x20).load(as: UInt32.self)
+        let ref0 = stateG1.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        var s1: AttributeGraph.Graph? = c_AGGraphCreateShared(g1!.graph)
+        let rawS1 = unsafeBitCast(s1!, to: UnsafeRawPointer.self)
+        let idS1 = rawS1.advanced(by: 0x20).load(as: UInt32.self)
+        let ref1 = stateG1.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        var s2: AttributeGraph.Graph? = c_AGGraphCreateShared(s1!)
+        let rawS2 = unsafeBitCast(s2!, to: UnsafeRawPointer.self)
+        let idS2 = rawS2.advanced(by: 0x20).load(as: UInt32.self)
+        let ref2 = stateG1.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        // Drop s2 in Swift
+        s2 = nil
+        let refAfterS2SwiftDrop = stateG1.advanced(by: 0x1a4).load(as: UInt32.self)
+        let idS1AfterS2Drop = rawS1.advanced(by: 0x20).load(as: UInt32.self)
+
+        // Invalidate s1 explicitly
+        c_AGGraphInvalidate(rawS1)
+        let refAfterS1Invalidate = stateG1.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        // Invalidate g1 explicitly
+        c_AGGraphInvalidate(rawG1)
+        let refAfterG1Invalidate = stateG1.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        print("case4|idG1=\(idG1)|idS1=\(idS1)|idS2=\(idS2)|ref0=\(ref0)|ref1=\(ref1)|ref2=\(ref2)|refAfterS2SwiftDrop=\(refAfterS2SwiftDrop)|idS1AfterS2Drop=\(idS1AfterS2Drop)|refAfterS1Invalidate=\(refAfterS1Invalidate)|refAfterG1Invalidate=\(refAfterG1Invalidate)")
+        fflush(stdout)
+        exit(0)
+
+    case "case5":
+        // Case 5: Mechanism of release: AGGraphInvalidate cleans Context, decrements state +0x1a4,
+        // and when reaching 0 triggers destructor of AG::Graph and frees state memory.
+        let d = Driver()
+        let rawG = unsafeBitCast(d.graph, to: UnsafeRawPointer.self)
+        let state = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let s = c_AGGraphCreateShared(d.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let invFlagBefore = rawS.advanced(by: 0x58).load(as: UInt8.self)
+        let refBefore = state.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        c_AGGraphInvalidate(rawS)
+        let invFlagAfter = rawS.advanced(by: 0x58).load(as: UInt8.self)
+        let refAfter = state.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        // Second invalidate on rawS is idempotent (no-op)
+        c_AGGraphInvalidate(rawS)
+        let refAfterDouble = state.advanced(by: 0x1a4).load(as: UInt32.self)
+
+        print("case5|invFlagBefore=\(invFlagBefore)|invFlagAfter=\(invFlagAfter)|refBefore=\(refBefore)|refAfter=\(refAfter)|refAfterDouble=\(refAfterDouble)")
+        fflush(stdout)
+        exit(0)
+
+    default:
+        exit(2)
+    }
+}
+#endif
+
 #endif
