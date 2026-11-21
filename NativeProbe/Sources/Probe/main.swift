@@ -722,6 +722,8 @@ func ownedLifetime() {
     print("lifetime|payloadReleased=true|scopeInvalidated=true|nodesReturnedToBaseline=true")
 }
 
+runIndirectSizeProbeIfRequested()
+runIndirectReadProbeIfRequested()
 runCreateAndClosureScenariosIfRequested()
 runIsolatedScenarioIfRequested()
 runIsDirtyScenariosIfRequested()
