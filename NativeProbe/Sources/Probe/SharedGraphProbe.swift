@@ -24,6 +24,12 @@ private func c_AGGraphCreateShared(_ graph: AttributeGraph.Graph?) -> AttributeG
 @_silgen_name("AGSubgraphGetCurrentGraphContext")
 private func c_shareGraphContext() -> UnsafeRawPointer?
 
+@_silgen_name("AGGraphHasValue")
+private func c_AGGraphHasValue(_ attr: UInt32) -> Bool
+
+@_silgen_name("AGGraphGetAttributeGraph")
+private func c_AGGraphGetAttributeGraph(_ attr: UInt32) -> UnsafeRawPointer?
+
 /// `Probe share-probe`: behaviour of a shared graph reference, measured against the graph it shares.
 /// Prints one line per question. Identity is the raw reference bits.
 func runSharedGraphProbeIfRequested() {
@@ -559,6 +565,217 @@ func runSharedGraphLifetimeProbeIfRequested() {
         let r2: Handle<Int64> = AttributeGraph.Subgraph(graph: s2).apply { Handle(NativeRule(body: { a2.value })) }
         print("two-hosts-orig|s1ReadsG1=\(r1.value)|s2ReadsG2=\(r2.value)")
         fflush(stdout)
+        exit(0)
+
+    case "e0-storage":
+        let g1 = AttributeGraph.Graph()
+        let g2 = AttributeGraph.Graph()
+        let rawA = unsafeBitCast(g1, to: UnsafeRawPointer.self)
+        let rawB = unsafeBitCast(g2, to: UnsafeRawPointer.self)
+        let storageA = rawA.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageB = rawB.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+
+        let s = c_AGGraphCreateShared(g1)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+
+        print("e0|rawA=\(rawA)|storageA=\(storageA)|rawB=\(rawB)|storageB=\(storageB)|different=\(storageA != storageB)")
+        print("e0|positiveControl|rawS=\(rawS)|storageS=\(storageS)|sameAsA=\(storageS == storageA)")
+        fflush(stdout)
+        exit(0)
+
+    case "e1-c1":
+        // c1: Evaluated=yes (rule evaluated before share) | G alive | Read via G
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        _ = g!.read(rule)
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        print("aboutToRead=true")
+        let val = g!.read(rule)
+        print("value=\(val)")
+        exit(0)
+
+    case "e1-c2":
+        // c2: Evaluated=yes (rule evaluated before share) | G alive | Read via S
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        _ = g!.read(rule)
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        print("aboutToRead=true")
+        let reader: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { rule.value })) }
+        print("value=\(reader.value)")
+        exit(0)
+
+    case "e1-c3":
+        // c3: Evaluated=no (rule NOT read before share) | G alive | Read via G
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        print("aboutToRead=true")
+        let val = g!.read(rule)
+        print("value=\(val)")
+        exit(0)
+
+    case "e1-c4":
+        // c4: Evaluated=no (rule NOT read before share) | G alive | Read via S
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        print("aboutToRead=true")
+        let reader: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { rule.value })) }
+        print("value=\(reader.value)")
+        exit(0)
+
+    case "e1-c5":
+        // c5: Evaluated=yes | G released | Read via S
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        _ = g!.read(rule)
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        let reader: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { rule.value })) }
+        g = nil
+        print("aboutToRead=true")
+        print("value=\(reader.value)")
+        exit(0)
+
+    case "e1-c6":
+        // c6: Evaluated=no | G released | Read via S
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        let reader: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { rule.value })) }
+        g = nil
+        print("aboutToRead=true")
+        print("value=\(reader.value)")
+        exit(0)
+
+    case "e1-c9":
+        // c9: Evaluated=yes | G invalidated-retained | Read via S
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        _ = g!.read(rule)
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        let reader: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { rule.value })) }
+        _ = c_CFRetain(rawG)
+        c_AGGraphInvalidate(rawG)
+        print("aboutToRead=true")
+        print("value=\(reader.value)")
+        c_CFRelease(rawG)
+        exit(0)
+
+    case "e1-c10":
+        // c10: Evaluated=no | G invalidated-retained | Read via S
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let rule: Handle<Int64> = g!.rule { 7 }
+        let hasVal = c_AGGraphHasValue(rule.identifier.rawValue)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+        let storageG = rawG.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let storageS = rawS.advanced(by: 0x10).load(as: UnsafeRawPointer.self)
+        let owner = c_AGGraphGetAttributeGraph(rule.identifier.rawValue)
+        let ownerLabel = (owner == rawG) ? "G" : ((owner == rawS) ? "S" : "unknown")
+        print("e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S")
+        print("hasValueBeforeShare=\(hasVal ? "yes" : "no")")
+        print("storageG=\(storageG)|storageS=\(storageS)|sameStorage=\(storageG == storageS)")
+        print("owner=\(ownerLabel)|ownerHandle=\(String(describing: owner))|rawG=\(rawG)|rawS=\(rawS)")
+        let reader: Handle<Int64> = sRoot.apply { Handle(NativeRule(body: { rule.value })) }
+        _ = c_CFRetain(rawG)
+        c_AGGraphInvalidate(rawG)
+        print("aboutToRead=true")
+        print("value=\(reader.value)")
+        c_CFRelease(rawG)
         exit(0)
 
     default:

@@ -1,67 +1,111 @@
-Resultados de resolución de puntos abiertos (macOS 15.8.3, AttributeGraph nativo)
+=== E0: Control de Storage y Control Positivo ===
+e0|rawA=0x0000600003a40240|storageA=0x0000000130e05f70|rawB=0x0000600003a402a0|storageB=0x0000000130e06160|different=true
+e0|positiveControl|rawS=0x0000600003a40300|storageS=0x0000000130e05f70|sameAsA=true
 
-=== Tarea 1: Marca +0x58 (Estado: FIRME) ===
+=== E1: Matriz de Lectura Cruzada ===
+| celda | evaluado en G | G al leer | leer por | exit | status | valor | dueño | mensaje |
+|---|---|---|---|---|---|---|---|---|
+| c1 | sí (hasValue=yes) | vivo | G | 0 | OK | 7 | G | control base |
+| c2 | sí (hasValue=yes) | vivo | S | 0 | OK | 7 | G | lectura cruzada materializada |
+| c3 | no (hasValue=no) | vivo | G | 0 | OK | 7 | G | control base perezoso |
+| c4 | no (hasValue=no) | vivo | S | 0 | OK | 7 | G | celda decisiva M1 vs M2 |
+| c5 | sí (hasValue=yes) | liberado | S | 134 | ABORT | - | G | precondition failure: accessing attribute in a different namespace (abort 134) |
+| c6 | no (hasValue=no) | liberado | S | 134 | ABORT | - | G | precondition failure: accessing attribute in a different namespace (abort 134) |
+| c7 | sí | liberado | G | - | NA | - | - | use-after-free por construcción |
+| c8 | no | liberado | G | - | NA | - | - | use-after-free por construcción |
+| c9 | sí (hasValue=yes) | invalidado-retenido | S | 134 | ABORT | - | G | precondition failure: accessing attribute in a different namespace (abort 134) |
+| c10 | no (hasValue=no) | invalidado-retenido | S | 134 | ABORT | - | G | precondition failure: accessing attribute in a different namespace (abort 134) |
 
-1. Medición nativa en sonda (`ProbeNative share-lifetime probe-58`):
-   - Configuración: Crear handle s = AGGraphCreateShared(d.graph), leer byte en rawS+0x58, invalidar rawS con c_AGGraphInvalidate, leer byte, volver a invalidar (segunda llamada idempotente), leer byte.
-   - Salida medida:
-     probe-58|created=0|invalidated=1|doubleInvalidated=1
-   - Conclusión medida:
-     - Recién creado: byte = 0.
-     - Tras primera invalidación: byte = 1.
-     - Tras segunda invalidación: byte = 1 (mantiene el valor).
+=== Reglas de Decisión y Modelo Respaldado ===
+Resultado E0: El almacenamiento central es idéntico entre handle original y compartido (sameAsA=true) y diferente entre grafos independientes (different=true). Sostiene el modelo de almacenamiento compartido.
 
-2. Desensamblado en LLDB (AttributeGraph binary en macOS 15.8.3):
-   - Creación (AGGraphCreateShared, 0x1c2c4033c):
-     - 0x1c2c40378: ldrb w8, [x20, #0x58] ; lee flag del grafo origen
-     - 0x1c2c4037c: cmp  w8, #1
-     - 0x1c2c40380: b.eq 0x1c2c40410      ; salta a AGGraphCreateShared.cold.1 si el grafo origen está invalidado
-     - 0x1c2c40410: bl   AG::precondition_failure("invalidated graph")
-     - 0x1c2c403f4: strb wzr, [x19, #0x58] ; inicializa a 0 en el nuevo handle
-   - Invalidación (AGGraphInvalidate, 0x1c2c40458):
-     - 0x1c2c40458: ldrb w8, [x0, #0x58]  ; lee flag
-     - 0x1c2c4045c: tbnz w8, #0x0, 0x1c2c40490 ; si bit 0 es 1, retorna inmediatamente (guardia de idempotencia)
-     - 0x1c2c40474: add  x0, x0, #0x10    ; x0 = handle + 0x10 (Context)
-     - 0x1c2c40478: bl   AG::Graph::Context::~Context()
-     - 0x1c2c4047c: mov  w8, #0x1
-     - 0x1c2c40480: strb w8, [x19, #0x58] ; escribe 1 marcando el handle como invalidado
-   - Finalizador CoreFoundation (klass->finalize, 0x1c2c42eac):
-     - 0x1c2c42eac: ldrb w8, [x0, #0x58]  ; lee flag
-     - 0x1c2c42eb0: tbz  w8, #0x0, 0x1c2c42eb8 ; si es 0, destruye contexto
-     - 0x1c2c42eb4: ret                   ; si es 1 (ya invalidado), retorna sin tocar contexto (evita double free)
-     - 0x1c2c42eb8: add  x0, x0, #0x10
-     - 0x1c2c42ebc: b    AG::Graph::Context::~Context()
-   - Funciones que comprueban +0x58 y disparan AG::precondition_failure("invalidated graph"):
-     - AGGraphCreateShared (0x1c2c40378)
-     - AGGraphSetNeedsUpdate (0x1c2c406fc)
-     - AGGraphStopTracing (0x1c2c42d14)
-     - AGGraphSyncTracing (0x1c2c42d58)
-     - AGGraphCopyTracePath (0x1c2c42d9c)
-     - AGGraphDescription (0x1c2c42e00)
-   - Significado: Flag booleano `is_invalidated` (1 byte) del handle `AGGraphStorage`.
+Resultado E1:
+- c4 (no evaluado + G vivo + leer por S): FUNCIONA limpiamente (exit=0, value=7, hasValueBeforeShare=no). Esto DESCARTA M1 (namespace estático por handle).
+- c2 (evaluado + G vivo + leer por S): FUNCIONA limpiamente (exit=0, value=7, hasValueBeforeShare=yes).
+- c6 (no evaluado + G liberado + leer por S): ABORTA con exit=134 ('accessing attribute in a different namespace').
+- c5 (evaluado + G liberado + leer por S): ABORTA con exit=134 ('accessing attribute in a different namespace').
+- c9 y c10 (G invalidado-pero-retenido + leer por S): AMBOS ABORTAN con exit=134 ('accessing attribute in a different namespace').
 
-=== Tarea 2: Fallo de la prueba dos hosts (Estado: FIRME) ===
+Conclusión de Modelo:
+Queda FIRMEMENTE RESPALDADO EL MODELO M2 (sello / ciclo de vida del creador del atributo):
+1. El namespace no está restringido al handle que lee: mientras el contexto creador G está vivo, S puede leer y evaluar perezosamente atributos creados en G (c2 y c4 exitosos con value=7).
+2. En c9 y c10, con G retenido (objeto CF vivo) pero invalidado (Context destruido vía AG::Graph::Context::~Context()), la lectura por S aborta exactamente igual que con G liberado (c5 y c6).
+3. Por tanto, lo que invalida el enlace no es la liberación de la memoria del handle CF, sino la destrucción del Context (AG::Graph::Context) del handle creador.
 
-1. Causa raíz identificada:
-   - En la sonda original de two-hosts:
-     `let r1: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a1.value })) }`
-     La instancia de `Subgraph(graph: s1)` se creó de forma temporal sin asignarse a una variable retenida.
-   - Swift ARC destruyó el `Subgraph` al terminar la sentencia (`AG::Subgraph::clear_object()`).
-   - El destructor del subgrafo desconecta el contexto del nodo de la regla (`[node + 0x28] = 0`).
-   - Al invocar `r1.value`, `AGGraphGetValue` cargó el puntero nulo de contexto y llamó a `AG::Graph::value_ref(AG::AttributeID, ...)` con `x0 = 0x0`.
-   - La instrucción `ldr w8, [x0, #0x1e0]` desreferenció `0x0 + 0x1e0 = 0x1e0`, provocando `EXC_BAD_ACCESS` (código de salida 139).
+=== Registros Crudos de Ejecución ===
+--- Raw c1 (e1-c1) ---
+exit=0
+stdout:
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x000000012b605f70|storageS=0x000000012b605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000017002a0)|rawG=0x00006000017002a0|rawS=0x0000600001700300
+aboutToRead=true
+value=7
 
-2. Corrección y verificación (sonda `two-hosts` con variable retenida):
-   - Código:
-     ```swift
-     let root1 = AttributeGraph.Subgraph(graph: s1)
-     let root2 = AttributeGraph.Subgraph(graph: s2)
-     let r1: Handle<Int64> = root1.apply { Handle(NativeRule(body: { a1.value })) }
-     let r2: Handle<Int64> = root2.apply { Handle(NativeRule(body: { a2.value })) }
-     ```
-   - Salida medida (`ProbeNative two-hosts`):
-     two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2
-     Exit code: 0 (limpio, 100 % éxito).
-   - Lectura cruzada entre grafos independientes (`ProbeNative two-hosts-cross`):
-     Exit code: 134 (SIGABRT esperado por violación de espacio de nombres en `AG::Graph::input_value_ref_slow`).
-   - Conclusión: El comportamiento nativo del motor es correcto y admite múltiples grafos independientes simultáneamente. El fallo anterior era un error en la sonda por ciclo de vida efímero del Subgraph temporal.
+--- Raw c2 (e1-c2) ---
+exit=0
+stdout:
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000131605f70|storageS=0x0000000131605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000010902a0)|rawG=0x00006000010902a0|rawS=0x0000600001090300
+aboutToRead=true
+value=7
+
+--- Raw c3 (e1-c3) ---
+exit=0
+stdout:
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x000000014fe05f70|storageS=0x000000014fe05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003e8c2a0)|rawG=0x0000600003e8c2a0|rawS=0x0000600003e8c300
+aboutToRead=true
+value=7
+
+--- Raw c4 (e1-c4) ---
+exit=0
+stdout:
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000138e05f70|storageS=0x0000000138e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000397c2a0)|rawG=0x000060000397c2a0|rawS=0x000060000397c300
+aboutToRead=true
+value=7
+
+--- Raw c5 (e1-c5) ---
+exit=134
+stdout:
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000154605f70|storageS=0x0000000154605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000018a82a0)|rawG=0x00006000018a82a0|rawS=0x00006000018a8300
+aboutToRead=true
+
+--- Raw c6 (e1-c6) ---
+exit=134
+stdout:
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000124e05f70|storageS=0x0000000124e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000fe42a0)|rawG=0x0000600000fe42a0|rawS=0x0000600000fe4300
+aboutToRead=true
+
+--- Raw c9 (e1-c9) ---
+exit=134
+stdout:
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000158705480|storageS=0x0000000158705480|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000c80060)|rawG=0x0000600000c80060|rawS=0x0000600000c800c0
+aboutToRead=true
+
+--- Raw c10 (e1-c10) ---
+exit=134
+stdout:
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000130e05f70|storageS=0x0000000130e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000034f82a0)|rawG=0x00006000034f82a0|rawS=0x00006000034f8300
+aboutToRead=true
+
