@@ -2,6 +2,18 @@
 import AttributeGraph
 import Darwin
 
+@_silgen_name("CFGetTypeID")
+private func c_CFGetTypeID(_ object: UnsafeRawPointer) -> UInt
+
+@_silgen_name("AGGraphGetTypeID")
+private func c_AGGraphGetTypeID() -> UInt
+
+@_silgen_name("CFGetRetainCount")
+private func c_CFGetRetainCount(_ object: UnsafeRawPointer) -> Int
+
+@_silgen_name("CFRelease")
+private func c_CFRelease(_ object: UnsafeRawPointer)
+
 /// `AGGraphCreateShared(graph)`: a new reference over the same graph state (AGGraphCreateShared in AGGraph.h).
 @_silgen_name("AGGraphCreateShared")
 private func c_AGGraphCreateShared(_ graph: AttributeGraph.Graph?) -> AttributeGraph.Graph
@@ -138,9 +150,53 @@ func runSharedGraphFaultProbeIfRequested() {
 /// `Probe share-stress <count>` and `Probe share-depth <count>`: many shared handles from one graph, and a chain of
 /// shared-of-shared handles. Prints the time and whether the first handle still reads.
 func runSharedGraphStressProbeIfRequested() {
-    guard CommandLine.arguments.count > 2 else { return }
+    guard CommandLine.arguments.count > 1 else { return }
     let mode = CommandLine.arguments[1]
-    if mode == "share-count", let n = Int(CommandLine.arguments[2]) {
+    if mode == "share-retain" {
+        let d = Driver()
+        var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a!, to: UnsafeRawPointer.self)
+        print("share-retain|sizeOfGraph=\(MemoryLayout<AttributeGraph.Graph>.size)|cfTypeIdOfA=\(c_CFGetTypeID(rawA))|agGraphTypeId=\(c_AGGraphGetTypeID())|rawA=\(rawA)")
+        fflush(stdout)
+        let rc0 = c_CFGetRetainCount(rawA)
+        let b = c_AGGraphCreateShared(d.graph)
+        let rawB = unsafeBitCast(b, to: UnsafeRawPointer.self)
+        let rc1 = c_CFGetRetainCount(rawA)
+        let rcB = c_CFGetRetainCount(rawB)
+        a = nil
+        let rc2 = c_CFGetRetainCount(rawB)
+        if CommandLine.arguments.count > 2 && CommandLine.arguments[2] == "release-a" {
+            let before = rawB.load(fromByteOffset: 0x20, as: UInt32.self)
+            c_CFRelease(rawA)
+            fflush(stdout)
+            print("share-retain|counterBeforeCFRelease=\(before)|counterAfterCFRelease=\(rawB.load(fromByteOffset: 0x20, as: UInt32.self))|rcOfB=\(c_CFGetRetainCount(rawB))")
+            fflush(stdout)
+            exit(0)
+        }
+        print("share-retain|rcOfAAfterCreate=\(rc0)|rcOfAAfterSecondCreate=\(rc1)|rcOfB=\(rcB)|rcOfBAfterDroppingA=\(rc2)")
+        fflush(stdout)
+        exit(0)
+    }
+    if mode == "share-release" {
+        let d = Driver()
+        var a: AttributeGraph.Graph? = c_AGGraphCreateShared(d.graph)
+        let rawA = unsafeBitCast(a!, to: UnsafeRawPointer.self)
+        let b = c_AGGraphCreateShared(d.graph)
+        let rawB = unsafeBitCast(b, to: UnsafeRawPointer.self)
+        let beforeRelease = rawB.load(fromByteOffset: 0x20, as: UInt32.self)
+        a = nil
+        let afterSwiftDrop = rawB.load(fromByteOffset: 0x20, as: UInt32.self)
+        print("share-release|cfRefcountOfA=\(rawA.load(fromByteOffset: 8, as: UInt32.self))")
+        fflush(stdout)
+        c_CFRelease(rawA)
+        let afterRelease = rawB.load(fromByteOffset: 0x20, as: UInt32.self)
+        print("share-release|afterSwiftDrop=\(afterSwiftDrop)")
+        fflush(stdout)
+        let stillReads = b.counter(for: .nodes)
+        print("share-release|counterBeforeRelease=\(beforeRelease)|counterAfterRelease=\(afterRelease)|rawA=\(rawA)|stateOfB=\(rawB.load(fromByteOffset: 0x10, as: UInt.self))|nodesOfB=\(stillReads)")
+        exit(0)
+    }
+    if mode == "share-count", CommandLine.arguments.count > 2, let n = Int(CommandLine.arguments[2]) {
         let d = Driver()
         var keep: [AttributeGraph.Graph] = []
         for _ in 0..<n { keep.append(c_AGGraphCreateShared(d.graph)) }
@@ -154,7 +210,7 @@ func runSharedGraphStressProbeIfRequested() {
         print("graphs-independent|n=\(n)|time=\(start.duration(to: ContinuousClock.now))|count=\(graphs.count)")
         exit(0)
     }
-    guard mode == "share-stress" || mode == "share-depth", let n = Int(CommandLine.arguments[2]) else { return }
+    guard mode == "share-stress" || mode == "share-depth", CommandLine.arguments.count > 2, let n = Int(CommandLine.arguments[2]) else { return }
     let d = Driver()
     let input: Handle<Int64> = d.input(5)
     let start = ContinuousClock.now

@@ -1,0 +1,16 @@
+Regla de liberación de AGGraphCreateShared: estado (macOS 15.8.3, nativo, sin commit de sondas hasta esta nota)
+
+FIRME (medido):
+- El handle compartido es un objeto CoreFoundation válido del tipo del grafo (CFGetTypeID = AGGraphGetTypeID).
+- La referencia de Swift (Graph) ocupa 8 bytes: es el puntero del handle.
+- Todos los handles de un grafo apuntan al mismo estado (+0x10 idéntico).
+- El contador en +0x20 sube en uno por handle nuevo (2 -> 3 -> 4 -> 5).
+- La referencia de Swift no baja el contador ni el retain count de CoreFoundation (1 -> 1).
+- El descriptor de la clase del grafo tiene el campo finalize a nulo.
+
+NO FIRME:
+- Liberar a mano un handle con CFRelease (contador CF = 1) termina en fallo (139): en CF_IS_OBJC primero y después en objc_release.
+  La causa no está identificada. Puede que la cabecera del objeto no encaje con la ruta de liberación de CoreFoundation.
+- Quién es dueño del handle y cuándo baja el contador de +0x20: sin resolver.
+
+Sondas: share-retain, share-release (sin commit). Lo que se puede afirmar sin liberar: que la referencia de Swift no libera.
