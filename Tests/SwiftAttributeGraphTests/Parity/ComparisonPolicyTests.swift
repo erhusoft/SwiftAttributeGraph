@@ -154,11 +154,12 @@ import Foundation
 
     // MARK: Enums with a payload that are not Equatable
 
-    /// SwiftUI compares an enum with a payload case-by-case and field-by-field.
-    @Test func enumsWithAPayloadThatAreNotEquatableAreComparedByCaseAndPayload() {
-        #expect(changes(.viewValue, PayloadString.b(Self.long()), PayloadString.b(Self.long())) == false)
-        #expect(changes(.stateWrite, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == false)
-        #expect(changes(.environment, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == false)
+    /// Native AttributeGraph compares a non-`Equatable` enum with a payload by its bytes, in all four modes (measured with
+    /// the `compare-plan` probe): equal `String`s stored separately differ, and `0.0` differs from `-0.0`.
+    @Test func enumsWithAPayloadThatAreNotEquatableAreComparedByBytes() {
+        #expect(changes(.viewValue, PayloadString.b(Self.long()), PayloadString.b(Self.long())) == true)
+        #expect(changes(.stateWrite, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == true)
+        #expect(changes(.environment, PayloadDouble.a(0.0), PayloadDouble.a(-0.0)) == true)
         #expect(changes(.viewValue, PayloadString.b("hi"), PayloadString.b("hi")) == false)
         #expect(changes(.viewValue, PayloadString.b("hi"), PayloadString.b("bye")) == true)
         #expect(changes(.viewValue, PayloadString.a(1), PayloadString.b("1")) == true)

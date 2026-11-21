@@ -142,25 +142,11 @@ private func dynamicOperation<X>(_: X.Type, mode: ComparisonPlan.Mode) -> (Unsaf
     }
 }
 
-/// The comparison of a non-`Equatable` enum or optional: first checks raw bytes, then compares the active case name
-/// and associated payload using the mode's comparison rules.
+/// The comparison of a non-`Equatable` enum or optional: by its bytes, as native AttributeGraph does for these types
+/// (`compare-plan` probe, all four modes). The payload is not inspected, so no reflection is involved.
 private func enumOperation<X>(_: X.Type, mode: ComparisonPlan.Mode) -> (UnsafeRawPointer, UnsafeRawPointer) -> Bool {
     let size = MemoryLayout<X>.size
-    let cache = DynamicPlans(mode: mode)
-    return { left, right in
-        if bytesEqual(left, right, size) { return true }
-        let a = left.assumingMemoryBound(to: X.self).pointee
-        let b = right.assumingMemoryBound(to: X.self).pointee
-        let mirrorA = Mirror(reflecting: a)
-        let mirrorB = Mirror(reflecting: b)
-        let childA = mirrorA.children.first
-        let childB = mirrorB.children.first
-        if let childA, let childB {
-            guard childA.label == childB.label else { return false }
-            return cache.equal(childA.value, childB.value)
-        }
-        return childA == nil && childB == nil && String(describing: a) == String(describing: b)
-    }
+    return { left, right in bytesEqual(left, right, size) }
 }
 
 /// The plans already built for the dynamic types seen by one existential leaf. One graph, one thread: no locking.
