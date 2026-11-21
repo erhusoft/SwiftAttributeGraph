@@ -48,9 +48,16 @@ public struct RuleContext<Value> {
     }
 
     /// Reads `attribute` (it becomes a dependency) and reports whether it changed since the previous run.
-    public func changedValue<T>(of attribute: Attribute<T>) -> (value: T, changed: Bool) {
-        let value = graph.read(attribute)
+    public func changedValue<T>(of attribute: Attribute<T>, options: AGValueOptions = []) -> (value: T, changed: Bool) {
+        let value = graph.value(of: attribute, options: Graph.ReadOptions(rawValue: options.rawValue))
         return (value, graph.inputChanged(of: node, source: attribute.id.index) ?? true)
+    }
+
+    /// Reads `attribute` as a dependency of this rule and returns its value and flags (`RuleContext.valueAndFlags` in
+    /// native AttributeGraph). The `changed` flag is the one ``changedValue(of:options:)`` reports.
+    public func valueAndFlags<T>(of attribute: Attribute<T>, options: AGValueOptions = []) -> (value: T, flags: AGChangedValueFlags) {
+        let read = changedValue(of: attribute, options: options)
+        return (read.value, read.changed ? .changed : [])
     }
 
     /// Reads `weakAttribute` if its target is still alive (recording a dependency) and reports whether it changed
