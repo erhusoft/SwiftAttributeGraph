@@ -1,0 +1,106 @@
+=== Audit and Measurements of Handle Offset +0x58 (is_invalidated) in AttributeGraph (macOS 15.8.3) ===
+
+1. Disassembly Analysis: Instructions accessing offset +0x58 of AGGraphStorage:
+The handle object returned by AGGraphCreate / AGGraphCreateShared (a CF-type AGGraphStorage instance) maintains an 8-bit boolean field at offset +0x58 representing `is_invalidated`.
+
+A. Write instructions (STRB):
+- _AGGraphCreateShared (0x1b1a6c3f4):
+  `0x1b1a6c3f4: 7f 62 01 39   strb wzr, [x19, #0x58]`
+  Initializes `is_invalidated = 0` upon creation of the shared handle.
+- _AGGraphInvalidate (0x1b1a6c480):
+  `0x1b1a6c480: 68 62 01 39   strb w8, [x19, #0x58]` (where w8 = 1 at 0x1b1a6c47c)
+  Marks `is_invalidated = 1` immediately after executing Context::~Context() (0x1b1a6c478).
+
+B. Read instructions (LDRB / TBNZ):
+- _AGGraphInvalidate (0x1b1a6c458):
+  `0x1b1a6c458: 08 60 41 39   ldrb w8, [x0, #0x58]`
+  `0x1b1a6c45c: a8 01 00 37   tbnz w8, #0, loc_1b1a6c490` (ret)
+  Guard for idempotency: if already 1, returns immediately without repeating context destruction.
+- CF finalizer for AGGraphStorage (__ZZN12_GLOBAL__N_113graph_type_idEvEN3$_08__invokeIPKvEEDaT_, 0x1b1a6eeac):
+  `0x1b1a6eeac: 08 60 41 39   ldrb w8, [x0, #0x58]`
+  `0x1b1a6eeb0: 48 00 00 36   tbz  w8, #0, loc_1b1a6eeb8` (calls Context::~Context() if 0, ret if 1)
+  Prevents double destruction of Context during CFRelease if already invalidated.
+- Context::from_cf (0x1b1a6c294):
+  `0x1b1a6c294: 08 60 41 39   ldrb w8, [x0, #0x58]`
+  `0x1b1a6c298: 1f 05 00 71   cmp  w8, #0x1`
+  `0x1b1a6c29c: 60 00 00 54   b.eq 0x1b1a6c2a8` -> cold.1: AG::precondition_failure("invalidated graph")
+- _AGGraphCreateShared (0x1b1a6c378):
+  `0x1b1a6c378: 88 62 41 39   ldrb w8, [x20, #0x58]`
+  Checks parent graph; aborts if parent is invalidated.
+- _AGGraphGetGraphContext (0x1b1a6c434):
+  `0x1b1a6c434: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphSetContext (0x1b1a6c494):
+  `0x1b1a6c494: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphGetContext (0x1b1a6c4b8):
+  `0x1b1a6c4b8: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphGetCounter (0x1b1a6c4e8):
+  `0x1b1a6c4e8: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphSetUpdateCallback (0x1b1a6c668):
+  `0x1b1a6c668: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphSetInvalidationCallback (0x1b1a6c6bc):
+  `0x1b1a6c6bc: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphSetNeedsUpdate (0x1b1a6c6fc):
+  `0x1b1a6c6fc: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphBeginDeferringSubgraphInvalidation (0x1b1a6c72c):
+  `0x1b1a6c72c: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphEndDeferringSubgraphInvalidation (0x1b1a6c768):
+  `0x1b1a6c768: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphGetDeadline (0x1b1a6cb7c):
+  `0x1b1a6cb7c: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphSetDeadline (0x1b1a6cba0):
+  `0x1b1a6cba0: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphInvalidateAllValues (0x1b1a6d6dc):
+  `0x1b1a6d6dc: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphStartProfiling (0x1b1a6e8a4):
+  `0x1b1a6e8a4: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphStopProfiling (0x1b1a6e8f0):
+  `0x1b1a6e8f0: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphResetProfile (0x1b1a6e9a0):
+  `0x1b1a6e9a0: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphStartTracing2 (0x1b1a6ec84):
+  `0x1b1a6ec84: 88 62 41 39   ldrb w8, [x20, #0x58]` -> aborts if 1.
+- _AGGraphStopTracing (0x1b1a6ed14):
+  `0x1b1a6ed14: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphSyncTracing (0x1b1a6ed58):
+  `0x1b1a6ed58: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphCopyTracePath (0x1b1a6ed9c):
+  `0x1b1a6ed9c: 08 60 41 39   ldrb w8, [x0, #0x58]` -> aborts if 1.
+- _AGGraphDescription (0x1b1a6ee00):
+  `0x1b1a6ee00: 88 62 41 39   ldrb w8, [x20, #0x58]` -> aborts if 1.
+
+2. Measurement Results (Task 2: 10 repetitions in isolated processes):
+Byte value at [handle + 0x58] before invalidation, after 1st invalidate, and after 2nd invalidate:
+
+Run | Before Invalidation | After 1st AGGraphInvalidate | After 2nd AGGraphInvalidate | Exit Code
+----+---------------------+-----------------------------+-----------------------------+----------
+ 1  |          0          |              1              |              1              |    0
+ 2  |          0          |              1              |              1              |    0
+ 3  |          0          |              1              |              1              |    0
+ 4  |          0          |              1              |              1              |    0
+ 5  |          0          |              1              |              1              |    0
+ 6  |          0          |              1              |              1              |    0
+ 7  |          0          |              1              |              1              |    0
+ 8  |          0          |              1              |              1              |    0
+ 9  |          0          |              1              |              1              |    0
+10  |          0          |              1              |              1              |    0
+
+Verdict: Confirmed (10/10). The byte is 0 upon creation, transitions to 1 upon the first AGGraphInvalidate, and remains 1 upon idempotent subsequent invalidations without altering handle state.
+
+3. Error Route Verification (Task 3: 10 repetitions in isolated processes):
+Test: Invoking AGGraphSetContext(handle, nil) on a handle where handle+0x58 == 1.
+Expected: Trigger precondition failure in __ZN2AG5Graph7Context7from_cfEP14AGGraphStorage.cold.1 (0x1b1a7e70c: bl __ZN2AG20precondition_failureEPKcz with "invalidated graph", terminating with SIGABRT 134 / exit code 134).
+
+Run | Exit Code | Signal  | Condition Triggered
+----+-----------+---------+----------------------------------------------
+ 1  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 2  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 3  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 4  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 5  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 6  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 7  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 8  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+ 9  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+10  |    134    | SIGABRT | AG::precondition_failure("invalidated graph")
+
+Verdict: Error route ACTIVATED and CONFIRMED (10/10). Accessing an invalidated handle via any context-dependent AGGraph* API triggers the precondition abort.
