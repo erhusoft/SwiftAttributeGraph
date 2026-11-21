@@ -214,11 +214,11 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
      - Estabilidad absoluta del 100 % (10 de 10 repeticiones idénticas en todas las celdas).
      - Se confirma de manera concluyente que la vigencia del enlace entre handles compartidos depende estrictamente de la vida del `Context` (`AG::Graph::Context`) del handle que creó el atributo y no de la memoria física del handle CF envoltorio. Mientras el contexto creador siga activo, cualquier handle compartido del mismo almacenamiento puede leer o evaluar perezosamente sus atributos.
    - **Mecanismo del Aborto (desensamblado y verificación LLDB)**:
-     - **Referencia**: `Results/shared-graph-macos-15.8.3/m2-mechanism.txt`.
-     - **Instrucción decisiva**: En `AG::Graph::input_value_ref_slow`, la comparación en `+144` (`cmp x8, x24`) seguida de `b.ne 0x1c2c2b210` salta a la llamada `AG::precondition_failure("accessing attribute in a different namespace: %u")`.
-     - **Valor del contexto dueño en c10**: Al invalidar `G` con `AGGraphInvalidate`, `AG::Graph::Context::~Context()` ejecuta `AG::Subgraph::invalidate_and_delete_` sobre sus subgrafos, poniendo a cero el puntero de contexto del nodo (`[node + 0x28] = 0x0`). En el momento del `cmp`, `x8 = 0x0` y `x24` es el contexto lector no nulo; al no coincidir (`0x0 != x24`), aborta con código 134. El nodo no conserva el contexto destruido, sino que éste queda disociado (`0x0`).
-     - **Valor del contexto en c4**: Con `G` vivo, en el momento del `cmp` ambos registros coinciden (`x8 == x24`), la rama `b.ne` no salta y la lectura se completa limpiamente con valor 7.
-     - **Invarianza**: Verificado en 3 sesiones independientes de LLDB para `c10` y 3 para `c4`, manteniendo idénticas relaciones relativas.
+     - **Referencia**: `Results/shared-graph-macos-15.8.3/m2-mechanism.txt` y `Results/shared-graph-macos-15.8.3/m2-zero-origin.txt`.
+     - **Instrucción decisiva**: En `AG::Graph::input_value_ref_slow`, la comparación en `+144` (`cmp x8, x24` en `0x1c2c2aee4`) seguida de `b.ne 0x1c2c2b210` salta a la llamada `AG::precondition_failure("accessing attribute in a different namespace: %u")`.
+     - **Origen del cero y validez del nodo en c10**: Al invalidar `G` con `AGGraphInvalidate`, `AG::Graph::Context::~Context()` ejecuta `AG::Graph::invalidate_subgraphs()` y `AG::Subgraph::invalidate_now`, los cuales destruyen y liberan el nodo de memoria (`_nanov2_free`). No hay una instrucción de AttributeGraph que escriba un cero lógico; el nodo **deja de ser válido** al ser desasignado del heap, y el allocator de macOS pone a cero su memoria (`_platform_memset`, instrucción `stp q0, q0, [x0, #0x20]`). En el momento del `cmp`, `x8 = 0x0` al leer la ranura del nodo liberado y `x24` es el contexto lector no nulo; al no coincidir (`0x0 != x24`), aborta con código 134.
+     - **Valor del contexto en c4**: Con `G` vivo, el nodo permanece válido y en el momento del `cmp` ambos registros coinciden (`x8 == x24`), la rama `b.ne` no salta y la lectura se completa limpiamente con valor 7.
+     - **Invarianza**: Verificado en sesiones independientes de LLDB con watchpoints en memoria de nodo para `c10` y breakpoints para `c4`, manteniendo idénticas relaciones relativas.
 
 ---
 
