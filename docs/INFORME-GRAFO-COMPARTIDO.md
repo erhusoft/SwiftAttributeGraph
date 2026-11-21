@@ -70,7 +70,12 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
   - *Prueba*: Desensamblado en lldb de `AGGraphCreateShared` (0x1c2c403bc) y `AG::Graph::Context::Context(AG::Graph&)` (0x1c2c26f64). Al inicializar el contexto (0x1c2c26f7c), se invoca `AGMakeUniqueID` (0x1c2c26470) y en 0x1c2c26f84 se escribe en `[x19, #0x10]` (que es `handle + 0x20`). `AGMakeUniqueID` ejecuta un `ldadd` atómico de 1 sobre un contador global, por lo que es un identificador monótono que nunca decrementa al liberar o invalidar.
 - **Hipótesis 3: El caso 2 falla porque el contexto se destruye antes de materializar el enlace**:
   - *Resultado*: **Firme**.
-  - *Prueba*: Desensamblado y comprobación en lldb de `AG::Graph::input_value_ref_slow` (0x1c2c2ae54). En 0x1c2c2aee0 lee el contexto dueño registrado `[node + 0x28]` y en 0x1c2c2aee4 lo compara con el contexto actual (`cmp x8, x24`). Al haber sido destruido el contexto creador, no coinciden y en 0x1c2c2aee8 salta a 0x1c2c2b210, activando `AG::precondition_failure` con `"accessing attribute in a different namespace: %u"`.
+  - *Prueba reproducible en lldb*: Parada en `AG::Graph::input_value_ref_slow` (`ProbeNative share-fault read-after-first-freed`, base 0x1c2c2ae54). Las instrucciones exactas de tiempo de ejecución confirman:
+    - `0x1c2c2aee0 <+140>: ldr x8, [x8, #0x28]` (lee el contexto dueño registrado en el nodo).
+    - `0x1c2c2aee4 <+144>: cmp x8, x24` (compara contra el contexto actual de la lectura en `x24`).
+    - `0x1c2c2aee8 <+148>: b.ne 0x1c2c2b210` (salta al aborto si son diferentes).
+    - `0x1c2c2b210 <+956>: str x27, [sp]; adrp x0, "accessing attribute in a different namespace: %u"; bl AG::precondition_failure`.
+    El breakpoint en `*0x1c2c2b210` detiene la ejecución inmediatamente tras el salto `b.ne`, verificando que el aborto es causado por la discrepancia de contextos.
 - **Hipótesis 4: Las lecturas `ref0..ref2` y `refAfterS1Invalidate` corresponden al campo `+0x1a4`**:
   - *Resultado*: **Firme**.
   - *Prueba*: La secuencia 1 → 2 → 3 → 2 → 1 → 0 coincide con `lifetime.txt` (caso 4), y el desensamblado de `AGGraphCreateShared` (0x1c2c40388) y `AG::Graph::Context::~Context` (0x1c2c270dc) confirma que esas instrucciones operan directa y exclusivamente sobre `[state + 0x1a4]`.
@@ -79,7 +84,12 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 - **Hipótesis 2: La causa del fallo de `CFRelease` a mano es un double free**:
   - *Resultado*: **Sin resolver**.
-  - *Prueba*: En lldb, al forzar `c_CFRelease(rawPtr)` desde Swift sobre un handle, se produce `EXC_BREAKPOINT` en `CF_IS_OBJC + 64` al fallar la autenticación PAC de la cabecera (`brk #0xc472`). Esto demuestra que la cabecera no encaja con la ruta de liberación de CoreFoundation, pero no descarta ni prueba la hipótesis de un double free. La causa sigue sin identificarse de forma concluyente.
+  - *Controles y mediciones (hypotheses-round2.txt)*:
+    - *Control A*: Handle creado con `AGGraphCreate` sin wrapper de Swift, `CFRelease` tiene éxito limpio (exit 0, cabecera isa `0x01000001ff68ceb9`).
+    - *Control B*: Handle compartido creado con `AGGraphCreateShared`, sin liberar, termina el proceso limpiamente (exit 0).
+    - *Control C*: Handle compartido creado con `AGGraphCreateShared` sin wrapper de Swift, `CFRelease` tiene éxito limpio (exit 0).
+    - *Experimento (`share-release`)*: Tras `a = nil` en Swift, la memoria de `rawA` es reciclada (word0 pasa a ser un puntero de heap freelist `0x000054...`, perdiendo el isa de CoreFoundation). La llamada posterior `c_CFRelease(rawA)` falla en `CF_IS_OBJC + 64` con trampa PAC (`brk #0xc472`) o en `objc_release` con `EXC_BAD_ACCESS`.
+    - Aunque la cabecera del puntero en ese instante ya no es un objeto válido, la causa del fallo de la sonda permanece formalmente abierta y sin resolver para no extrapolar sin prueba adicional el modelo de propiedad de CoreFoundation.
 
 ## Abierto
 
