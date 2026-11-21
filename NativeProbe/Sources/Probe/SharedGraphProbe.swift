@@ -863,6 +863,47 @@ func runSharedGraphLifetimeProbeIfRequested() {
             exit(2)
         }
 
+    case "rss-independent", "rss-shared":
+        setbuf(stdout, nil)
+        func getRSS() -> UInt64 {
+            var info = mach_task_basic_info()
+            var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / 4)
+            let kerr = withUnsafeMutablePointer(to: &info) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                    task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+                }
+            }
+            guard kerr == KERN_SUCCESS else { return 0 }
+            return info.resident_size
+        }
+
+        let count = 1000
+        let rssBefore = getRSS()
+
+        if subcase == "rss-independent" {
+            var drivers: [Driver] = []
+            drivers.reserveCapacity(count)
+            for _ in 0..<count {
+                drivers.append(Driver())
+            }
+            let rssAfter = getRSS()
+            print("rss-case|mode=independent|count=\(count)|rssBefore=\(rssBefore)|rssAfter=\(rssAfter)|delta=\(Int64(rssAfter) - Int64(rssBefore))")
+            _ = drivers.count
+            exit(0)
+        } else {
+            let baseDriver = Driver()
+            var sharedHandles: [AttributeGraph.Graph] = []
+            sharedHandles.reserveCapacity(count)
+            for _ in 0..<count {
+                sharedHandles.append(c_AGGraphCreateShared(baseDriver.graph))
+            }
+            let rssAfter = getRSS()
+            print("rss-case|mode=shared|count=\(count)|rssBefore=\(rssBefore)|rssAfter=\(rssAfter)|delta=\(Int64(rssAfter) - Int64(rssBefore))")
+            _ = sharedHandles.count
+            _ = baseDriver.graph
+            exit(0)
+        }
+
     default:
         exit(2)
     }
