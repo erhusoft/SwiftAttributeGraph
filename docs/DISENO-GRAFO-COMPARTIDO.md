@@ -68,3 +68,8 @@ Consecuencias:
 
 - ¿La referencia que devuelve `graph.graph(of:)` debe ser siempre la original, o la última usada? Propuesta: la original.
 - ¿Hace falta `GraphStorage` público? Propuesta: no; solo `Graph` es pública.
+
+
+## 8. Resultado del primer intento de la fase 2 (2026-11-20)
+
+Se movieron a un objeto interno los contadores y banderas que no tienen trampas (transacciones, actualizaciones, cambios, nodos creados, observadores, lote, vaciado), con propiedades calculadas `_read`/`_modify`. Medido en release: lecturas de entrada 114,3 ms (+10,5 %) y de regla 117,4 ms (+8,7 %), frente a la línea base de 103,4 y 108,0 ms. Supera el límite del 5 %, así que se revirtió. Conclusión: el camino de lectura toca estos campos, y el indirecto cuesta más de lo previsto. La fase 2 necesita otra forma: por ejemplo, que el camino caliente siga con las tablas en el propio grafo y solo se mueva lo que no se toca al leer, o un diseño con la referencia al objeto interno copiada en campos locales.
