@@ -81,15 +81,13 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
   - *Prueba*: La secuencia 1 → 2 → 3 → 2 → 1 → 0 coincide con `lifetime.txt` (caso 4), y el desensamblado de `AGGraphCreateShared` (0x1c2c40388) y `AG::Graph::Context::~Context` (0x1c2c270dc) confirma que esas instrucciones operan directa y exclusivamente sobre `[state + 0x1a4]`.
 
 - **Hipótesis 2: La causa del fallo de `CFRelease` a mano es un double free**:
-  - *Resultado*: **Firme (Causa demostrada: Double Free)**.
-  - *Pruebas y mediciones (hypotheses-round4.txt)*:
-    - *Medición con referencia viva (sin leer memoria liberada)*:
-      1. Se crea A con `AGGraphCreateShared` (`rcInitial = 1`).
-      2. Se invoca `CFRetain(rawA)` para añadir una referencia extra (`rcAfterRetain = 2`).
-      3. Se ejecuta `a = nil` (ARC suelta su referencia). Como el objeto sigue vivo gracias a `CFRetain`, se lee válidamente `c_CFGetRetainCount(rawA) = 1` (`rcAfterARCDrop = 1`).
-      4. Se completa la liberación limpia con `CFRelease(rawA)` (exit 0).
-    - *Conclusión*: Al confirmarse que el paso 2 da 2 y el paso 3 da 1, queda demostrado que Swift ARC suelta exactamente una referencia de CoreFoundation (1 -> 0).
-    - Por lo tanto, un `CFRelease` manual posterior sobre un puntero sin retain previo constituye un segundo release sobre un objeto ya destruido por ARC (**Double Free**), siendo esta la causa del fallo en `CF_IS_OBJC` / `objc_release`.
+  - *Resultado*: **Firme (Reproducido y demostrado: Double Free)**.
+  - *Pruebas y controles reproducibles (hypotheses-round4.txt y hypotheses-round5.txt)*:
+    - *Consumo de referencia por ARC (ronda 4)*: Medido sobre referencia viva retenida (`rcInitial = 1 -> CFRetain = 2 -> a = nil -> rc = 1 -> CFRelease = exit 0`), demostrando que ARC consume exactamente 1 referencia.
+    - *Caso A (control de fallo, ronda 5)*: `AGGraphCreateShared` -> `a = nil` -> `CFRelease(rawA)` sin retain previo. Falla de forma 100 % estable en las 3 repeticiones con código 139 (SIGSEGV).
+    - *Caso B (contraste sin ARC, ronda 5)*: `AGGraphCreateShared` -> `CFRelease(rawA)` sin tocar ARC. Termina con código 0 limpio en las 3 repeticiones.
+    - *Caso C (contraste con retain previo, ronda 5)*: `AGGraphCreateShared` -> `CFRetain` -> `a = nil` -> `CFRelease`. Termina con código 0 limpio en las 3 repeticiones.
+    - *Conclusión*: La inferencia pasa a hecho firme. El fallo es estrictamente un **segundo release sobre un objeto ya liberado por ARC (Double Free)**.
 
 ## Abierto
 
