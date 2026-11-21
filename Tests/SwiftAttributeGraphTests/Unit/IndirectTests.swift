@@ -124,7 +124,7 @@ import Testing
             return input.value * 3
         }
         let indirect = graph.makeIndirect(rule)
-        #expect(graph.source(of: indirect) == rule)
+        #expect(indirect.source == rule)
         #expect(runs == 0, "creating an indirect to a rule is lazy")
 
         let reader = graph.makeRule { indirect.value + 1 }
@@ -174,7 +174,7 @@ import Testing
 
         // Redirecting to a different attribute with the same value still marks the reader dirty and re-evaluates it.
         graph.setSource(b, for: indirect)
-        #expect(graph.source(of: indirect) == b)
+        #expect(indirect.source == b)
         #expect(graph.isDirty(reader.id))
         #expect(graph.value(of: reader) == 20)
         #expect(runs == 2)
@@ -229,13 +229,13 @@ import Testing
         let child = graph.makeSubgraph()
         let childTarget = graph.withCurrent(child) { graph.makeInput(77) }
         graph.setSource(childTarget, for: indirect)
-        #expect(graph.source(of: indirect) == childTarget)
+        #expect(indirect.source == childTarget)
         #expect(graph.value(of: reader) == 78)
         #expect(runs == 2)
 
         // Invalidating `child` resets `indirect` back to `initial` without dirtying `reader`.
         child.invalidate()
-        #expect(graph.source(of: indirect) == initial)
+        #expect(indirect.source == initial)
         #expect(!graph.isDirty(reader.id))
         #expect(graph.value(of: reader) == 78)
         #expect(runs == 2)
@@ -252,7 +252,7 @@ import Testing
         #expect(runs == 4)
 
         graph.resetSource(for: indirect)
-        #expect(graph.source(of: indirect) == initial)
+        #expect(indirect.source == initial)
         #expect(graph.value(of: reader) == 101)
         #expect(runs == 5)
     }

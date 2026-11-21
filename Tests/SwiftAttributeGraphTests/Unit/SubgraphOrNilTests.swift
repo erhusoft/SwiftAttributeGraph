@@ -8,7 +8,7 @@ import Testing
         let graph = Graph()
         let subgraph = graph.makeSubgraph()
         let input = graph.withCurrent(subgraph) { graph.makeInput(1) }
-        #expect(graph.subgraphOrNil(of: input) == subgraph)
+        #expect(input.subgraphOrNil == subgraph)
     }
 
     @Test func aFreedAttributeReportsNil() {
@@ -16,6 +16,6 @@ import Testing
         let subgraph = graph.makeSubgraph()
         let input = graph.withCurrent(subgraph) { graph.makeInput(1) }
         subgraph.invalidate()
-        #expect(graph.subgraphOrNil(of: input) == nil)
+        #expect(input.subgraphOrNil == nil)
     }
 }

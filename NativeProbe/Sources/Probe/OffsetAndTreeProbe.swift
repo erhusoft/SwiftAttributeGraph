@@ -1,3 +1,4 @@
+import Darwin
 #if NATIVE_ATTRIBUTE_GRAPH
 import AttributeGraph
 

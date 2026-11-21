@@ -10,21 +10,21 @@ import Testing
         let graph = Graph()
         let input = graph.makeInput(1)
         let r = graph.makeRule { graph.value(of: input) + 1 }
-        #expect(graph.valueState(of: r).rawValue & 0x0B == 0x03)
+        #expect(r.valueState.rawValue & 0x0B == 0x03)
 
         _ = graph.value(of: r)
-        #expect(graph.valueState(of: r).rawValue & 0x0B == 0x08)
+        #expect(r.valueState.rawValue & 0x0B == 0x08)
 
         graph.setValue(2, for: input)
-        #expect(graph.valueState(of: r).rawValue & 0x0B == 0x09)
+        #expect(r.valueState.rawValue & 0x0B == 0x09)
 
         _ = graph.value(of: r)
-        #expect(graph.valueState(of: r).rawValue & 0x0B == 0x08)
+        #expect(r.valueState.rawValue & 0x0B == 0x08)
     }
 
     @Test func inputHasAValueAndIsNotDirty() {
         let graph = Graph()
         let input = graph.makeInput(7)
-        #expect(graph.valueState(of: input).rawValue & 0x0B == 0x08)
+        #expect(input.valueState.rawValue & 0x0B == 0x08)
     }
 }

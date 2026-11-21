@@ -422,8 +422,8 @@ final class Driver {
     /// Own side: the engine method under test.
     func invalidateAllValues() { graph.invalidateAllValues() }
     /// Own side: engine state bits. Main-thread bits of Apple are not modeled, so the mask 0x0B is compared on both sides.
-    func valueState<V>(of attribute: Handle<V>) -> UInt8 { graph.valueState(of: attribute).rawValue & 0x0B }
-    func owns<V>(_ subgraph: SubgraphHandle, _ attribute: Handle<V>) -> Bool { graph.subgraph(of: attribute) == subgraph }
+    func valueState<V>(of attribute: Handle<V>) -> UInt8 { attribute.valueState.rawValue & 0x0B }
+    func owns<V>(_ subgraph: SubgraphHandle, _ attribute: Handle<V>) -> Bool { attribute.subgraph == subgraph }
     func anyWeakEmpty() -> AnyWeakAttribute { AnyWeakAttribute(nil) }
     func anyWeak<V>(_ attribute: Handle<V>) -> AnyWeakAttribute { AnyWeakAttribute(attribute.erased) }
     func anyWeakHasAttribute(_ weak: AnyWeakAttribute) -> Bool { weak.attribute != nil }
@@ -529,7 +529,7 @@ final class Driver {
         graph.withCurrent(scope) { graph.makeOffsetFieldAttribute(of: source, keyPath: keyPath) }
     }
     func attribute<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect }
-    func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { graph.source(of: indirect) }
+    func source<V>(of indirect: IndirectHandle<V>) -> Handle<V> { indirect.source }
     func setSource<V>(_ newSource: Handle<V>, for indirect: IndirectHandle<V>) { graph.setSource(newSource, for: indirect) }
     func resetSource<V>(of indirect: IndirectHandle<V>) { graph.resetSource(for: indirect) }
     func focus<Root, V>(_ root: Handle<Root>, keyPath: KeyPath<Root, V>) -> Handle<V> {
@@ -590,7 +590,7 @@ final class Driver {
     func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { let r = attribute.changedValue(); return (r.value, r.changed) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
     func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
-    func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { graph.subgraphOrNil(of: attribute) == nil }
+    func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { attribute.subgraphOrNil == nil }
     func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
     func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
     func beginDeferring() -> Bool { graph.beginDeferringSubgraphInvalidation() }

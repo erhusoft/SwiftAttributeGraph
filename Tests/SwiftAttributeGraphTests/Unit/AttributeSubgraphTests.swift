@@ -9,13 +9,13 @@ import Testing
         let a = graph.makeSubgraph()
         let b = graph.makeSubgraph()
         let inA = graph.withCurrent(a) { graph.makeInput(1) }
-        #expect(graph.subgraph(of: inA) == a)
-        #expect(graph.subgraph(of: inA) != b)
+        #expect(inA.subgraph == a)
+        #expect(inA.subgraph != b)
     }
 
     @Test func attributeCreatedOutsideAnySubgraphIsOwnedByTheRootSubgraph() {
         let graph = Graph()
         let outside = graph.makeInput(3)
-        #expect(graph.subgraph(of: outside) == graph.rootSubgraph)
+        #expect(outside.subgraph == graph.rootSubgraph)
     }
 }

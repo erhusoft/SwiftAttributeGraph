@@ -19,7 +19,7 @@ import Testing
         #expect(runs == 1)
 
         graph.setValue(2, for: source)
-        #expect(graph.valueState(of: rule).rawValue & 0x01 == 1)
+        #expect(rule.valueState.rawValue & 0x01 == 1)
         _ = graph.value(of: rule)
         #expect(runs == 2)
     }
