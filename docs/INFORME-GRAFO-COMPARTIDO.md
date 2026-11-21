@@ -80,16 +80,15 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
   - *Resultado*: **Firme**.
   - *Prueba*: La secuencia 1 → 2 → 3 → 2 → 1 → 0 coincide con `lifetime.txt` (caso 4), y el desensamblado de `AGGraphCreateShared` (0x1c2c40388) y `AG::Graph::Context::~Context` (0x1c2c270dc) confirma que esas instrucciones operan directa y exclusivamente sobre `[state + 0x1a4]`.
 
-### Sin resolver
-
 - **Hipótesis 2: La causa del fallo de `CFRelease` a mano es un double free**:
-  - *Resultado*: **Sin resolver**.
-  - *Controles y mediciones (hypotheses-round2.txt)*:
-    - *Control A*: Handle creado con `AGGraphCreate` sin wrapper de Swift, `CFRelease` tiene éxito limpio (exit 0, cabecera isa `0x01000001ff68ceb9`).
-    - *Control B*: Handle compartido creado con `AGGraphCreateShared`, sin liberar, termina el proceso limpiamente (exit 0).
-    - *Control C*: Handle compartido creado con `AGGraphCreateShared` sin wrapper de Swift, `CFRelease` tiene éxito limpio (exit 0).
-    - *Experimento (`share-release`)*: Tras `a = nil` en Swift, la memoria de `rawA` es reciclada (word0 pasa a ser un puntero de heap freelist `0x000054...`, perdiendo el isa de CoreFoundation). La llamada posterior `c_CFRelease(rawA)` falla en `CF_IS_OBJC + 64` con trampa PAC (`brk #0xc472`) o en `objc_release` con `EXC_BAD_ACCESS`.
-    - Aunque la cabecera del puntero en ese instante ya no es un objeto válido, la causa del fallo de la sonda permanece formalmente abierta y sin resolver para no extrapolar sin prueba adicional el modelo de propiedad de CoreFoundation.
+  - *Resultado*: **Firme (Causa identificada: Double Free)**.
+  - *Pruebas y mediciones (hypotheses-round2.txt y hypotheses-round3.txt)*:
+    - *Retain count de A con A vivo*: Justo antes de `a = nil`, `c_CFGetRetainCount(rawA)` es exactamente 1 (`rcOfAAfterCreate = 1`).
+    - *Liberación de A por ARC*: Al hacer `a = nil`, Swift ARC consume el retain count de A (1 -> 0), destruyendo el handle y reciclando su memoria al heap freelist (`word0` pasa a ser `0x000054...`).
+    - *Independencia de handles*: El retain count de un handle vivo B permanece en 1 tras la liberación de A (`rcOfB_init = 1 -> rcOfB_afterADrop = 1`), confirmando que cada handle gestiona su propio ciclo de vida.
+    - *Corrección de la afirmación previa*: La hipótesis anterior de que "soltar la referencia de Swift no baja el retain count de CoreFoundation" era un error de lectura de la sonda, que leía el retain count del handle B creyendo que era el de A tras haber soltado A.
+    - *Doble liberación*: En `share-release`, invocar `c_CFRelease(rawA)` después de `a = nil` constituye un segundo release sobre un objeto ya liberado por ARC (double free), provocando que `CF_IS_OBJC` lea memoria reciclada y dispare la trampa PAC en `brk #0xc472`.
+    - *Controles sin ARC*: Sin el wrapper de Swift, `CFRelease` sobre un handle creado por `AGGraphCreate` o `AGGraphCreateShared` termina limpiamente con código 0.
 
 ## Abierto
 
