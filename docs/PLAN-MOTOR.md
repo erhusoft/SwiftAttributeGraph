@@ -784,3 +784,40 @@ Fecha: 2026-11-15. Mac M1, macOS 15.7.9, Swift 6.2.4 (Xcode).
 - **Benchmark Nativo vs Propio (`/Users/erhusoft/NativeAttributeGraphBackendProbe/BENCH_NATIVO_VS_PROPIO.md`, `release`):** 3 razones más desfavorables (propio/nativo): `batch-writes` N=1.000 (**4.85x**, 101.45 ms vs 492.17 ms), `batch-writes` N=10.000 (**3.87x**, 1254.78 ms vs 4856.50 ms), `fan-out` N=1.000 (**3.05x**, 0.42 ms vs 1.29 ms).
 - **Optimización del camino caliente (`c1ed9a9`..`9497f00`, `release`, informe `/Users/erhusoft/NativeAttributeGraphBackendProbe/OPTIMIZACION_MOTOR.md`):** el perfil de `batch-writes` era 29,5 % exclusividad dinámica y ~43 % metadatos genéricos + `chkstk` del `value(of:)` sin especializar [O]. Cuatro cambios sin `unsafeFlags`: `@exclusivity(unchecked)` solo en release, lectura `@inlinable` sobre núcleo no genérico, bucles de aristas con un búfer por bucle en `NodeTable`, y atajo sin comparadores parciales. Frente a `f8de31b`: `batch-writes` 483,9 → 96,2 ms y 4.779 → 908 ms (0,96x/0,73x del nativo), `fan-out` 1,30 → 0,74 ms y 12,07 → 6,53 ms (1,72x/0,98x); todas las cargas mejoran (−10 % a −81 %); `PerformanceTests`+`IndirectPerformanceTests` razón mediana 0,37, máxima 0,89. 456 tests (debug) y 455 (release) en verde; oráculo 119/119 × 6.
 - **Segundo ciclo de optimización (`0b08db1`..`7f488a2`, `release`, informe `/Users/erhusoft/NativeAttributeGraphBackendProbe/OPTIMIZACION_MOTOR_2.md`):** el perfil de las cuatro cargas peores era 20–37 % metadatos genéricos (creación de nodos, `store` de reglas y `setValue` sin especializar) y ~14 % reasignar aristas en diamond [O]. Cinco cambios: creación y ejecución de reglas de cierre especializadas en el llamador con un `NodeType<Value>` compartido, `setValue` `@inlinable`, capacidad 2 en la primera arista, ranura de hilo solo si cambia y memoria de la última clave de `NodeType`. Razón propio/nativo final (N=1.000/10.000): `diamond-layers` 1,23x/0,85x (antes 1,80x/1,36x), `fan-out` 1,13x/0,63x (1,72x/0,98x), `equal-write-cut` 1,09x/0,55x (1,67x/0,87x), `create-inputs-rules` 0,69x/0,28x (1,33x/0,60x); todas las cargas mejoran frente a `2262174` (−7 % a −52 %); perf tests mediana 0,59, máxima 1,03 (`cut stops at rule 1`). 471 tests y oráculo 132/132 × 6 en verde.
+
+## 27. Comparación de valores no `Equatable`: bytes como criterio de paridad (decisión)
+
+**Decisión:** para un enum o un opcional con payload que no es `Equatable`, la comparación es **byte a byte**, como
+`AGCompareValues` nativo en los cuatro modos. Así está implementado en `ComparisonPlan` (`enumOperation`, commit `201b8e2`),
+sin `Mirror`. Antes se comparaba por caso y campos con `Mirror`, que costaba unos 2,4 µs por comparación frente a unos
+13 ns con bytes.
+
+**Por qué bytes:** es el criterio que podemos verificar contra el oráculo para cualquier tipo nuevo. Un falso «distinto»
+solo provoca un recálculo de más; un falso «igual» entre valores distintos no ocurre en los casos medidos.
+
+**Medido (sonda `compare-plan` y `compare-types`, `NativeProbe`, cuatro modos, nativo frente a motor):**
+
+| Caso | Nativo | Motor |
+|---|---|---|
+| `Int` igual / distinto | iguales / distintos | iguales / distintos |
+| `Double` 1.0 frente a 1.0 | iguales | iguales |
+| `Optional` `some(5)` frente a `some(5)` | iguales | iguales |
+| `Optional` `nil` frente a `some(0)` | distintos | distintos |
+| Clase, dos instancias con el mismo contenido | distintos | distintos |
+| `Array` con el mismo contenido, memoria separada | distintos | distintos |
+| `String` largo, memoria separada | distintos | distintos |
+| `0.0` frente a `-0.0` | distintos | distintos |
+| Struct sin relleno, campos iguales / distintos | iguales / distintos | iguales / distintos |
+| Struct `Int8`+`Int8`, campos iguales | iguales | iguales |
+| Struct `Int8`+`Int64` (con relleno), campos iguales | **distintos** (6 de 6) | **iguales** |
+
+**Abierto:** el relleno. El nativo compara también los bytes de relleno, que no son parte del valor, así que el resultado
+depende de la memoria. Hay dos opciones y no está elegida:
+- **Incluir el relleno:** igual que el nativo, pero el resultado no es determinista.
+- **Ignorar el relleno:** determinista, como las structs en `ComparisonPlan`; diverge del nativo solo en valores con
+  relleno, y solo en la dirección de recalcular de más.
+
+**Regla de trabajo:** ante un tipo nuevo, medirlo con la sonda nativa antes de suponer nada.
+
+**Pruebas:** `ComparisonEnumBytesTests` (nuevo) y `ComparisonPolicyTests` (expectativas corregidas: `String` y `-0.0`
+distintos, en lugar del supuesto campo a campo). Rendimiento: `ComparisonPlanMirrorPerformanceTests`.
