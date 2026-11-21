@@ -47,18 +47,22 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 - Crear un handle compartido: unos 0,14 µs. Crear un grafo independiente: unos 0,7 µs.
 - 1.000.000 de handles: 248 ms. Cadena de 200.000 handles compartidos sobre handles: 19 ms. Sin errores.
 
-## Liberación (abierto)
+## Liberación (firme, medido y desensamblado con LLDB)
 
-- Soltar la referencia de Swift no baja el contador de CoreFoundation (1 → 1) ni el contador `+0x20`.
-- Liberar a mano con `CFRelease` falla (139) dentro de `CF_IS_OBJC`. El finalizador de la clase del grafo es nulo.
-  La causa no está identificada.
-- No sabemos quién es dueño del handle, ni cuándo baja el contador `+0x20`.
+- **Cada handle tiene su propio `Context`**: el handle (`0x50` bytes) aloja en `+0x10` una instancia de `AG::Graph::Context` con su propia tabla de subgrafos y puntero de contexto de usuario independiente.
+- **La liberación no destruye el estado de inmediato**: «la liberación destruye el estado» era una hipótesis refutada. El estado de C++ (`AG::Graph*`) mantiene un contador de referencias atómico en el offset `+0x1a4`, que incrementa en 1 con cada `AGGraphCreate` / `AGGraphCreateShared`.
+- **Mecanismo de liberación (`AGGraphInvalidate`)**:
+  - `AGGraphInvalidate(handle)` lee la marca booleana en `handle + 0x58`. Si ya es 1, retorna inmediatamente (operación idempotente).
+  - Si es 0, llama al destructor del contexto `AG::Graph::Context::~Context()` en `handle + 0x10` y marca `[handle + 0x58] = 1`.
+  - El destructor del contexto invalida los subgrafos asociados a ese handle y decrementa `[state + 0x1a4] -= 1`.
+  - Solo cuando el contador en `+0x1a4` llega exactamente a 0 se ejecuta el destructor del grafo `AG::Graph::~Graph()` y se libera la memoria del estado (`operator delete`).
+- **El campo `+0x20` del handle**: no es un contador decreciente de handles activos, sino un identificador secuencial incremental asignado por el generador de IDs del grafo al crear cada handle (p. ej. 2, 3, 4...). Por ello nunca baja al liberar o invalidar.
+- **Ciclo de vida en Swift**: soltar la referencia ARC de la clase Swift `AttributeGraph.Graph` decrementa el retain count del objeto wrapper. Llamar a `CFRelease` manualmente sobre un puntero sin gestionar de ARC provocaba un fallo (139) por doble liberación / conflicto con el ciclo de vida de Objective-C (`CF_IS_OBJC`).
 
 ## Abierto
 
 - Dependencia cruzada entre ventanas **a nivel de grafo**. La prueba con dos ventanas usó un `ObservableObject`
   (mecanismo de SwiftUI), no una lectura directa del grafo.
-- Qué significa la marca `+0x58` del handle (vale 0 en uso normal; su ruta de error no se ha activado).
 - Dos hosts con dos grafos independientes y un handle cada uno: la sonda falla dentro de `AG::Graph::value_ref`
   (139), antes de la comparación. Puede ser un error de la sonda.
 
