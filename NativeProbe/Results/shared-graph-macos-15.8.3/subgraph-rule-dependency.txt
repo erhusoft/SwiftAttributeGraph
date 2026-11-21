@@ -1,0 +1,206 @@
+# Experimento: Dependencia de Regla respecto a su Subgrafo en Grafos Compartidos
+# Fecha: 2026-11-21
+# Sistema: macOS 15.8.3 (Darwin 24.3.0 arm64)
+# Módulo AttributeGraph UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+
+================================================================================
+HIPÓTESIS Y DISEÑO EXPERIMENTAL
+================================================================================
+Hipótesis:
+  Una regla depende del subgrafo que la contiene. Si se invalida solo el subgrafo
+  de una regla del creador (SG1), la lectura cruzada desde el compartido falla para
+  esa regla (R1) y sigue funcionando para la otra regla (R2 en SG2).
+  Si fallan las dos, el mecanismo es el contexto completo del handle, no la regla.
+
+Diseño (en procesos aislados por repetición, 10 repeticiones por celda):
+  1. G = Driver(); S = AGGraphCreateShared(G.graph).
+  2. Entrada común `commonInput = g.input(10)` creada en G.
+  3. SG1 = Subgraph(graph: G); SG2 = Subgraph(graph: G).
+  4. R1 en SG1 lee commonInput + 1; R2 en SG2 lee commonInput + 2.
+  5. Ninguna se lee antes de compartir (hasValueBeforeShare=no para ambas).
+  6. En S, readers independientes (readerR1 lee r1.value; readerR2 lee r2.value).
+  7. Operación de invalidación puntual: `sg1.invalidate()` (AGSubgraphInvalidate),
+     sin invocar AGGraphInvalidate sobre el contexto G.
+
+Telemetría capturada:
+  - cell, hasValR1Before, hasValR2Before, sg1Valid (vía AGSubgraphIsValid),
+    sg2Valid (vía AGSubgraphIsValid), readVia, target, código de salida y valor/mensaje.
+
+================================================================================
+TABLA RESUMEN DE LA MATRIZ (10 REPETICIONES POR CELDA)
+================================================================================
+| celda | descripción | SG1 | SG2 | leer por | target | exit | status | valor / mensaje |
+|---|---|---|---|---|---|---|---|---|
+| c1 | Invalidar SG1, leer R1 desde S | invalidated | valid | S | R1 | 134 | ABORT | precondition failure: accessing attribute in a different namespace: 536 |
+| c2 | Invalidar SG1, leer R2 desde S | invalidated | valid | S | R2 | 0 | OK | value=12 |
+| c3 | Sin invalidar nada, leer R1 desde S (control) | valid | valid | S | R1 | 0 | OK | value=11 |
+| c4 | Invalidar SG1, leer R1 desde G creador (control) | invalidated | valid | G | R1 | 139 | SIGSEGV | EXC_BAD_ACCESS (desreferencia de subgrafo liberado [0x0 + 0x1e0]) |
+
+================================================================================
+TELEMETRÍA CRUDA DE LAS DIEZ REPETICIONES POR CELDA
+================================================================================
+--- CELDA c1 (Invalidar SG1, leer R1 desde S) ---
+  Repetición 1: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 2: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 3: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 4: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 5: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 6: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 7: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 8: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 9: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+  Repetición 10: exit=134 (returncode=-6)
+    subgraph-case|cell=c1|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+
+--- CELDA c2 (Invalidar SG1, leer R2 desde S) ---
+  Repetición 1: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 2: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 3: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 4: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 5: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 6: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 7: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 8: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 9: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+  Repetición 10: exit=0 (returncode=0)
+    subgraph-case|cell=c2|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=S|target=R2
+    aboutToRead=true
+    value=12
+
+--- CELDA c3 (Sin invalidar nada, leer R1 desde S (control)) ---
+  Repetición 1: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 2: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 3: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 4: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 5: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 6: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 7: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 8: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 9: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+  Repetición 10: exit=0 (returncode=0)
+    subgraph-case|cell=c3|hasValR1Before=no|hasValR2Before=no|sg1Valid=true|sg2Valid=true|readVia=S|target=R1
+    aboutToRead=true
+    value=11
+
+--- CELDA c4 (Invalidar SG1, leer R1 desde G creador (control)) ---
+  Repetición 1: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 2: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 3: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 4: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 5: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 6: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 7: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 8: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 9: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+  Repetición 10: exit=139 (returncode=-11)
+    subgraph-case|cell=c4|hasValR1Before=no|hasValR2Before=no|sg1Valid=false|sg2Valid=true|readVia=G|target=R1
+    aboutToRead=true
+
+================================================================================
+DECISIÓN FORMAL Y CONCLUSIÓN
+================================================================================
+Criterio de decisión:
+  - c1 aborta (134) de forma 100 % estable (10 de 10 repeticiones).
+  - c2 funciona limpiamente (exit 0, value=12) de forma 100 % estable (10 de 10 repeticiones).
+  - c3 (control) funciona limpiamente (exit 0, value=11) en las 10 repeticiones.
+  - c4 (control) aborta con SIGSEGV (139) en las 10 repeticiones (desreferencia de subgrafo liberado en el creador).
+
+Decisión:
+  LA REGLA DEPENDE DE SU SUBGRAFO (HIPÓTESIS CONFIRMADA).
+  La invalidación puntual de un subgrafo específico del creador (SG1) destruye y libera
+  los descriptores de sus reglas asociadas, haciendo fallar únicamente las lecturas que
+  dependen de ese subgrafo (R1 en c1). Las reglas que residen en otros subgrafos vivos
+  del mismo creador (R2 en SG2 en c2) continúan funcionando de forma totalmente limpia.
+  Queda descartado que el mecanismo de invalidación opere a nivel de contexto completo
+  del handle; el ciclo de vida y la pertenencia residen en la jerarquía granular de Subgraph.

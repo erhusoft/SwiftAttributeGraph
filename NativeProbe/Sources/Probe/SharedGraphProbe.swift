@@ -778,6 +778,91 @@ func runSharedGraphLifetimeProbeIfRequested() {
         c_CFRelease(rawG)
         exit(0)
 
+    case "subgraph-c1", "subgraph-c2", "subgraph-c3", "subgraph-c4":
+        setbuf(stdout, nil)
+        var g: Driver? = Driver()
+        let rawG = unsafeBitCast(g!.graph, to: UnsafeRawPointer.self)
+        let s = c_AGGraphCreateShared(g!.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let sRoot = AttributeGraph.Subgraph(graph: s)
+
+        // Common input created in G
+        let commonInput: Handle<Int64> = g!.input(10)
+
+        // SG1 and SG2 created in G
+        let sg1 = AttributeGraph.Subgraph(graph: g!.graph)
+        let sg2 = AttributeGraph.Subgraph(graph: g!.graph)
+
+        // R1 in SG1, R2 in SG2
+        let r1: Handle<Int64> = sg1.apply {
+            Handle(NativeRule(body: { commonInput.value + 1 }))
+        }
+        let r2: Handle<Int64> = sg2.apply {
+            Handle(NativeRule(body: { commonInput.value + 2 }))
+        }
+
+        // None is read before share (hasValue=no)
+        let hasValR1Before = c_AGGraphHasValue(r1.identifier.rawValue)
+        let hasValR2Before = c_AGGraphHasValue(r2.identifier.rawValue)
+
+        // Readers created in S
+        let readerR1: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: { r1.value }))
+        }
+        let readerR2: Handle<Int64> = sRoot.apply {
+            Handle(NativeRule(body: { r2.value }))
+        }
+
+        let cellName = subcase.replacingOccurrences(of: "subgraph-", with: "")
+
+        switch cellName {
+        case "c1":
+            // c1: Invalidate SG1, read R1 from S
+            sg1.invalidate()
+            let sg1Valid = sg1.isValid
+            let sg2Valid = sg2.isValid
+            print("subgraph-case|cell=c1|hasValR1Before=\(hasValR1Before ? "yes" : "no")|hasValR2Before=\(hasValR2Before ? "yes" : "no")|sg1Valid=\(sg1Valid)|sg2Valid=\(sg2Valid)|readVia=S|target=R1")
+            print("aboutToRead=true")
+            let val = readerR1.value
+            print("value=\(val)")
+            exit(0)
+
+        case "c2":
+            // c2: Invalidate SG1, read R2 from S
+            sg1.invalidate()
+            let sg1Valid = sg1.isValid
+            let sg2Valid = sg2.isValid
+            print("subgraph-case|cell=c2|hasValR1Before=\(hasValR1Before ? "yes" : "no")|hasValR2Before=\(hasValR2Before ? "yes" : "no")|sg1Valid=\(sg1Valid)|sg2Valid=\(sg2Valid)|readVia=S|target=R2")
+            print("aboutToRead=true")
+            let val = readerR2.value
+            print("value=\(val)")
+            exit(0)
+
+        case "c3":
+            // c3 (control): Without invalidating anything, read R1 from S
+            let sg1Valid = sg1.isValid
+            let sg2Valid = sg2.isValid
+            print("subgraph-case|cell=c3|hasValR1Before=\(hasValR1Before ? "yes" : "no")|hasValR2Before=\(hasValR2Before ? "yes" : "no")|sg1Valid=\(sg1Valid)|sg2Valid=\(sg2Valid)|readVia=S|target=R1")
+            print("aboutToRead=true")
+            let val = readerR1.value
+            print("value=\(val)")
+            exit(0)
+
+        case "c4":
+            // c4 (control): Invalidate SG1, read R1 from G (creator)
+            sg1.invalidate()
+            let sg1Valid = sg1.isValid
+            let sg2Valid = sg2.isValid
+            print("subgraph-case|cell=c4|hasValR1Before=\(hasValR1Before ? "yes" : "no")|hasValR2Before=\(hasValR2Before ? "yes" : "no")|sg1Valid=\(sg1Valid)|sg2Valid=\(sg2Valid)|readVia=G|target=R1")
+            print("aboutToRead=true")
+            let val = r1.value
+            print("value=\(val)")
+            exit(0)
+
+        default:
+            exit(2)
+        }
+
     default:
         exit(2)
     }
