@@ -194,6 +194,7 @@ final class Driver {
         if raw == 2 /* AGAttributeNil, measured as 2 */ { return "nil" }
         return raw == handle?.identifier.rawValue ? "self" : "other"
     }
+    func updateBody<V>(_ context: StatefulHandleContext<V>, _ body: () -> Void) { context.raw.update(body: body) }
     func currentWasModified() -> Bool { c_AGGraphCurrentAttributeWasModified() }
     func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
         c_AGGraphGetValue(attribute.identifier, options, Metadata(V.self))
@@ -481,6 +482,7 @@ final class Driver {
         guard let current = Graph.currentAttribute else { return "nil" }
         return current == handle?.erased ? "self" : "other"
     }
+    func updateBody<V>(_ context: StatefulHandleContext<V>, _ body: () -> Void) { context.box.inner.update(body: body) }
     func currentWasModified() -> Bool { Graph.currentWasModified }
     func read<V>(_ attribute: Handle<V>, options: UInt32) -> V {
         graph.value(of: attribute, options: Graph.ReadOptions(rawValue: options))
@@ -856,3 +858,4 @@ graphOnInvalidationScenario()
 graphOnInvalidationSubgraphScenario()
 graphOnUpdateScenario()
 graphOnUpdateNeedsScenario()
+updateBodyOracleScenario()

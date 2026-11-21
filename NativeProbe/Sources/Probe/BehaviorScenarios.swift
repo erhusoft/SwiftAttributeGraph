@@ -3177,3 +3177,36 @@ func graphOnUpdateNeedsScenario() {
     let afterRequest = notices
     print("graph-on-update-needs|afterRequest=\(afterRequest)")
 }
+
+/// `RuleContext.update(body:)` (steps 1 and 2): inside the body the current attribute is the context's, and a dependency read
+/// inside it belongs to the context's attribute.
+func updateBodyOracleScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let x: Handle<Int64> = d.input(5)
+    var saved: StatefulHandleContext<Int64>? = nil
+    var runsA = 0
+    let a: Handle<Int64> = d.statefulRule(initialValue: 0) { ctx in
+        runsA += 1
+        if !ctx.hasValue { ctx.value = 0 }
+        saved = ctx
+    }
+    _ = d.read(a)
+    var runsB = 0
+    var inside = ""
+    let b: Handle<Int64> = d.rule {
+        runsB += 1
+        if let ctx = saved {
+            d.updateBody(ctx) {
+                inside = d.currentAttributeState(is: a)
+                _ = d.read(x)
+            }
+        }
+        return 1
+    }
+    _ = d.read(b)
+    d.write(6, to: x)
+    _ = d.read(a)
+    _ = d.read(b)
+    print("update-body|inside=\(inside)|runsA=\(runsA)|runsB=\(runsB)")
+}

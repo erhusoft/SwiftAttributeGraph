@@ -153,6 +153,7 @@ SCENARIOS = [
     "graph-on-invalidation-subgraph",
     "graph-on-update",
     "graph-on-update-needs",
+    "update-body",
 ]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
