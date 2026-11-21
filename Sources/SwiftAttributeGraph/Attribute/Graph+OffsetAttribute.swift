@@ -41,6 +41,18 @@ extension Graph {
         makeProjectedAttribute(of: source, project: project, isEqual: ==)
     }
 
+    /// Creates an indirect attribute with `offset` metadata spanning from `offset` to the end of `Source`.
+    ///
+    /// - Note: Defaults `size` to `MemoryLayout<Source>.size - offset`.
+    public func makeOffsetIndirect<Source: BitwiseCopyable>(
+        of source: Attribute<Source>,
+        offset: Int
+    ) -> Attribute<Source> {
+        let sourceSize = MemoryLayout<Source>.size
+        precondition(offset >= 0 && offset <= sourceSize, "offset \(offset) exceeds source size \(sourceSize)")
+        return makeOffsetIndirect(of: source, offset: offset, size: sourceSize - offset)
+    }
+
     /// Creates an indirect attribute with `(offset, size)` metadata for native-style edge-level range comparison.
     ///
     /// - Note: Returns `Attribute<Source>` (the full value), while downstream consumers are only dirtied when bytes
