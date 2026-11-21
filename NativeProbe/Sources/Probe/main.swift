@@ -301,6 +301,7 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { let r = attribute.changedValue(); return (r.value, r.changed) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
     func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
     func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { c_AGGraphGetAttributeSubgraph2(attribute.identifier) == nil }
@@ -576,6 +577,7 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func changedValueOf<V>(_ attribute: Handle<V>) -> (V, Bool) { (graph.value(of: attribute), false) }
     func setValueResult<V>(_ attribute: Handle<V>, _ value: V) -> Bool { attribute.setValue(value) }
     func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
     func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { graph.subgraphOrNil(of: attribute) == nil }
@@ -841,3 +843,5 @@ subgraphObserversScenario()
 subgraphOrNilScenario()
 prefetchValueScenario()
 setValueResultScenario()
+changedValueOutsideRuleScenario()
+readOptionsEdgeScenario()

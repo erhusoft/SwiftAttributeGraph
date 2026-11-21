@@ -1,3 +1,8 @@
+/// Measured on macOS 15.8 (read-options-runs, inside a rule, source changed): raw 0 and raw 2 re-run the rule (a dependency
+/// edge is recorded); raw 4 and raw 6 do not (no edge). So the header name of bit 2 (`inputOptionsSyncMainRef`) does not
+/// describe its effect, and bit 4 (`incrementGraphVersion`) suppresses the edge. The names are the header's; the behaviour
+/// is the measured one.
+///
 /// The options of a value read (`AGValueOptions` in native AttributeGraph; the header gives it no Swift name, so the C
 /// name is the Swift name).
 public struct AGValueOptions: OptionSet, Hashable, Sendable {

@@ -3074,3 +3074,32 @@ func setValueResultScenario() {
     let changed = d.setValueResult(input, 3)
     print("set-value-result|first=\(first)|same=\(same)|changed=\(changed)")
 }
+
+/// `Attribute.changedValue(options:)` outside a rule: changed after a write, then unchanged on the next read.
+func changedValueOutsideRuleScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let input: Handle<Int64> = d.input(1)
+    let (_, c0) = d.changedValueOf(input)
+    d.write(2, to: input)
+    let (v1, c1) = d.changedValueOf(input)
+    let (_, c2) = d.changedValueOf(input)
+    print("changed-value|first=\(c0)|afterWrite=\(c1)|value=\(v1)|nextRead=\(c2)")
+}
+
+/// Read options by raw value inside a rule: does the rule re-run when its source changes?
+func readOptionsEdgeScenario() {
+    let d = Driver()
+    defer { d.close() }
+    var out: [String] = []
+    for option: UInt32 in [0, 2, 4, 6] {
+        let src: Handle<Int64> = d.input(1)
+        var runs = 0
+        let r: Handle<Int64> = d.rule { runs += 1; return d.read(src, options: option) + 1 }
+        _ = d.read(r)
+        d.write(2, to: src)
+        _ = d.read(r)
+        out.append("\(option)=\(runs)")
+    }
+    print("read-options-runs|" + out.joined(separator: "|"))
+}
