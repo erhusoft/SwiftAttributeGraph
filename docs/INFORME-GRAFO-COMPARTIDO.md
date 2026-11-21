@@ -241,6 +241,33 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 ---
 
+## Función de diseño (hipótesis)
+
+> [!NOTE]
+> Esta sección analiza las razones de diseño por las cuales Apple diseñó `AGGraphCreateShared` para usar múltiples entradas a un único grafo central en lugar de un grafo independiente por anfitrión (`Host`). Distingue explícitamente entre indicios estáticos de nombres, hipótesis de diseño y hechos medidos en runtime.
+
+1. **Indicios en símbolos y llamadores (SwiftUI / SwiftUICore)**:
+   - **Instancia raíz única (`AGGraphCreate`)**: En SwiftUI existe un único punto de creación del grafo base por proceso, inicializado de forma perezosa y única en `closure #1 in variable initialization expression of static SwiftUI.GraphHost.(sharedGraph in _F9F204BD2F8DB167A76F17F3FB1B3335) : __C.AGGraphRef` (`0x1e767bf4c`). *[INDICIO]*: Sugiere centralización de la memoria reactiva a nivel de aplicación.
+   - **Múltiples entradas compartidas (`AGGraphCreateShared`)**: Invocado directamente en `SwiftUI.GraphHost.Data.init() -> SwiftUI.GraphHost.Data` (`0x1e7679388`), que obtiene un handle compartido de `GraphHost.sharedGraph` y crea inmediatamente su propio `_AGSubgraphCreate` (`rootSubgraph`). *[INDICIO]*: Cada subsistema (`ViewGraph`, `GestureGraph`, `CAHostingLayer`) opera como un host con su propia jerarquía de subgrafos locales montada sobre la misma base.
+   - **Menciones a reciclaje y control de hosts**: Símbolos como `isHiddenForReuse` (`SwiftUI.GraphHost.isHiddenForReuseDidChange()`), `blockedGraphHosts` (`SwiftUI.(blockedGraphHosts in _F9F204BD2F8DB167A76F17F3FB1B3335)`) y `setNeedsUpdate(mayDeferUpdate:values:)`. *[INDICIO]*: Sugieren mecanismos de reciclaje de anfitriones y coordinación centralizada de transacciones.
+
+2. **Evaluación de hipótesis frente a medidas directas**:
+   - **Hipótesis A (Aislamiento — un host no ve los cambios de otro)**:
+     - **Estado**: *Descartada / refutada a nivel de datos*.
+     - **Fundamento**: Las mediciones directas (E1/c4 y F1/F2) demostraron que los atributos creados en un handle son legibles y evaluables desde otro handle compartido a través del mismo storage central. No existe un aislamiento estático de namespace; el aislamiento observable es únicamente de pertenencia a subgrafos (`rootSubgraph`).
+   - **Hipótesis B (Coordinación — los hosts comparten el ciclo de actualización)**:
+     - **Estado**: *No distinguida por las medidas actuales (Hipótesis abierta)*.
+     - **Fundamento**: Aunque existen indicios en símbolos (`blockedGraphHosts`, `finishTransactionUpdate`), no se ha medido en nativo si una mutación en un host despierta automáticamente o comparte el ciclo de paso de renderizado con otro sin un puente de vistas (como `ObservableObject`).
+   - **Hipótesis C (Reutilización de memoria — los hosts reducen el coste de memoria por host)**:
+     - **Estado**: *Apoyada con medida directa en runtime (10 repeticiones)*.
+     - **Referencia**: `Results/shared-graph-macos-15.8.3/design-purpose.txt`.
+     - **Medida (RSS con `mach_task_basic_info`, 1.000 instancias)**:
+       - Grafos independientes (`AGGraphCreate`): $\Delta$RSS mediana de **+9.256.960 bytes** (~9,26 KB por grafo).
+       - Handles compartidos (`AGGraphCreateShared`): $\Delta$RSS mediana de **+393.216 bytes** (~0,39 KB por handle).
+     - **Conclusión**: Crear un handle compartido consume un **95,8 % menos de memoria residente (RSS)** (~23.5x más ligero), evitando replicar la tabla compartida `_shared_table_bytes`, tablas hash y buffers de asignación de `AG::Graph`.
+
+---
+
 ## Conclusiones para la arquitectura del motor
 
 - **Modelo idéntico al de SwiftUI**: SwiftUI mantiene un único estado central `AG::Graph` por proceso y entrega handles ligeros (`AGGraphCreateShared`) a cada consumidor de UI.
