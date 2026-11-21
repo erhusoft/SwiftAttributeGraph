@@ -103,3 +103,15 @@ Pendiente de decisión del dueño del proyecto: aceptar esta forma (handle reenv
 Conclusión: no hay un uso confirmado de `AGGraphCreateShared` en SwiftUI ni en SwiftUICore. La propuesta del handle
 reenviador no depende de ese uso, pero tampoco queda justificada por él. Antes de implementarla hay que encontrar un
 llamador real, o decidir la forma sin ese dato.
+
+## 11. Búsqueda de referencias (2026-11-20)
+
+- **Importaciones de SwiftUI**: el binario importa 73 símbolos de AttributeGraph. `AGGraphCreateShared` **no** está entre
+  ellos (la búsqueda sí encuentra otros de creación, como `AGGraphCreateIndirectAttribute`). SwiftUI no puede llamarla
+  directamente.
+- **Desensamblado de SwiftUI y de SwiftUICore**: ninguna referencia por nombre C, nombre Swift ni nombre mangled.
+- **AttributeGraph**: solo su definición.
+
+Conclusión: en los binarios que tenemos, nadie llama a `AGGraphCreateShared`. El grafo compartido, por tanto, no es
+necesario para SwiftUI en macOS 15.8. Recomendación: **aplazar las fases 2 a 4** (el handle reenviador incluido) y
+dejarlas documentadas, en lugar de implementarlas sin un uso real que las justifique.
