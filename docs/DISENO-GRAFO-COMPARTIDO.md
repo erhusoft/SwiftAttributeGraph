@@ -138,3 +138,14 @@ Virtualization no importa ningún símbolo de AttributeGraph, así que esa atrib
 Conclusión: ningún cliente del sistema que hemos podido comprobar importa `AGGraphCreateShared`. Puede ser parte de la API
 exportada para otros clientes (de terceros o herramientas internas), o un uso por búsqueda dinámica (`dlsym`) que no se ve
 en las importaciones. No está resuelto, y el handle reenviador sigue aplazado.
+
+## 13. Referencia: OpenAttributeGraph 0.5.0 (`~/OpenAttributeGraph-0.5.0`)
+
+- `OAGGraphCreateShared(graph)` crea un objeto de referencia nuevo cuyo contexto apunta al mismo `OAG::Graph` (no un grafo nuevo).
+- Lleva un contador de referencias dentro del grafo (`[graph+0x10c]`): sube al crear la referencia compartida y, al liberar, el grafo se borraría cuando llegue a cero. El borrado está comentado en el código: no está implementado.
+- Si la referencia original está invalidada, lanza `invalidated graph`.
+- Su prueba de compatibilidad solo crea y descarta el grafo compartido; no comprueba comportamiento.
+
+Coincide con la lectura del desensamblado de Apple (sección 1 y la lectura de `AGGraphCreateShared`): otro handle sobre el mismo
+estado, con cuenta de referencias. Es una reimplementación de terceros: pista, no prueba. Su contador y su liberación están
+incompletos, así que no se copian sin medirlos en Apple.
