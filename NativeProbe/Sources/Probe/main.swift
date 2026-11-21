@@ -301,6 +301,7 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
     func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { c_AGGraphGetAttributeSubgraph2(attribute.identifier) == nil }
     func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
     func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
@@ -574,6 +575,7 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func prefetch<V>(_ attribute: Handle<V>) { attribute.prefetchValue() }
     func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { graph.subgraphOrNil(of: attribute) == nil }
     func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
     func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
@@ -835,3 +837,4 @@ anyWeakAttributeScenario()
 deferringScenario()
 subgraphObserversScenario()
 subgraphOrNilScenario()
+prefetchValueScenario()

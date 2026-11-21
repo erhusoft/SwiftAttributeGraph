@@ -3046,3 +3046,20 @@ func subgraphOrNilScenario() {
     let deadIsNil = d.subgraphOrNilIsNil(x)
     print("subgraph-or-nil|liveIsNil=\(liveIsNil)|deadIsNil=\(deadIsNil)")
 }
+
+/// `AGGraphPrefetchValue` (`Attribute.prefetchValue()`): a dirty rule is brought up to date by the prefetch, so the next
+/// read does not run it again.
+func prefetchValueScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let src: Handle<Int64> = d.input(1)
+    var runs = 0
+    let r: Handle<Int64> = d.rule { runs += 1; return d.read(src) + 1 }
+    _ = d.read(r)
+    d.write(2, to: src)
+    let before = runs
+    d.prefetch(r)
+    let afterPrefetch = runs
+    let value = d.read(r)
+    print("prefetch|runsBefore=\(before)|runsAfterPrefetch=\(afterPrefetch)|runsAfterRead=\(runs)|value=\(value)")
+}

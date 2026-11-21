@@ -143,7 +143,9 @@ SCENARIOS = [
     "any-weak",
     "deferring",
     "subgraph-observers",
-    "subgraph-or-nil",]
+    "subgraph-or-nil",
+    "prefetch",
+]
 SYSTEM_IMAGE = "/System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph"
 
 
