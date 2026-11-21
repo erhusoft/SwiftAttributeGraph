@@ -4,54 +4,52 @@ Resultados de comprobación de hipótesis (macOS 15.8.3, AttributeGraph nativo)
 Estado: Firme.
 Prueba concreta:
 - Desensamblado con lldb de AGGraphCreateShared (0x1c2c4033c) y AG::Graph::Context::Context(AG::Graph&) (0x1c2c26f64):
-  1. AGGraphCreateShared llama a _CFRuntimeCreateInstance(..., size=0x50), inicializa la instancia y llama a AG::Graph::Context::Context(AG::Graph&) pasando x0 = handle + 0x10.
-  2. Dentro de AG::Graph::Context::Context (0x1c2c26f7c), se llama a AGMakeUniqueID (0x1c2c26470).
-  3. El valor devuelto por AGMakeUniqueID se almacena en [x19, #0x10] (offset 0x10 del Context, que corresponde exactamente al offset 0x20 del handle CF).
-  4. AGMakeUniqueID ejecuta atómicamente un incremento monótono global:
-     0x1c2c26470: adrp  x8, AGMakeUniqueID::counter
-     0x1c2c26478: mov   w9, #0x1
-     0x1c2c2647c: ldadd x9, x0, [x8] ; fetch and add 1
+  1. En AGGraphCreateShared (0x1c2c403bc), el handle se inicializa pasando x0 = handle + 0x10 a AG::Graph::Context::Context(AG::Graph&).
+  2. Dentro de AG::Graph::Context::Context:
+     0x1c2c26f74: mov  x19, x0               ; x19 = handle + 0x10
+     0x1c2c26f7c: bl   0x1c2c26470           ; AGMakeUniqueID
+     0x1c2c26f84: str  x0, [x19, #0x10]      ; escribe el ID en (handle + 0x10) + 0x10 = handle + 0x20
+  3. AGMakeUniqueID (0x1c2c26470) ejecuta atómicamente un incremento monótono global:
+     0x1c2c26470: adrp x8, AGMakeUniqueID::counter
+     0x1c2c26478: mov  w9, #0x1
+     0x1c2c2647c: ldadd x9, x0, [x8]        ; atomic fetch-and-add de 1
      0x1c2c26480: ret
-  Por diseño, AGMakeUniqueID es un generador monótono atómico global de IDs únicos. Nunca decrementa al liberar o invalidar.
+  Se confirma de forma exacta que el constructor de Context escribe el resultado de AGMakeUniqueID en handle+0x20, por lo que es un identificador secuencial monótono global que nunca decrementa al liberar o invalidar.
 
-=== Hipótesis 2: El fallo de CFRelease a mano es un double free ===
-Estado: Refutada (la hipótesis de double free; la causa real es incompatibilidad de cabecera en el modelo de objetos).
+=== Hipótesis 2: La causa del fallo de CFRelease es un double free ===
+Estado: Sin resolver.
 Prueba concreta:
-- Ejecución y rastreo en lldb de CFRelease sobre un handle recién creado con AGGraphCreate() (sin liberar previamente y con retain count 1):
-  1. En un handle recién creado de C puro, llamar a CFRelease(g) tiene éxito limpio (retain count 1 -> 0).
-  2. En Swift, cuando se obtiene un AttributeGraph.Graph a través de ARC y luego se le aplica c_CFRelease(rawPtr):
-     En lldb se comprobó que el crash ocurre con EXC_BREAKPOINT (código 1, subcode 0x191806e20) en CoreFoundation`CF_IS_OBJC + 64:
-     0x191806dec: ldr   x9, [x1]        ; lee la cabecera isa en el offset 0
-     0x191806e0c: autda x16, x17        ; valida firma PAC del puntero de clase
-     0x191806e18: cmp   x16, x17
-     0x191806e20: brk   #0xc472         ; atrapa porque la firma PAC no coincide (header no encaja)
-  3. No se trata de un "double free" sobre memoria liberada, sino de una trampa de autenticación de punteros (PAC) en CF_IS_OBJC al evaluar si la cabecera del objeto CFRuntime es una clase Objective-C válida puenteada con Swift.
+- En lldb, al forzar c_CFRelease(rawPtr) desde Swift sobre un handle de AttributeGraph.Graph, el proceso se detiene con EXC_BREAKPOINT (código 1, subcode 0x191806e20) en CoreFoundation`CF_IS_OBJC + 64:
+  0x191806dec: ldr   x9, [x1]        ; lee la cabecera isa
+  0x191806e0c: autda x16, x17        ; autentica firma PAC del puntero de clase
+  0x191806e18: cmp   x16, x17
+  0x191806e20: brk   #0xc472         ; trampa PAC
+- El fallo observado en la comprobación de autenticación de punteros (PAC) en CF_IS_OBJC indica que la cabecera del puntero no encaja con la ruta de liberación esperada en ese punto, pero esto no descarta ni demuestra que exista un double free subyacente. La causa sigue sin identificarse de forma concluyente.
 
 === Hipótesis 3: El caso 2 falla porque el contexto se destruye antes de materializar el enlace ===
 Estado: Firme.
 Prueba concreta:
-- Desensamblado y rastreo en lldb de AG::Graph::input_value_ref_slow (0x1c2c2ae54):
-  1. Al evaluar una regla en el handle compartido que lee un input de g1 (attribute id 536), input_value_ref_slow consulta la tabla compartida de nodos AG::data::_shared_table_bytes (0x1c2c2ae90).
-  2. En 0x1c2c2aed8 lee la entrada del nodo [x9, x8] y en 0x1c2c2aee0 lee el puntero al contexto/dueño registrado [node + 0x28].
-  3. Compara en 0x1c2c2aee4 el contexto del nodo contra el contexto de la lectura actual (cmp x8, x24).
-  4. Si los contextos son diferentes (porque g1 fue liberado/invalidado y su contexto local fue destruido por Context::~Context()), la comprobación falla y salta a 0x1c2c2b210:
+- Desensamblado y parada en lldb de AG::Graph::input_value_ref_slow (0x1c2c2ae54):
+  1. Durante la lectura de un atributo no evaluado previamente (attribute id 536), input_value_ref_slow consulta la entrada del nodo en la tabla compartida AG::data::_shared_table_bytes:
+     0x1c2c2aed0: and x8, x27, #0xfffffe00
+     0x1c2c2aed4: ldr x9, [x21]
+     0x1c2c2aed8: ldr x8, [x9, x8]
+     0x1c2c2aedc: cbz x8, 0x1c2c2b210
+     0x1c2c2aee0: ldr x8, [x8, #0x28]        ; lee el contexto dueño del nodo
+     0x1c2c2aee4: cmp x8, x24                ; compara contra el contexto actual de la lectura
+     0x1c2c2aee8: b.ne 0x1c2c2b210           ; si no coinciden, salta a la ruta de aborto
+  2. En la prueba lldb de `share-fault read-after-first-freed`, el breakpoint en 0x1c2c2b210 se activa exactamente (`stop reason = breakpoint 2.1` en `0x1c2c2b210`):
+     0x1c2c2b210: str  x27, [sp]
      0x1c2c2b214: adrp x0, "accessing attribute in a different namespace: %u"
      0x1c2c2b21c: bl   AG::precondition_failure
-  5. Cuando la regla se evalúa antes de liberar g1 (caso 1), el enlace de dependencia entre contextos ya queda establecido en la tabla de aristas del grafo compartido; cuando no se evalúa (caso 2), el contexto creador desaparece y el lector no puede validar el atributo a través del contexto destruido.
+  3. Queda verificado en lldb que la instrucción en 0x1c2c2aee4 detecta la discrepancia de contexto generada tras la destrucción del contexto del grafo creador liberado, derivando en el salto a 0x1c2c2b214.
 
 === Hipótesis 4: Las lecturas ref0..ref2 y refAfterS1Invalidate son el campo +0x1a4 ===
 Estado: Firme.
 Prueba concreta:
-- Comparación en lldb y sonda directa entre el offset desensamblado y los valores del caso 4:
-  1. En AGGraphCreateShared (0x1c2c40388), la instrucción de incremento de referencias al estado es:
-     ldr w8, [x20, #0x1a4]; add w8, w8, #1; str w8, [x20, #0x1a4]
-  2. En AG::Graph::Context::~Context (0x1c2c270d8), la instrucción de decremento y verificación de destrucción es:
-     ldr w8, [x0, #0x1a4]; subs w8, w8, #1; str w8, [x0, #0x1a4]
-  3. En la prueba standalone (test_h4_standalone.swift) y caso 4 de lifetime.txt, leer rawG1.advanced(by: 0x10).advanced(by: 0x1a4).load(as: UInt32.self) arroja idénticos valores paso a paso:
-     ref0 = 1 (tras crear g1)
-     ref1 = 2 (tras crear s1)
-     ref2 = 3 (tras crear s2)
-     refAfterS2Invalidate = 2
-     refAfterS1Invalidate = 1
-     refAfterG1Invalidate = 0 (al llegar a 0 se ejecuta AG::Graph::~Graph y operator delete).
-  4. Queda demostrado que ref0..ref2 y refAfterS1Invalidate leen exactamente el campo +0x1a4 del estado AG::Graph.
+- La secuencia de refcounts 1 → 2 → 3 → 2 → 1 → 0 coincide con NativeProbe/Results/shared-graph-macos-15.8.3/lifetime.txt (caso 4).
+- Desensamblado en lldb confirma las operaciones directas sobre el offset +0x1a4 del estado AG::Graph:
+  - Incremento en AGGraphCreateShared (0x1c2c40388):
+    ldr w8, [x20, #0x1a4]; add w8, w8, #1; str w8, [x20, #0x1a4]
+  - Decremento en AG::Graph::Context::~Context (0x1c2c270dc):
+    ldr w8, [x0, #0x1a4]; subs w8, w8, #1; str w8, [x0, #0x1a4]
