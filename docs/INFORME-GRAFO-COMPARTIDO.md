@@ -176,20 +176,20 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 1. **Significado y ruta de error de la marca `+0x58`**:
    - **Estado**: Firme.
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt` (`probe-58`, desensamblado LLDB).
-   - **Significado**: Es el campo booleano `is_invalidated` (1 byte) del handle `AGGraphStorage`.
-   - **Ciclo de vida medido**:
-     - Creado en `AGGraphCreateShared`: inicializado a `0` (`0x1c2c403f4: strb wzr, [x19, #0x58]`).
-     - Al invalidar (`AGGraphInvalidate`): pasa a `1` (`0x1c2c40480: strb w8, [x19, #0x58]`).
-     - En subsiguientes llamadas a `AGGraphInvalidate`: guardia de idempotencia (`0x1c2c4045c: tbnz w8, #0x0`), retorna de inmediato sin destruir el contexto de nuevo.
-   - **Guardia de finalización**: El finalizador CoreFoundation de la clase (`klass->finalize`, `0x1c2c42eac`) comprueba `ldrb w8, [x0, #0x58]`. Si es `1` (ya invalidado), retorna inmediatamente sin destruir el contexto; si es `0`, ejecuta `AG::Graph::Context::~Context()`. Esto previene dobles destrucciones de contexto entre `AGGraphInvalidate` y `CFRelease`.
-   - **Rutas de error**: Si `handle + 0x58 == 1`, las siguientes funciones saltan a su bloque frío y abortan el proceso con `AG::precondition_failure("invalidated graph")`:
-     - `AGGraphCreateShared` (`0x1c2c40378`)
-     - `AGGraphSetNeedsUpdate` (`0x1c2c406fc`)
-     - `AGGraphStopTracing` (`0x1c2c42d14`)
-     - `AGGraphSyncTracing` (`0x1c2c42d58`)
-     - `AGGraphCopyTracePath` (`0x1c2c42d9c`)
-     - `AGGraphDescription` (`0x1c2c42e00`)
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/marker-58.txt` (`test_marker58`, desensamblado verificado en macOS 15.8.3).
+   - **Significado**: Es el campo booleano `is_invalidated` (1 byte / uint8_t) de la estructura del handle `AGGraphStorage`.
+   - **Ciclo de vida medido (10/10 repeticiones en procesos aislados)**:
+     - Recién creado (`AGGraphCreateShared`): valor inicial `0` (`0x1b1a6c3f4: strb wzr, [x19, #0x58]`).
+     - Al invalidar 1 vez (`AGGraphInvalidate`): pasa a `1` (`0x1b1a6c480: strb w8, [x19, #0x58]`, donde `w8=1`).
+     - Al invalidar 2ª vez (`AGGraphInvalidate`): permanece en `1`.
+     - Secuencia medida: `0 -> 1 -> 1` con `exit=0` en el 100 % de los casos (10/10).
+   - **Guardia de idempotencia y prevención de doble liberación**:
+     - En `AGGraphInvalidate`: lee `0x1b1a6c458: ldrb w8, [x0, #0x58]` y comprueba `0x1b1a6c45c: tbnz w8, #0, ret`. Si ya vale 1, retorna inmediatamente sin volver a ejecutar la destrucción del contexto.
+     - En el finalizador CoreFoundation de la clase (`graph_type_id::finalize`, `0x1b1a6eeac`): comprueba `ldrb w8, [x0, #0x58]`. Si es 1 (ya invalidado explícitamente), salta y omite `AG::Graph::Context::~Context()`. Si es 0, destruye el contexto. Esto garantiza inmunidad ante dobles liberaciones entre `AGGraphInvalidate` y `CFRelease`.
+   - **Rutas de error y precondición**:
+     - `Context::from_cf` (`0x1b1a6c294`): lee `ldrb w8, [x0, #0x58]` y compara `cmp w8, #0x1`. Si es 1, salta a `from_cf.cold.1` (`0x1b1a7e70c`) abortando con `AG::precondition_failure("invalidated graph")`.
+     - Más de 20 puntos de entrada de la API pública (`_AGGraphSetContext` en `0x1b1a6c494`, `_AGGraphGetContext` en `0x1b1a6c4b8`, `_AGGraphSetNeedsUpdate` en `0x1b1a6c6fc`, `_AGGraphCreateShared` en `0x1b1a6c378`, etc.) validan este byte antes de operar.
+     - Comprobado en probe independiente (10/10 repeticiones): invocar `AGGraphSetContext` tras invalidar dispara de forma consistente el aborto con código `134` (`SIGABRT`) y mensaje `precondition failure: invalidated graph`.
 
 2. **Causa raíz del fallo en la prueba de dos hosts con dos grafos independientes**:
    - **Estado**: Firme.
