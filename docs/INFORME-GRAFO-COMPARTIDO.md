@@ -67,23 +67,19 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 - **Hipótesis 1: El campo `+0x20` es un identificador secuencial que no decrementa**:
   - *Resultado*: **Firme**.
-  - *Prueba*: Desensamblado de `AGGraphCreateShared` (0x1c2c4033c) y `AG::Graph::Context::Context(AG::Graph&)` (0x1c2c26f64). Al inicializar el contexto (0x1c2c26f7c), se invoca `AGMakeUniqueID` (0x1c2c26470) y su resultado se almacena en `[context + 0x10]` (que corresponde exactamente al offset `handle + 0x20`). `AGMakeUniqueID` es un generador atómico global monótono (`ldadd` de 1 sobre un contador global), por lo que nunca decrementa al liberar o invalidar.
+  - *Prueba*: Desensamblado en lldb de `AGGraphCreateShared` (0x1c2c403bc) y `AG::Graph::Context::Context(AG::Graph&)` (0x1c2c26f64). Al inicializar el contexto (0x1c2c26f7c), se invoca `AGMakeUniqueID` (0x1c2c26470) y en 0x1c2c26f84 se escribe en `[x19, #0x10]` (que es `handle + 0x20`). `AGMakeUniqueID` ejecuta un `ldadd` atómico de 1 sobre un contador global, por lo que es un identificador monótono que nunca decrementa al liberar o invalidar.
 - **Hipótesis 3: El caso 2 falla porque el contexto se destruye antes de materializar el enlace**:
   - *Resultado*: **Firme**.
-  - *Prueba*: Desensamblado de `AG::Graph::input_value_ref_slow` (0x1c2c2ae54). Al resolver el nodo de entrada en `AG::data::_shared_table_bytes`, en 0x1c2c2aee0 se lee el contexto registrado `[node + 0x28]` y en 0x1c2c2aee4 se compara contra el contexto actual (`cmp x8, x24`). Si el contexto original fue destruido por la liberación del creador, los contextos no coinciden y salta a 0x1c2c2b214 emitiendo `accessing attribute in a different namespace: %u`. Al evaluar antes de liberar (caso 1), la arista queda enlazada en la tabla compartida y no vuelve a pasar por la validación fallida.
+  - *Prueba*: Desensamblado y comprobación en lldb de `AG::Graph::input_value_ref_slow` (0x1c2c2ae54). En 0x1c2c2aee0 lee el contexto dueño registrado `[node + 0x28]` y en 0x1c2c2aee4 lo compara con el contexto actual (`cmp x8, x24`). Al haber sido destruido el contexto creador, no coinciden y en 0x1c2c2aee8 salta a 0x1c2c2b210, activando `AG::precondition_failure` con `"accessing attribute in a different namespace: %u"`.
 - **Hipótesis 4: Las lecturas `ref0..ref2` y `refAfterS1Invalidate` corresponden al campo `+0x1a4`**:
   - *Resultado*: **Firme**.
-  - *Prueba*: Desensamblado de `AGGraphCreateShared` (0x1c2c40388: `add w8, w8, #1; str w8, [x20, #0x1a4]`) y `AG::Graph::Context::~Context` (0x1c2c270dc: `subs w8, w8, #1; str w8, [x0, #0x1a4]`), contrastado con lecturas directas en `test_h4_standalone.swift` y caso 4 de `lifetime.txt`. Los valores observados (1, 2, 3, 2, 1, 0) corresponden exactamente a las manipulaciones atómicas del campo `+0x1a4` del estado `AG::Graph`.
-
-### Refutadas
-
-- **Hipótesis 2: El fallo de `CFRelease` a mano es un double free**:
-  - *Resultado*: **Refutada**.
-  - *Prueba*: En un handle recién creado en C puro con `AGGraphCreate()`, invocar `CFRelease` tiene éxito limpio (retain count 1 -> 0 sin fallar). En Swift, el crash al forzar `c_CFRelease(rawPtr)` sobre un objeto gestionado por ARC no ocurre por memoria liberada (double free), sino por una trampa de autenticación de punteros (`EXC_BREAKPOINT` en `CoreFoundation` `CF_IS_OBJC + 64` al fallar `autda` y ejecutarse `brk #0xc472`), provocada por una incompatibilidad en la cabecera del modelo de objetos CF/ObjC puenteada con Swift.
+  - *Prueba*: La secuencia 1 → 2 → 3 → 2 → 1 → 0 coincide con `lifetime.txt` (caso 4), y el desensamblado de `AGGraphCreateShared` (0x1c2c40388) y `AG::Graph::Context::~Context` (0x1c2c270dc) confirma que esas instrucciones operan directa y exclusivamente sobre `[state + 0x1a4]`.
 
 ### Sin resolver
 
-- *Ninguna* (las cuatro hipótesis planteadas han sido resueltas mediante mediciones y desensamblado).
+- **Hipótesis 2: La causa del fallo de `CFRelease` a mano es un double free**:
+  - *Resultado*: **Sin resolver**.
+  - *Prueba*: En lldb, al forzar `c_CFRelease(rawPtr)` desde Swift sobre un handle, se produce `EXC_BREAKPOINT` en `CF_IS_OBJC + 64` al fallar la autenticación PAC de la cabecera (`brk #0xc472`). Esto demuestra que la cabecera no encaja con la ruta de liberación de CoreFoundation, pero no descarta ni prueba la hipótesis de un double free. La causa sigue sin identificarse de forma concluyente.
 
 ## Abierto
 
