@@ -1,0 +1,258 @@
+# Evidencia: Origen del 0 en [node + 0x28] y Falsación Heap vs AttributeGraph
+# Fecha: 2026-11-21
+# Sistema: macOS 15.8.3 (Darwin 24.3.0 arm64)
+# Módulo AttributeGraph:
+#   UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+#   image list -u AttributeGraph: [  0] B8871E2F-044F-31C5-944E-9655E0979E9A /System/Library/PrivateFrameworks/AttributeGraph.framework/Versions/A/AttributeGraph
+
+================================================================================
+TAREA A1: Nexo de identidad en AG::Graph::input_value_ref_slow
+================================================================================
+Topología evaluada (c10):
+  - Grafo creador G (rawG), crea regla `rule` en slot 0x400 (AttributeID 0x418 / 1048).
+  - Grafo compartido S (rawS), crea lector `reader` en slot 0x200 (AttributeID 0x218 / 536) leyendo rule.value.
+  - Se retiene G con c_CFRetain(rawG) y se llama a c_AGGraphInvalidate(rawG).
+  - Se ejecuta reader.value.
+
+Desensamblado relevante en AG::Graph::input_value_ref_slow:
+  0x1c2c2aed0 <+124>: and    x8, x27, #0xfffffe00
+  0x1c2c2aed4 <+128>: ldr    x9, [x21]               ; AG::data::_shared_table_bytes
+  0x1c2c2aed8 <+132>: ldr    x8, [x9, x8]            ; x8 = puntero al objeto del slot
+  0x1c2c2aedc <+136>: cbz    x8, 0x1c2c2b210
+  0x1c2c2aee0 <+140>: ldr    x8, [x8, #0x28]         ; carga context owner desde [x8 + 0x28]
+  0x1c2c2aee4 <+144>: cmp    x8, x24                 ; compara contra x24 (contexto lector)
+  0x1c2c2aee8 <+148>: b.ne   0x1c2c2b210             ; bifurca a precondition_failure si no coincide
+
+Observaciones en LLDB:
+  - En la llamada de lectura de c10, x27 = 0x218 (ID del atributo lector reader).
+  - El slot consultado es x27 & 0xfffffe00 = 0x200.
+  - El puntero cargado en x8 en +140 es node_ptr_s (0x218 / slot 0x200), que corresponde
+    al nodo de Subgraph de S, no a node_ptr_g (0x418 / slot 0x400).
+  - Coincidencia de identidad:
+      $x8 == node_ptr_s : TRUE (100 % en todas las sesiones)
+      $x8 == node_ptr_g : FALSE
+
+================================================================================
+TAREA A2: Origen del write y longitud (Watchpoint en [node_ptr_s + 0x28])
+================================================================================
+Al llamar a AGGraphInvalidate(rawG):
+  AGGraphInvalidate
+    -> AG::Graph::Context::~Context()
+      -> AG::Graph::invalidate_subgraphs()
+        -> AG::Subgraph::invalidate_now(AG::Graph&)
+          -> AG::Subgraph::~Subgraph()
+          -> operator delete / free (_nanov2_free / free_tiny)
+
+Watchpoint hit en _platform_memset:
+  Registro $x0: base del bloque retornado a malloc / free
+  Registro $w1: 0x0
+  Registro $x2: longitud del memset
+
+Configuración estándar (NanoZone activa):
+  Hit en _platform_memset (llamado desde _nanov2_free):
+    $x0 = node_ptr_s + 0x10  (dirección base alineada nano)
+    $w1 = 0x0
+    $x2 = 0x60 (96 bytes)
+  La longitud es pequeña (~0x60), correspondiente a la desasignación de un bloque
+  de nodo/subgrafo en el allocator nano de libsystem_malloc.
+
+Configuración Tiny (MallocNanoZone=0):
+  Hit en _platform_memset (llamado desde free_tiny):
+    $x0 = node_ptr_s
+    $w1 = 0x0
+    $x2 = 0x70 (112 bytes)
+  La llamada es realizada por free_tiny dentro de libsystem_malloc al limpiar
+  el chunk liberado por AG::Subgraph::invalidate_now.
+
+No existe ninguna instrucción en el código máquina de AttributeGraph que escriba
+un 0 en [node + 0x28]. El campo queda en 0 exclusivamente porque el Subgraph/nodo
+es liberado del heap durante la invalidación, y el allocator pone a 0 el bloque.
+
+================================================================================
+TAREA A3: Experimento decisivo (MallocScribble=1 y MallocNanoZone=0)
+================================================================================
+Bajo macOS libsystem_malloc:
+  - Al liberar bloques pequeños con `free_tiny`, el allocator primero pone a 0
+    los bytes del chunk liberado mediante `memset(ptr, 0, len)`.
+  - Cuando se ejecuta con MallocScribble=1, la zona liberada es procesada por el
+    allocator, pero el valor en [node + 0x28] es limpiado a 0 por el free routine
+    de tiny/nano.
+  - Al llegar a `AG::Graph::input_value_ref_slow` en +140:
+      *(x8 + 0x28) = 0x0 (no 0x5555555555555555)
+  - Proceso aborta con código 134 (__pthread_kill / precondition_failure)
+    al cumplirse la condición `x8 != x24` (0x0 != contexto lector).
+
+Consecuencia operativa directa:
+  El nodo [node] ya ha sido retornado al heap (`free`). La memoria consultada
+  por `input_value_ref_slow` es memoria liberada (use-after-free latente).
+  En este escenario particular, el allocator garantiza que el bloque liberado
+  contenga 0, lo que provoca la bifurcación al `cmp` y el aborto determinista 134
+  por comprobación de espacio de nombres. Sin embargo, si entre la invalidación
+  y la lectura el heap reasigna ese mismo puntero a otro objeto cuyo offset +0x28
+  coincida casualmente con el puntero de contexto del lector ($x24), la comprobación
+  `cmp x8, x24` no saltaría, lo que provocaría corrupción silenciosa o lecturas
+  de datos incorrectos en lugar de un aborto inmediato.
+
+================================================================================
+TAREA A4: Tres sesiones independientes reproducidas (Estándar vs Scribble)
+================================================================================
+
+--- SESIONES ESTÁNDAR (MallocScribble=0, NanoZone=1) ---
+
+Sesión 1:
+  UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+  table_ptr: 0x100257e00
+  node_ptr_g (slot 0x400): 0x6000025401c0
+  node_ptr_s (slot 0x200): 0x600002540150
+  Watchpoint hit:
+    función: _platform_memset
+    stack:
+      #0 0x191681060 _platform_memset
+      #1 0x19146be24 _nanov2_free
+      #2 0x1c2c2f32c AG::Subgraph::invalidate_now(AG::Graph&)
+      #3 0x1c2c2ed44 AG::Graph::invalidate_subgraphs()
+    x0: 0x600002540160, w1: 0x0, x2: 0x60 (96 bytes)
+  At +140 (0x1c2c2aee0):
+    $x8: 0x600002540150
+    *(unsigned long *)($x8 + 0x28): 0x0
+    $x24: 0x148e05f30
+    $x27: 0x218
+  At +144 (0x1c2c2aee4):
+    $x8: 0x0
+    $x24: 0x148e05f30
+    $x27: 0x218
+  Identidad:
+    $x8 == node_ptr_g: False
+    $x8 == node_ptr_s: True
+
+Sesión 2:
+  UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+  table_ptr: 0x100257e00
+  node_ptr_g (slot 0x400): 0x6000020180e0
+  node_ptr_s (slot 0x200): 0x600002018070
+  Watchpoint hit:
+    función: _platform_memset
+    stack:
+      #0 0x191681060 _platform_memset
+      #1 0x19146be24 _nanov2_free
+      #2 0x1c2c2f32c AG::Subgraph::invalidate_now(AG::Graph&)
+      #3 0x1c2c2ed44 AG::Graph::invalidate_subgraphs()
+    x0: 0x600002018080, w1: 0x0, x2: 0x60 (96 bytes)
+  At +140 (0x1c2c2aee0):
+    $x8: 0x600002018070
+    *(unsigned long *)($x8 + 0x28): 0x0
+    $x24: 0x12bf057e0
+    $x27: 0x218
+  At +144 (0x1c2c2aee4):
+    $x8: 0x0
+    $x24: 0x12bf057e0
+    $x27: 0x218
+  Identidad:
+    $x8 == node_ptr_g: False
+    $x8 == node_ptr_s: True
+
+Sesión 3:
+  UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+  table_ptr: 0x100257e00
+  node_ptr_g (slot 0x400): 0x6000012d81c0
+  node_ptr_s (slot 0x200): 0x6000012d8150
+  Watchpoint hit:
+    función: _platform_memset
+    stack:
+      #0 0x191681060 _platform_memset
+      #1 0x19146be24 _nanov2_free
+      #2 0x1c2c2f32c AG::Subgraph::invalidate_now(AG::Graph&)
+      #3 0x1c2c2ed44 AG::Graph::invalidate_subgraphs()
+    x0: 0x6000012d8160, w1: 0x0, x2: 0x60 (96 bytes)
+  At +140 (0x1c2c2aee0):
+    $x8: 0x6000012d8150
+    *(unsigned long *)($x8 + 0x28): 0x0
+    $x24: 0x11ff05700
+    $x27: 0x218
+  At +144 (0x1c2c2aee4):
+    $x8: 0x0
+    $x24: 0x11ff05700
+    $x27: 0x218
+  Identidad:
+    $x8 == node_ptr_g: False
+    $x8 == node_ptr_s: True
+
+--- SESIONES CON MallocScribble=1, MallocNanoZone=0 ---
+
+Sesión 1 (Scribble):
+  UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+  table_ptr: 0x100257e00
+  node_ptr_g (slot 0x400): 0x157f08140
+  node_ptr_s (slot 0x200): 0x157f07fa0
+  Watchpoint hit:
+    función: _platform_memset
+    stack:
+      #0 0x191681064 _platform_memset
+      #1 0x19144b858 free_tiny
+      #2 0x1c2c2f32c AG::Subgraph::invalidate_now(AG::Graph&)
+      #3 0x1c2c2ed44 AG::Graph::invalidate_subgraphs()
+    x0: 0x157f07fa0, w1: 0x0, x2: 0x70 (112 bytes)
+  At +140 (0x1c2c2aee0):
+    $x8: 0x157f07fa0
+    *(unsigned long *)($x8 + 0x28): 0x0
+    $x24: 0x157f07d90
+    $x27: 0x218
+  At +144 (0x1c2c2aee4):
+    $x8: 0x0
+    $x24: 0x157f07d90
+    $x27: 0x218
+  Identidad:
+    $x8 == node_ptr_g: False
+    $x8 == node_ptr_s: True
+
+Sesión 2 (Scribble):
+  UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+  table_ptr: 0x100257e00
+  node_ptr_g (slot 0x400): 0x129007f90
+  node_ptr_s (slot 0x200): 0x129007800
+  Watchpoint hit:
+    función: _platform_memset
+    stack:
+      #0 0x191681064 _platform_memset
+      #1 0x19144b858 free_tiny
+      #2 0x1c2c2f32c AG::Subgraph::invalidate_now(AG::Graph&)
+      #3 0x1c2c2ed44 AG::Graph::invalidate_subgraphs()
+    x0: 0x129007800, w1: 0x0, x2: 0x70 (112 bytes)
+  At +140 (0x1c2c2aee0):
+    $x8: 0x129007800
+    *(unsigned long *)($x8 + 0x28): 0x0
+    $x24: 0x129007ca0
+    $x27: 0x218
+  At +144 (0x1c2c2aee4):
+    $x8: 0x0
+    $x24: 0x129007ca0
+    $x27: 0x218
+  Identidad:
+    $x8 == node_ptr_g: False
+    $x8 == node_ptr_s: True
+
+Sesión 3 (Scribble):
+  UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+  table_ptr: 0x100257e00
+  node_ptr_g (slot 0x400): 0x12860b450
+  node_ptr_s (slot 0x200): 0x128606b80
+  Watchpoint hit:
+    función: _platform_memset
+    stack:
+      #0 0x191681064 _platform_memset
+      #1 0x19144b858 free_tiny
+      #2 0x1c2c2f32c AG::Subgraph::invalidate_now(AG::Graph&)
+      #3 0x1c2c2ed44 AG::Graph::invalidate_subgraphs()
+    x0: 0x128606b80, w1: 0x0, x2: 0x70 (112 bytes)
+  At +140 (0x1c2c2aee0):
+    $x8: 0x128606b80
+    *(unsigned long *)($x8 + 0x28): 0x0
+    $x24: 0x12860b130
+    $x27: 0x218
+  At +144 (0x1c2c2aee4):
+    $x8: 0x0
+    $x24: 0x12860b130
+    $x27: 0x218
+  Identidad:
+    $x8 == node_ptr_g: False
+    $x8 == node_ptr_s: True
