@@ -15,6 +15,9 @@ struct SubgraphTable {
     /// removals in ``removeChild(_:from:)`` and ``release(index:)`` so that sibling order is preserved without O(N)
     /// array shifts (`multi-observer-tree-order-and-cancel`, `subgraph-flags-forEach-and-update` [O]).
     private var rawChildren: [[UInt32]] = []
+    /// The child tag of each entry of `rawChildren`, in the same position: two bits (`AGSubgraphAddChild2`), zero when linked
+    /// without a tag.
+    private var rawTags: [[UInt8]] = []
     /// For each slot `c`, `positionInParents[c][k]` is the index of `c` inside `rawChildren[parents[c][k]]`, enabling
     /// O(1) tombstoning when `c` is unlinked or released.
     private var positionInParents: [[UInt32]] = []
@@ -51,6 +54,7 @@ struct SubgraphTable {
             members.append([])
             parents.append([])
             rawChildren.append([])
+            rawTags.append([])
             positionInParents.append([])
             childTombstoneCount.append(0)
             contexts.append(SubgraphTable.defaultContext)
@@ -67,6 +71,7 @@ struct SubgraphTable {
             let p = Int(parent.index)
             let pos = UInt32(rawChildren[p].count)
             rawChildren[p].append(index)
+            rawTags[p].append(0)
             parents[i].append(parent.index)
             positionInParents[i].append(pos)
         }
@@ -105,6 +110,16 @@ struct SubgraphTable {
         return rawChildren[p].filter { $0 != SubgraphTable.none }
     }
 
+    /// The live children of a subgraph with their tags, in the order they were linked.
+    func childrenWithTags(of index: UInt32) -> [(child: UInt32, tag: UInt8)] {
+        let p = Int(index)
+        var result: [(child: UInt32, tag: UInt8)] = []
+        for (position, child) in rawChildren[p].enumerated() where child != SubgraphTable.none {
+            result.append((child, rawTags[p][position]))
+        }
+        return result
+    }
+
     /// Compacts `rawChildren[p]` in place when its tombstone count reaches at least half of its buffer length (minimum
     /// 64), updating `positionInParents` of each surviving child in O(surviving) so amortized removal is O(1) while
     /// preserving exact creation/link order.
@@ -114,9 +129,11 @@ struct SubgraphTable {
         let total = rawChildren[p].count
         guard dead >= 64 && dead * 2 >= total else { return }
         var write = 0
+        var keptTags: [UInt8] = []
         for read in 0..<total {
             let child = rawChildren[p][read]
             guard child != SubgraphTable.none else { continue }
+            keptTags.append(rawTags[p][read])
             if write != read {
                 rawChildren[p][write] = child
                 let c = Int(child)
@@ -127,6 +144,7 @@ struct SubgraphTable {
             write += 1
         }
         rawChildren[p].removeSubrange(write..<total)
+        rawTags[p] = keptTags
         childTombstoneCount[p] = 0
     }
 
@@ -149,7 +167,7 @@ struct SubgraphTable {
     /// `SubgraphChainPerformanceTests`]. Native `Subgraph::add_child` checks only the graph and a duplicate parent and
     /// does no ancestor walk apart from flag propagation [O, PHASE12 disassembly]; native timing for 20,000 links was
     /// 52 ms [O]. The cycle rejection itself is this engine's own addition (native behaviour on a cycle is [?]).
-    mutating func addChild(_ child: UInt32, to parent: UInt32) {
+    mutating func addChild(_ child: UInt32, to parent: UInt32, tag: UInt8 = 0) {
         precondition(child != parent, "addChild: a subgraph cannot be its own parent")
         let p = Int(parent)
         let c = Int(child)
@@ -159,6 +177,7 @@ struct SubgraphTable {
         if !parents[c].contains(parent) {
             let pos = UInt32(rawChildren[p].count)
             rawChildren[p].append(child)
+            rawTags[p].append(tag & 0x3)
             parents[c].append(parent)
             positionInParents[c].append(pos)
         }
@@ -280,6 +299,7 @@ struct SubgraphTable {
         parents[i] = []
         positionInParents[i] = []
         rawChildren[i] = []
+        rawTags[i] = []
         childTombstoneCount[i] = 0
         falling[i] = false
         members[i] = []

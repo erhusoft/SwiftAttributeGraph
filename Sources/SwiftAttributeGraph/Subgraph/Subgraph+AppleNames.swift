@@ -49,3 +49,20 @@ extension Subgraph {
         owningGraph().update(self, flags: flags)
     }
 }
+
+extension Subgraph {
+    /// Links `child` under this subgraph with a two-bit tag (`AGSubgraphAddChild2` in native AttributeGraph).
+    public func addChild(_ child: Subgraph, tag: UInt8) { owningGraph().addChild(child, to: self, tag: tag) }
+
+    /// The number of children (`AGSubgraphGetChildCount` in native AttributeGraph).
+    public var childCount: UInt32 { owningGraph().childCount(of: self) }
+
+    /// The child at `index` in link order, with its tag (`AGSubgraphGetChild` in native AttributeGraph).
+    public func child(at index: UInt32) -> (subgraph: Subgraph, tag: UInt8) { owningGraph().child(of: self, at: index) }
+
+    /// The number of parents, the root and every secondary parent (`AGSubgraphGetParentCount` in native AttributeGraph).
+    public var parentCount: UInt64 { owningGraph().parentCount(of: self) }
+
+    /// The parent at `index` in link order (`AGSubgraphGetParent` in native AttributeGraph).
+    public func parent(at index: Int64) -> Subgraph { owningGraph().parent(of: self, at: index) }
+}

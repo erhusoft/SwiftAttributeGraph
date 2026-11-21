@@ -220,13 +220,13 @@ public final class Graph {
     }
 
     /// Links `child` under `parent` in the subgraph DAG. Rejects self-links and cycles.
-    func addChild(_ child: Subgraph, to parent: Subgraph) {
+    func addChild(_ child: Subgraph, to parent: Subgraph, tag: UInt8 = 0) {
         assertOwnThread()
         precondition(subgraphs.isLive(parent.id) && !subgraphs.isFalling(index: parent.id.index),
                      "addChild: the parent subgraph was invalidated")
         precondition(subgraphs.isLive(child.id) && !subgraphs.isFalling(index: child.id.index),
                      "addChild: the child subgraph was invalidated")
-        subgraphs.addChild(child.id.index, to: parent.id.index)
+        subgraphs.addChild(child.id.index, to: parent.id.index, tag: tag)
     }
 
     /// Unlinks `child` from `parent` in the subgraph DAG without invalidating `child`.
