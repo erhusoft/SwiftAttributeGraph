@@ -1,0 +1,581 @@
+=== E0: Control de Storage y Control Positivo (10 Repeticiones) ===
+| Repetición | Exit | different=true | sameAsA=true | Estado | Línea Cruda e0 | Línea Cruda Control Positivo |
+|---|---|---|---|---|---|---|
+| 1 | 0 | True | True | OK | `e0|rawA=0x0000600002508000|storageA=0x0000000155804e00|rawB=0x0000600002508060|storageB=0x0000000155804ff0|different=true` | `e0|positiveControl|rawS=0x00006000025080c0|storageS=0x0000000155804e00|sameAsA=true` |
+| 2 | 0 | True | True | OK | `e0|rawA=0x0000600001b48240|storageA=0x000000014ee05f70|rawB=0x0000600001b482a0|storageB=0x000000014ee06160|different=true` | `e0|positiveControl|rawS=0x0000600001b48300|storageS=0x000000014ee05f70|sameAsA=true` |
+| 3 | 0 | True | True | OK | `e0|rawA=0x0000600001ef8240|storageA=0x000000014fe05f70|rawB=0x0000600001ef82a0|storageB=0x000000014fe06160|different=true` | `e0|positiveControl|rawS=0x0000600001ef8300|storageS=0x000000014fe05f70|sameAsA=true` |
+| 4 | 0 | True | True | OK | `e0|rawA=0x0000600000e50240|storageA=0x0000000129605f70|rawB=0x0000600000e502a0|storageB=0x0000000129606160|different=true` | `e0|positiveControl|rawS=0x0000600000e50300|storageS=0x0000000129605f70|sameAsA=true` |
+| 5 | 0 | True | True | OK | `e0|rawA=0x0000600002d04240|storageA=0x000000014b605f70|rawB=0x0000600002d042a0|storageB=0x000000014b606160|different=true` | `e0|positiveControl|rawS=0x0000600002d04300|storageS=0x000000014b605f70|sameAsA=true` |
+| 6 | 0 | True | True | OK | `e0|rawA=0x0000600003248240|storageA=0x000000013ae05f70|rawB=0x00006000032482a0|storageB=0x000000013ae06160|different=true` | `e0|positiveControl|rawS=0x0000600003248300|storageS=0x000000013ae05f70|sameAsA=true` |
+| 7 | 0 | True | True | OK | `e0|rawA=0x0000600002dcc240|storageA=0x000000012b605f70|rawB=0x0000600002dcc2a0|storageB=0x000000012b606160|different=true` | `e0|positiveControl|rawS=0x0000600002dcc300|storageS=0x000000012b605f70|sameAsA=true` |
+| 8 | 0 | True | True | OK | `e0|rawA=0x0000600001274240|storageA=0x0000000149605f70|rawB=0x00006000012742a0|storageB=0x0000000149606160|different=true` | `e0|positiveControl|rawS=0x0000600001274300|storageS=0x0000000149605f70|sameAsA=true` |
+| 9 | 0 | True | True | OK | `e0|rawA=0x0000600003004000|storageA=0x0000000140805200|rawB=0x0000600003004060|storageB=0x00000001408053f0|different=true` | `e0|positiveControl|rawS=0x00006000030040c0|storageS=0x0000000140805200|sameAsA=true` |
+| 10 | 0 | True | True | OK | `e0|rawA=0x0000600001c9c240|storageA=0x000000013ae05f70|rawB=0x0000600001c9c2a0|storageB=0x000000013ae06160|different=true` | `e0|positiveControl|rawS=0x0000600001c9c300|storageS=0x000000013ae05f70|sameAsA=true` |
+Estabilidad E0: 100% estable (10 de 10 repeticiones coinciden)
+
+=== E1: Matriz de Lectura Cruzada (10 Repeticiones por Celda) ===
+| Celda | Evaluado en G | G al leer | Leer por | Códigos de salida (1..10) | Valores (1..10) | Estabilidad | Mensaje Común |
+|---|---|---|---|---|---|---|---|
+| c1 | sí (hasValue=yes) | vivo | G | [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | [7, 7, 7, 7, 7, 7, 7, 7, 7, 7] | 100% estable (10/10) | value=7 |
+| c2 | sí (hasValue=yes) | vivo | S | [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | [7, 7, 7, 7, 7, 7, 7, 7, 7, 7] | 100% estable (10/10) | value=7 |
+| c3 | no (hasValue=no) | vivo | G | [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | [7, 7, 7, 7, 7, 7, 7, 7, 7, 7] | 100% estable (10/10) | value=7 |
+| c4 | no (hasValue=no) | vivo | S | [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] | [7, 7, 7, 7, 7, 7, 7, 7, 7, 7] | 100% estable (10/10) | value=7 |
+| c5 | sí (hasValue=yes) | liberado | S | [134, 134, 134, 134, 134, 134, 134, 134, 134, 134] | [-, -, -, -, -, -, -, -, -, -] | 100% estable (10/10) | precondition failure: accessing attribute in a different namespace (abort 134) |
+| c6 | no (hasValue=no) | liberado | S | [134, 134, 134, 134, 134, 134, 134, 134, 134, 134] | [-, -, -, -, -, -, -, -, -, -] | 100% estable (10/10) | precondition failure: accessing attribute in a different namespace (abort 134) |
+| c7 | sí | liberado | G | NA (10x) | NA (10x) | Estable (N/A) | use-after-free por construcción |
+| c8 | no | liberado | G | NA (10x) | NA (10x) | Estable (N/A) | use-after-free por construcción |
+| c9 | sí (hasValue=yes) | invalidado-retenido | S | [134, 134, 134, 134, 134, 134, 134, 134, 134, 134] | [-, -, -, -, -, -, -, -, -, -] | 100% estable (10/10) | precondition failure: accessing attribute in a different namespace (abort 134) |
+| c10 | no (hasValue=no) | invalidado-retenido | S | [134, 134, 134, 134, 134, 134, 134, 134, 134, 134] | [-, -, -, -, -, -, -, -, -, -] | 100% estable (10/10) | precondition failure: accessing attribute in a different namespace (abort 134) |
+
+=== Verificación de Telemetría gAlive en c9 y c10 ===
+- c9: telemetría muestra gAlive=invalidated-retained en las 10 repeticiones -> True
+- c10: telemetría muestra gAlive=invalidated-retained en las 10 repeticiones -> True
+
+=== Decisión sobre Modelos con Diez Repeticiones ===
+- Celda c4: exit=0 y valor=7 en las 10 repeticiones -> True
+- Celda c2: exit=0 y valor=7 en las 10 repeticiones -> True
+- Celda c9: exit=134 en las 10 repeticiones -> True
+- Celda c10: exit=134 en las 10 repeticiones -> True
+- Celda c5: exit=134 en las 10 repeticiones -> True
+- Celda c6: exit=134 en las 10 repeticiones -> True
+
+M1 descartado con diez repeticiones.
+M2 queda respaldado con diez repeticiones.
+
+=== Registros Crudos de Telemetría (10 Rondas) ===
+--- Detalle celda c1 (e1-c1) ---
+[Ronda 1] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x0000000124605f70|storageS=0x0000000124605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000022502a0)|rawG=0x00006000022502a0|rawS=0x0000600002250300
+aboutToRead=true
+value=7
+[Ronda 2] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x000000014f605f70|storageS=0x000000014f605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000029bc2a0)|rawG=0x00006000029bc2a0|rawS=0x00006000029bc300
+aboutToRead=true
+value=7
+[Ronda 3] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x000000013a605f70|storageS=0x000000013a605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000014782a0)|rawG=0x00006000014782a0|rawS=0x0000600001478300
+aboutToRead=true
+value=7
+[Ronda 4] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x0000000142e05f70|storageS=0x0000000142e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000018f42a0)|rawG=0x00006000018f42a0|rawS=0x00006000018f4300
+aboutToRead=true
+value=7
+[Ronda 5] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x0000000147605f70|storageS=0x0000000147605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000ca42a0)|rawG=0x0000600000ca42a0|rawS=0x0000600000ca4300
+aboutToRead=true
+value=7
+[Ronda 6] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x0000000120e05f70|storageS=0x0000000120e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000014a42a0)|rawG=0x00006000014a42a0|rawS=0x00006000014a4300
+aboutToRead=true
+value=7
+[Ronda 7] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x0000000122605f70|storageS=0x0000000122605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600002a1c2a0)|rawG=0x0000600002a1c2a0|rawS=0x0000600002a1c300
+aboutToRead=true
+value=7
+[Ronda 8] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x000000012ae05f70|storageS=0x000000012ae05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600002e6c2a0)|rawG=0x0000600002e6c2a0|rawS=0x0000600002e6c300
+aboutToRead=true
+value=7
+[Ronda 9] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x0000000128e05f70|storageS=0x0000000128e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000afc2a0)|rawG=0x0000600000afc2a0|rawS=0x0000600000afc300
+aboutToRead=true
+value=7
+[Ronda 10] exit=0
+e1-case|cell=c1|evaluatedInG=yes|gAlive=yes|readVia=G
+hasValueBeforeShare=yes
+storageG=0x00000001537056e0|storageS=0x00000001537056e0|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000c34120)|rawG=0x0000600000c34120|rawS=0x0000600000c34180
+aboutToRead=true
+value=7
+
+--- Detalle celda c2 (e1-c2) ---
+[Ronda 1] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000127605f70|storageS=0x0000000127605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000014142a0)|rawG=0x00006000014142a0|rawS=0x0000600001414300
+aboutToRead=true
+value=7
+[Ronda 2] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000014c605f70|storageS=0x000000014c605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001bf82a0)|rawG=0x0000600001bf82a0|rawS=0x0000600001bf8300
+aboutToRead=true
+value=7
+[Ronda 3] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000011f605f70|storageS=0x000000011f605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000015282a0)|rawG=0x00006000015282a0|rawS=0x0000600001528300
+aboutToRead=true
+value=7
+[Ronda 4] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000015ae05f70|storageS=0x000000015ae05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001e542a0)|rawG=0x0000600001e542a0|rawS=0x0000600001e54300
+aboutToRead=true
+value=7
+[Ronda 5] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000124e05f70|storageS=0x0000000124e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000019582a0)|rawG=0x00006000019582a0|rawS=0x0000600001958300
+aboutToRead=true
+value=7
+[Ronda 6] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000135605f70|storageS=0x0000000135605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000002682a0)|rawG=0x00006000002682a0|rawS=0x0000600000268300
+aboutToRead=true
+value=7
+[Ronda 7] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000013be05f70|storageS=0x000000013be05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000028442a0)|rawG=0x00006000028442a0|rawS=0x0000600002844300
+aboutToRead=true
+value=7
+[Ronda 8] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000121704480|storageS=0x0000000121704480|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000f00060)|rawG=0x0000600000f00060|rawS=0x0000600000f000c0
+aboutToRead=true
+value=7
+[Ronda 9] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000152e05f70|storageS=0x0000000152e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000291c2a0)|rawG=0x000060000291c2a0|rawS=0x000060000291c300
+aboutToRead=true
+value=7
+[Ronda 10] exit=0
+e1-case|cell=c2|evaluatedInG=yes|gAlive=yes|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000134e05f70|storageS=0x0000000134e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000ae42a0)|rawG=0x0000600000ae42a0|rawS=0x0000600000ae4300
+aboutToRead=true
+value=7
+
+--- Detalle celda c3 (e1-c3) ---
+[Ronda 1] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x000000011de05f70|storageS=0x000000011de05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003c642a0)|rawG=0x0000600003c642a0|rawS=0x0000600003c64300
+aboutToRead=true
+value=7
+[Ronda 2] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x0000000130e05f70|storageS=0x0000000130e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000013182a0)|rawG=0x00006000013182a0|rawS=0x0000600001318300
+aboutToRead=true
+value=7
+[Ronda 3] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x000000012d605f70|storageS=0x000000012d605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000010e02a0)|rawG=0x00006000010e02a0|rawS=0x00006000010e0300
+aboutToRead=true
+value=7
+[Ronda 4] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x0000000132e05f70|storageS=0x0000000132e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000022ac2a0)|rawG=0x00006000022ac2a0|rawS=0x00006000022ac300
+aboutToRead=true
+value=7
+[Ronda 5] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x000000012be05f70|storageS=0x000000012be05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001a002a0)|rawG=0x0000600001a002a0|rawS=0x0000600001a00300
+aboutToRead=true
+value=7
+[Ronda 6] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x000000011de05f70|storageS=0x000000011de05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000303c2a0)|rawG=0x000060000303c2a0|rawS=0x000060000303c300
+aboutToRead=true
+value=7
+[Ronda 7] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x0000000135605f70|storageS=0x0000000135605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000076c2a0)|rawG=0x000060000076c2a0|rawS=0x000060000076c300
+aboutToRead=true
+value=7
+[Ronda 8] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x0000000147605f70|storageS=0x0000000147605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000cf82a0)|rawG=0x0000600000cf82a0|rawS=0x0000600000cf8300
+aboutToRead=true
+value=7
+[Ronda 9] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x0000000153e04be0|storageS=0x0000000153e04be0|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600002a30180)|rawG=0x0000600002a30180|rawS=0x0000600002a301e0
+aboutToRead=true
+value=7
+[Ronda 10] exit=0
+e1-case|cell=c3|evaluatedInG=no|gAlive=yes|readVia=G
+hasValueBeforeShare=no
+storageG=0x0000000155605f70|storageS=0x0000000155605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000000c02a0)|rawG=0x00006000000c02a0|rawS=0x00006000000c0300
+aboutToRead=true
+value=7
+
+--- Detalle celda c4 (e1-c4) ---
+[Ronda 1] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000149605f70|storageS=0x0000000149605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000a182a0)|rawG=0x0000600000a182a0|rawS=0x0000600000a18300
+aboutToRead=true
+value=7
+[Ronda 2] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000158605f70|storageS=0x0000000158605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000000a42a0)|rawG=0x00006000000a42a0|rawS=0x00006000000a4300
+aboutToRead=true
+value=7
+[Ronda 3] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000012e605f70|storageS=0x000000012e605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000185c2a0)|rawG=0x000060000185c2a0|rawS=0x000060000185c300
+aboutToRead=true
+value=7
+[Ronda 4] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000014de05f70|storageS=0x000000014de05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001bdc2a0)|rawG=0x0000600001bdc2a0|rawS=0x0000600001bdc300
+aboutToRead=true
+value=7
+[Ronda 5] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000134605f70|storageS=0x0000000134605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000009ac2a0)|rawG=0x00006000009ac2a0|rawS=0x00006000009ac300
+aboutToRead=true
+value=7
+[Ronda 6] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000121605f70|storageS=0x0000000121605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000002402a0)|rawG=0x00006000002402a0|rawS=0x0000600000240300
+aboutToRead=true
+value=7
+[Ronda 7] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000149605f70|storageS=0x0000000149605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003c382a0)|rawG=0x0000600003c382a0|rawS=0x0000600003c38300
+aboutToRead=true
+value=7
+[Ronda 8] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000121e05f70|storageS=0x0000000121e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000002c42a0)|rawG=0x00006000002c42a0|rawS=0x00006000002c4300
+aboutToRead=true
+value=7
+[Ronda 9] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000013d605f70|storageS=0x000000013d605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003e002a0)|rawG=0x0000600003e002a0|rawS=0x0000600003e00300
+aboutToRead=true
+value=7
+[Ronda 10] exit=0
+e1-case|cell=c4|evaluatedInG=no|gAlive=yes|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000013c805380|storageS=0x000000013c805380|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001318060)|rawG=0x0000600001318060|rawS=0x00006000013180c0
+aboutToRead=true
+value=7
+
+--- Detalle celda c5 (e1-c5) ---
+[Ronda 1] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000013ee05f70|storageS=0x000000013ee05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000b1c2a0)|rawG=0x0000600000b1c2a0|rawS=0x0000600000b1c300
+aboutToRead=true
+[Ronda 2] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000122e05f70|storageS=0x0000000122e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000010182a0)|rawG=0x00006000010182a0|rawS=0x0000600001018300
+aboutToRead=true
+[Ronda 3] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000012d605f70|storageS=0x000000012d605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000d802a0)|rawG=0x0000600000d802a0|rawS=0x0000600000d80300
+aboutToRead=true
+[Ronda 4] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000149e05f70|storageS=0x0000000149e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600002ccc2a0)|rawG=0x0000600002ccc2a0|rawS=0x0000600002ccc300
+aboutToRead=true
+[Ronda 5] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000139e05f70|storageS=0x0000000139e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001f102a0)|rawG=0x0000600001f102a0|rawS=0x0000600001f10300
+aboutToRead=true
+[Ronda 6] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000011e605f70|storageS=0x000000011e605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001ae42a0)|rawG=0x0000600001ae42a0|rawS=0x0000600001ae4300
+aboutToRead=true
+[Ronda 7] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000013de05f70|storageS=0x000000013de05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000005902a0)|rawG=0x00006000005902a0|rawS=0x0000600000590300
+aboutToRead=true
+[Ronda 8] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000149605f70|storageS=0x0000000149605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000aa02a0)|rawG=0x0000600000aa02a0|rawS=0x0000600000aa0300
+aboutToRead=true
+[Ronda 9] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000012e704f00|storageS=0x000000012e704f00|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003168060)|rawG=0x0000600003168060|rawS=0x00006000031680c0
+aboutToRead=true
+[Ronda 10] exit=134
+e1-case|cell=c5|evaluatedInG=yes|gAlive=no|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000157e05f70|storageS=0x0000000157e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000023642a0)|rawG=0x00006000023642a0|rawS=0x0000600002364300
+aboutToRead=true
+
+--- Detalle celda c6 (e1-c6) ---
+[Ronda 1] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000014fe05f70|storageS=0x000000014fe05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001dbc2a0)|rawG=0x0000600001dbc2a0|rawS=0x0000600001dbc300
+aboutToRead=true
+[Ronda 2] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000133605f70|storageS=0x0000000133605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000000042a0)|rawG=0x00006000000042a0|rawS=0x0000600000004300
+aboutToRead=true
+[Ronda 3] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000147e05f70|storageS=0x0000000147e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000139c2a0)|rawG=0x000060000139c2a0|rawS=0x000060000139c300
+aboutToRead=true
+[Ronda 4] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000145f059d0|storageS=0x0000000145f059d0|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001f74240)|rawG=0x0000600001f74240|rawS=0x0000600001f742a0
+aboutToRead=true
+[Ronda 5] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000014de05f70|storageS=0x000000014de05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000033802a0)|rawG=0x00006000033802a0|rawS=0x0000600003380300
+aboutToRead=true
+[Ronda 6] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000148704480|storageS=0x0000000148704480|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000161c060)|rawG=0x000060000161c060|rawS=0x000060000161c0c0
+aboutToRead=true
+[Ronda 7] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000120605f70|storageS=0x0000000120605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000017342a0)|rawG=0x00006000017342a0|rawS=0x0000600001734300
+aboutToRead=true
+[Ronda 8] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000147e05f70|storageS=0x0000000147e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000027242a0)|rawG=0x00006000027242a0|rawS=0x0000600002724300
+aboutToRead=true
+[Ronda 9] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000130e05f70|storageS=0x0000000130e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000011342a0)|rawG=0x00006000011342a0|rawS=0x0000600001134300
+aboutToRead=true
+[Ronda 10] exit=134
+e1-case|cell=c6|evaluatedInG=no|gAlive=no|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000123605f70|storageS=0x0000000123605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000002e02a0)|rawG=0x00006000002e02a0|rawS=0x00006000002e0300
+aboutToRead=true
+
+--- Detalle celda c9 (e1-c9) ---
+[Ronda 1] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000120e05f70|storageS=0x0000000120e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000036a02a0)|rawG=0x00006000036a02a0|rawS=0x00006000036a0300
+aboutToRead=true
+[Ronda 2] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000142e05f70|storageS=0x0000000142e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000025802a0)|rawG=0x00006000025802a0|rawS=0x0000600002580300
+aboutToRead=true
+[Ronda 3] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000148e05f70|storageS=0x0000000148e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003a582a0)|rawG=0x0000600003a582a0|rawS=0x0000600003a58300
+aboutToRead=true
+[Ronda 4] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000152605f70|storageS=0x0000000152605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000027402a0)|rawG=0x00006000027402a0|rawS=0x0000600002740300
+aboutToRead=true
+[Ronda 5] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x000000012d605f70|storageS=0x000000012d605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000107c2a0)|rawG=0x000060000107c2a0|rawS=0x000060000107c300
+aboutToRead=true
+[Ronda 6] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000133e05f70|storageS=0x0000000133e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003cc42a0)|rawG=0x0000600003cc42a0|rawS=0x0000600003cc4300
+aboutToRead=true
+[Ronda 7] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000156e05f70|storageS=0x0000000156e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000028802a0)|rawG=0x00006000028802a0|rawS=0x0000600002880300
+aboutToRead=true
+[Ronda 8] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000135605f70|storageS=0x0000000135605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000000d42a0)|rawG=0x00006000000d42a0|rawS=0x00006000000d4300
+aboutToRead=true
+[Ronda 9] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000145605f70|storageS=0x0000000145605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003d482a0)|rawG=0x0000600003d482a0|rawS=0x0000600003d48300
+aboutToRead=true
+[Ronda 10] exit=134
+e1-case|cell=c9|evaluatedInG=yes|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=yes
+storageG=0x0000000134f056e0|storageS=0x0000000134f056e0|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600003b80120)|rawG=0x0000600003b80120|rawS=0x0000600003b80180
+aboutToRead=true
+
+--- Detalle celda c10 (e1-c10) ---
+[Ronda 1] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000013f804480|storageS=0x000000013f804480|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000000c060)|rawG=0x000060000000c060|rawS=0x000060000000c0c0
+aboutToRead=true
+[Ronda 2] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000155605f70|storageS=0x0000000155605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000016342a0)|rawG=0x00006000016342a0|rawS=0x0000600001634300
+aboutToRead=true
+[Ronda 3] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000127e05f70|storageS=0x0000000127e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600001fc82a0)|rawG=0x0000600001fc82a0|rawS=0x0000600001fc8300
+aboutToRead=true
+[Ronda 4] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000129605f70|storageS=0x0000000129605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000131c2a0)|rawG=0x000060000131c2a0|rawS=0x000060000131c300
+aboutToRead=true
+[Ronda 5] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000149f056e0|storageS=0x0000000149f056e0|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600002fcc120)|rawG=0x0000600002fcc120|rawS=0x0000600002fcc180
+aboutToRead=true
+[Ronda 6] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x000000015ae05f70|storageS=0x000000015ae05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600002b9c2a0)|rawG=0x0000600002b9c2a0|rawS=0x0000600002b9c300
+aboutToRead=true
+[Ronda 7] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000139605f70|storageS=0x0000000139605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000020f02a0)|rawG=0x00006000020f02a0|rawS=0x00006000020f0300
+aboutToRead=true
+[Ronda 8] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000131605f70|storageS=0x0000000131605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x00006000039542a0)|rawG=0x00006000039542a0|rawS=0x0000600003954300
+aboutToRead=true
+[Ronda 9] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000143e05f70|storageS=0x0000000143e05f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x0000600000e582a0)|rawG=0x0000600000e582a0|rawS=0x0000600000e58300
+aboutToRead=true
+[Ronda 10] exit=134
+e1-case|cell=c10|evaluatedInG=no|gAlive=invalidated-retained|readVia=S
+hasValueBeforeShare=no
+storageG=0x0000000138605f70|storageS=0x0000000138605f70|sameStorage=true
+owner=G|ownerHandle=Optional(0x000060000327c2a0)|rawG=0x000060000327c2a0|rawS=0x000060000327c300
+aboutToRead=true
+
