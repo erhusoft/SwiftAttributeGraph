@@ -91,3 +91,15 @@ la referencia compartida paga el reenvío.
 
 Pendiente de decisión del dueño del proyecto: aceptar esta forma (handle reenviador) frente a mover el estado completo
 (sección 8, que supera el límite de rendimiento).
+
+## 10. Quién llama a `AGGraphCreateShared` (corrección)
+
+- El análisis guardado en `ag_callsites.json` decía que `SwiftUI.GraphHost.Data.init` la llama. **No se confirma**: en el
+  desensamblado completo del binario de SwiftUI no hay ninguna llamada a `AGGraphCreateShared`, y el símbolo
+  `GraphHost.Data.init` no aparece en él.
+- SwiftUICore: ninguna llamada directa en su desensamblado.
+- AttributeGraph: solo su definición (desensamblado leído en la sección 9 de la sesión).
+
+Conclusión: no hay un uso confirmado de `AGGraphCreateShared` en SwiftUI ni en SwiftUICore. La propuesta del handle
+reenviador no depende de ese uso, pero tampoco queda justificada por él. Antes de implementarla hay que encontrar un
+llamador real, o decidir la forma sin ese dato.
