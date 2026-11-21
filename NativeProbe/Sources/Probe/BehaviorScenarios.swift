@@ -3034,3 +3034,15 @@ func subgraphObserversScenario() {
     sub2.invalidate()
     print("subgraph-observers|a=\(a)|b=\(b)|removed=\(removed)|distinct=\(id1 != id2)")
 }
+
+/// `AGGraphGetAttributeSubgraph2` (`subgraphOrNil`): non-nil for a live attribute, nil for one whose subgraph was freed.
+func subgraphOrNilScenario() {
+    let d = Driver()
+    defer { d.close() }
+    let sub = d.makeSubgraph()
+    let x: Handle<Int64> = d.withSubgraph(sub) { d.input(1) }
+    let liveIsNil = d.subgraphOrNilIsNil(x)
+    sub.invalidate()
+    let deadIsNil = d.subgraphOrNilIsNil(x)
+    print("subgraph-or-nil|liveIsNil=\(liveIsNil)|deadIsNil=\(deadIsNil)")
+}

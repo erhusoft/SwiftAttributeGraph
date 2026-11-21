@@ -38,6 +38,8 @@ private func AGGraphCancelUpdate()
 private func AGGraphUpdateWasCancelled() -> Bool
 @_silgen_name("AGMakeUniqueID")
 private func AGMakeUniqueID() -> UInt
+@_silgen_name("AGGraphGetAttributeSubgraph2")
+private func c_AGGraphGetAttributeSubgraph2(_ attribute: AnyAttribute) -> UnsafeRawPointer?
 @_silgen_name("AGGraphBeginDeferringSubgraphInvalidation")
 private func c_AGGraphBegin(_ graph: UnsafeRawPointer) -> Bool
 @_silgen_name("AGGraphEndDeferringSubgraphInvalidation")
@@ -299,6 +301,7 @@ final class Driver {
     func cancelUpdate() { AGGraphCancelUpdate() }
     func updateWasCancelled() -> Bool { AGGraphUpdateWasCancelled() }
     func nextUniqueID() -> UInt { AGMakeUniqueID() }
+    func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { c_AGGraphGetAttributeSubgraph2(attribute.identifier) == nil }
     func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
     func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
     func beginDeferring() -> Bool { c_AGGraphBegin(Unmanaged.passUnretained(graph).toOpaque()) }
@@ -571,6 +574,7 @@ final class Driver {
     func cancelUpdate() { graph.cancelUpdate() }
     func updateWasCancelled() -> Bool { graph.updateWasCancelled }
     func nextUniqueID() -> UInt { makeUniqueID() }
+    func subgraphOrNilIsNil<V>(_ attribute: Handle<V>) -> Bool { graph.subgraphOrNil(of: attribute) == nil }
     func addObserverID(_ s: SubgraphHandle, _ body: @escaping () -> Void) -> Int { s.addObserver(body) }
     func removeObserverID(_ s: SubgraphHandle, _ id: Int) { s.removeObserver(id) }
     func beginDeferring() -> Bool { graph.beginDeferringSubgraphInvalidation() }
@@ -830,3 +834,4 @@ registerDependencyInRuleScenario()
 anyWeakAttributeScenario()
 deferringScenario()
 subgraphObserversScenario()
+subgraphOrNilScenario()
