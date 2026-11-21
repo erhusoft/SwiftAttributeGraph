@@ -162,8 +162,10 @@ func runSharedGraphStressProbeIfRequested() {
         let a2: Handle<Int64> = g2.input(20)
         let s1 = c_AGGraphCreateShared(g1.graph)
         let s2 = c_AGGraphCreateShared(g2.graph)
-        let r1: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a1.value })) }
-        let r2: Handle<Int64> = AttributeGraph.Subgraph(graph: s2).apply { Handle(NativeRule(body: { a2.value })) }
+        let root1 = AttributeGraph.Subgraph(graph: s1)
+        let root2 = AttributeGraph.Subgraph(graph: s2)
+        let r1: Handle<Int64> = root1.apply { Handle(NativeRule(body: { a1.value })) }
+        let r2: Handle<Int64> = root2.apply { Handle(NativeRule(body: { a2.value })) }
         print("two-hosts|s1ReadsG1=\(r1.value)|s2ReadsG2=\(r2.value)|nodesS1=\(s1.counter(for: .nodes))|nodesS2=\(s2.counter(for: .nodes))|nodesG1=\(g1.graph.counter(for: .nodes))|nodesG2=\(g2.graph.counter(for: .nodes))")
         fflush(stdout)
         exit(0)
@@ -173,7 +175,8 @@ func runSharedGraphStressProbeIfRequested() {
         let g2 = Driver()
         let a2: Handle<Int64> = g2.input(20)
         let s1 = c_AGGraphCreateShared(g1.graph)
-        let cross: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a2.value })) }
+        let root1 = AttributeGraph.Subgraph(graph: s1)
+        let cross: Handle<Int64> = root1.apply { Handle(NativeRule(body: { a2.value })) }
         print("two-hosts-cross|s1ReadsG2=\(cross.value)")
         fflush(stdout)
         exit(0)
@@ -465,6 +468,96 @@ func runSharedGraphLifetimeProbeIfRequested() {
         a = nil
         c_CFRelease(rawA)
         print("round5-case-c|cleanCompletion=true")
+        fflush(stdout)
+        exit(0)
+
+    case "probe-58":
+        // Measure byte at +0x58
+        let d = Driver()
+        let s = c_AGGraphCreateShared(d.graph)
+        let rawS = unsafeBitCast(s, to: UnsafeRawPointer.self)
+        let byteCreated = rawS.advanced(by: 0x58).load(as: UInt8.self)
+        c_AGGraphInvalidate(rawS)
+        let byteInvalidated = rawS.advanced(by: 0x58).load(as: UInt8.self)
+        c_AGGraphInvalidate(rawS)
+        let byteDoubleInvalidated = rawS.advanced(by: 0x58).load(as: UInt8.self)
+        print("probe-58|created=\(byteCreated)|invalidated=\(byteInvalidated)|doubleInvalidated=\(byteDoubleInvalidated)")
+        fflush(stdout)
+        exit(0)
+
+    case "two-hosts-step1":
+        // Step 1: Single Driver
+        let g1 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        print("step1|a1=\(a1.value)")
+        fflush(stdout)
+        exit(0)
+
+    case "two-hosts-step2":
+        // Step 2: Driver + shared handle of that driver
+        let g1 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        let s1 = c_AGGraphCreateShared(g1.graph)
+        let r1: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a1.value })) }
+        print("step2|r1=\(r1.value)")
+        fflush(stdout)
+        exit(0)
+
+    case "two-hosts-step3":
+        // Step 3: Two Drivers alive at the same time, reading each its own input
+        let g1 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        let g2 = Driver()
+        let a2: Handle<Int64> = g2.input(20)
+        print("step3|a1=\(a1.value)|a2=\(a2.value)")
+        fflush(stdout)
+        exit(0)
+
+    case "two-hosts-step4":
+        // Step 4: Two Drivers with shared handles each, creating r1 in s1 and r2 in s2
+        let g1 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        let s1 = c_AGGraphCreateShared(g1.graph)
+        let root1 = AttributeGraph.Subgraph(graph: s1)
+        let r1: Handle<Int64> = root1.apply { Handle(NativeRule(body: { a1.value })) }
+        let g2 = Driver()
+        let a2: Handle<Int64> = g2.input(20)
+        let s2 = c_AGGraphCreateShared(g2.graph)
+        let root2 = AttributeGraph.Subgraph(graph: s2)
+        let r2: Handle<Int64> = root2.apply { Handle(NativeRule(body: { a2.value })) }
+        print("step4|r1=\(r1.value)|r2=\(r2.value)")
+        fflush(stdout)
+        exit(0)
+
+    case "two-hosts-step4-order":
+        // Test step 4 evaluating r1 BEFORE creating g2/s2
+        let g1 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        let s1 = c_AGGraphCreateShared(g1.graph)
+        let root1 = AttributeGraph.Subgraph(graph: s1)
+        let r1: Handle<Int64> = root1.apply { Handle(NativeRule(body: { a1.value })) }
+        let val1 = r1.value
+        let g2 = Driver()
+        let a2: Handle<Int64> = g2.input(20)
+        let s2 = c_AGGraphCreateShared(g2.graph)
+        let root2 = AttributeGraph.Subgraph(graph: s2)
+        let r2: Handle<Int64> = root2.apply { Handle(NativeRule(body: { a2.value })) }
+        let val2 = r2.value
+        print("step4-order|r1=\(val1)|r2=\(val2)")
+        fflush(stdout)
+        exit(0)
+
+    case "two-hosts-orig":
+        // The exact code of the original two-hosts in runSharedGraphStressProbeIfRequested
+        let g1 = Driver()
+        let g2 = Driver()
+        let a1: Handle<Int64> = g1.input(10)
+        let a2: Handle<Int64> = g2.input(20)
+        let s1 = c_AGGraphCreateShared(g1.graph)
+        let s2 = c_AGGraphCreateShared(g2.graph)
+        let r1: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a1.value })) }
+        let r2: Handle<Int64> = AttributeGraph.Subgraph(graph: s2).apply { Handle(NativeRule(body: { a2.value })) }
+        print("two-hosts-orig|s1ReadsG1=\(r1.value)|s2ReadsG2=\(r2.value)")
         fflush(stdout)
         exit(0)
 

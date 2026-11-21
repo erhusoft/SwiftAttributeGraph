@@ -1,0 +1,67 @@
+Resultados de resolución de puntos abiertos (macOS 15.8.3, AttributeGraph nativo)
+
+=== Tarea 1: Marca +0x58 (Estado: FIRME) ===
+
+1. Medición nativa en sonda (`ProbeNative share-lifetime probe-58`):
+   - Configuración: Crear handle s = AGGraphCreateShared(d.graph), leer byte en rawS+0x58, invalidar rawS con c_AGGraphInvalidate, leer byte, volver a invalidar (segunda llamada idempotente), leer byte.
+   - Salida medida:
+     probe-58|created=0|invalidated=1|doubleInvalidated=1
+   - Conclusión medida:
+     - Recién creado: byte = 0.
+     - Tras primera invalidación: byte = 1.
+     - Tras segunda invalidación: byte = 1 (mantiene el valor).
+
+2. Desensamblado en LLDB (AttributeGraph binary en macOS 15.8.3):
+   - Creación (AGGraphCreateShared, 0x1c2c4033c):
+     - 0x1c2c40378: ldrb w8, [x20, #0x58] ; lee flag del grafo origen
+     - 0x1c2c4037c: cmp  w8, #1
+     - 0x1c2c40380: b.eq 0x1c2c40410      ; salta a AGGraphCreateShared.cold.1 si el grafo origen está invalidado
+     - 0x1c2c40410: bl   AG::precondition_failure("invalidated graph")
+     - 0x1c2c403f4: strb wzr, [x19, #0x58] ; inicializa a 0 en el nuevo handle
+   - Invalidación (AGGraphInvalidate, 0x1c2c40458):
+     - 0x1c2c40458: ldrb w8, [x0, #0x58]  ; lee flag
+     - 0x1c2c4045c: tbnz w8, #0x0, 0x1c2c40490 ; si bit 0 es 1, retorna inmediatamente (guardia de idempotencia)
+     - 0x1c2c40474: add  x0, x0, #0x10    ; x0 = handle + 0x10 (Context)
+     - 0x1c2c40478: bl   AG::Graph::Context::~Context()
+     - 0x1c2c4047c: mov  w8, #0x1
+     - 0x1c2c40480: strb w8, [x19, #0x58] ; escribe 1 marcando el handle como invalidado
+   - Finalizador CoreFoundation (klass->finalize, 0x1c2c42eac):
+     - 0x1c2c42eac: ldrb w8, [x0, #0x58]  ; lee flag
+     - 0x1c2c42eb0: tbz  w8, #0x0, 0x1c2c42eb8 ; si es 0, destruye contexto
+     - 0x1c2c42eb4: ret                   ; si es 1 (ya invalidado), retorna sin tocar contexto (evita double free)
+     - 0x1c2c42eb8: add  x0, x0, #0x10
+     - 0x1c2c42ebc: b    AG::Graph::Context::~Context()
+   - Funciones que comprueban +0x58 y disparan AG::precondition_failure("invalidated graph"):
+     - AGGraphCreateShared (0x1c2c40378)
+     - AGGraphSetNeedsUpdate (0x1c2c406fc)
+     - AGGraphStopTracing (0x1c2c42d14)
+     - AGGraphSyncTracing (0x1c2c42d58)
+     - AGGraphCopyTracePath (0x1c2c42d9c)
+     - AGGraphDescription (0x1c2c42e00)
+   - Significado: Flag booleano `is_invalidated` (1 byte) del handle `AGGraphStorage`.
+
+=== Tarea 2: Fallo de la prueba dos hosts (Estado: FIRME) ===
+
+1. Causa raíz identificada:
+   - En la sonda original de two-hosts:
+     `let r1: Handle<Int64> = AttributeGraph.Subgraph(graph: s1).apply { Handle(NativeRule(body: { a1.value })) }`
+     La instancia de `Subgraph(graph: s1)` se creó de forma temporal sin asignarse a una variable retenida.
+   - Swift ARC destruyó el `Subgraph` al terminar la sentencia (`AG::Subgraph::clear_object()`).
+   - El destructor del subgrafo desconecta el contexto del nodo de la regla (`[node + 0x28] = 0`).
+   - Al invocar `r1.value`, `AGGraphGetValue` cargó el puntero nulo de contexto y llamó a `AG::Graph::value_ref(AG::AttributeID, ...)` con `x0 = 0x0`.
+   - La instrucción `ldr w8, [x0, #0x1e0]` desreferenció `0x0 + 0x1e0 = 0x1e0`, provocando `EXC_BAD_ACCESS` (código de salida 139).
+
+2. Corrección y verificación (sonda `two-hosts` con variable retenida):
+   - Código:
+     ```swift
+     let root1 = AttributeGraph.Subgraph(graph: s1)
+     let root2 = AttributeGraph.Subgraph(graph: s2)
+     let r1: Handle<Int64> = root1.apply { Handle(NativeRule(body: { a1.value })) }
+     let r2: Handle<Int64> = root2.apply { Handle(NativeRule(body: { a2.value })) }
+     ```
+   - Salida medida (`ProbeNative two-hosts`):
+     two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2
+     Exit code: 0 (limpio, 100 % éxito).
+   - Lectura cruzada entre grafos independientes (`ProbeNative two-hosts-cross`):
+     Exit code: 134 (SIGABRT esperado por violación de espacio de nombres en `AG::Graph::input_value_ref_slow`).
+   - Conclusión: El comportamiento nativo del motor es correcto y admite múltiples grafos independientes simultáneamente. El fallo anterior era un error en la sonda por ciclo de vida efímero del Subgraph temporal.
