@@ -10,11 +10,15 @@
     /// Mutates the stored rule body in place if its type is `R`, returning `true` when matched.
     func mutateRuleBody<R>(as type: R.Type, _ body: (inout R) -> Void) -> Bool { false }
 
+    /// Returns the boxed value as `Any?` if available.
+    func boxedValue() -> Any? { nil }
+
     @usableFromInline init() {}
 }
 
 /// A box holding a value of a known type.
 @usableFromInline class TypedNode<Value>: NodeBox {
+    override func boxedValue() -> Any? { value }
     // Release builds skip the dynamic exclusivity check on the value, read on every attribute read (see `Graph`).
     // Every access copies the value in or out; none stays open while user code runs.
     #if DEBUG && !SAG_UNCHECKED

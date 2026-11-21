@@ -384,12 +384,17 @@ public final class Graph {
 
     /// Returns the attribute that `indirect` currently redirects to.
     public func source<Value>(of indirect: Attribute<Value>) -> Attribute<Value> {
+        Attribute(id: source(of: indirect.erased).id)
+    }
+
+    /// Returns the attribute that `indirect` currently redirects to (untyped).
+    public func source(of indirect: AnyAttribute) -> AnyAttribute {
         assertOwnThread()
         precondition(table.isLive(indirect.id), "source(of:): the indirect attribute is dead")
         precondition(table.state[Int(indirect.id.index)] & NodeState.indirect != 0,
                      "source(of:): the attribute is not an indirect attribute")
-        let box = table.box(at: indirect.id.index) as! IndirectNode<Value>
-        return Attribute(id: box.source)
+        let box = table.box(at: indirect.id.index) as! AnyIndirectNode
+        return AnyAttribute(id: box.source)
     }
 
     /// Redirects `indirect` to `newSource`.
@@ -398,6 +403,11 @@ public final class Graph {
     /// marks readers of `indirect` dirty and pending so they re-evaluate against `newSource` even when both hold equal
     /// values (matching native AttributeGraph).
     public func setSource<Value>(_ newSource: Attribute<Value>, for indirect: Attribute<Value>) {
+        setSource(newSource.erased, for: indirect.erased)
+    }
+
+    /// Redirects `indirect` to `newSource` (untyped).
+    public func setSource(_ newSource: AnyAttribute, for indirect: AnyAttribute) {
         assertOwnThread()
         precondition(table.isLive(indirect.id), "setSource(_:for:): the indirect attribute is dead")
         precondition(table.isLive(newSource.id), "setSource(_:for:): the source attribute is dead")
@@ -407,7 +417,7 @@ public final class Graph {
         let n = Int(index)
         precondition(table.state[n] & NodeState.indirect != 0,
                      "setSource(_:for:): the attribute is not an indirect attribute")
-        let box = table.box(at: index) as! IndirectNode<Value>
+        let box = table.box(at: index) as! AnyIndirectNode
         if box.source == newSource.id { return }
 
         // Reject cycles through chains of indirect attributes.
@@ -421,8 +431,8 @@ public final class Graph {
         precondition(cursor.index != index,
                      "setSource(_:for:): cycle detected (an indirect attribute cannot redirect to itself)")
 
-        let oldResolved = resolveIndirect(Attribute<Value>(id: box.source))
-        let newResolved = resolveIndirect(newSource)
+        let oldResolved = resolveIndirectNode(box.source)
+        let newResolved = resolveIndirectNode(newSource.id)
         let oldVal = resolvedValueIfAvailable(of: oldResolved)
         let newVal = resolvedValueIfAvailable(of: newResolved)
 
@@ -597,13 +607,13 @@ public final class Graph {
         return id
     }
 
-    private func resolvedValueIfAvailable<Value>(of resolved: Attribute<Value>) -> Value? {
-        guard table.isLive(resolved.id),
-              table.state[Int(resolved.id.index)] & NodeState.hasValue != 0 else { return nil }
-        if let reader = offsetFieldReaders[resolved.id.index] {
-            return reader() as? Value
+    private func resolvedValueIfAvailable(of resolvedIndex: UInt32) -> Any? {
+        guard table.isLive(index: resolvedIndex),
+              table.state[Int(resolvedIndex)] & NodeState.hasValue != 0 else { return nil }
+        if let reader = offsetFieldReaders[resolvedIndex] {
+            return reader()
         }
-        return typedNode(resolved).value
+        return table.box(at: resolvedIndex).boxedValue()
     }
 
     @usableFromInline func typedNode<Value>(_ attribute: Attribute<Value>) -> TypedNode<Value> {

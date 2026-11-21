@@ -8,4 +8,12 @@ public struct Subgraph: Hashable, Sendable {
 
     /// The ID of the subgraph inside its graph.
     public let id: SubgraphID
+
+    /// Whether the debug tree recording is enabled (`AGSubgraphShouldRecordTree`).
+    nonisolated(unsafe) public private(set) static var shouldRecordTree: Bool = false
+
+    /// Enables tree recording (`AGSubgraphSetShouldRecordTree`).
+    public static func setShouldRecordTree() {
+        shouldRecordTree = true
+    }
 }

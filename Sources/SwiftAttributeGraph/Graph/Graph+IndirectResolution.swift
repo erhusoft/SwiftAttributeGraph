@@ -45,9 +45,20 @@ extension Graph {
         return inputChanged(of: node, source: source.id.index) ?? false
     }
 
-    /// Resolves a chain of indirect attributes iteratively to its terminal non-indirect source
-    /// (or to an offset-field attribute, which is terminal for typed resolution because its underlying
-    /// `IndirectNode` stores `Source` rather than `Value`).
+    /// Resolves a chain of indirect attributes iteratively to its terminal non-indirect source (untyped).
+    func resolveIndirectNode(_ id: AttributeID) -> UInt32 {
+        var current = id
+        while true {
+            precondition(table.isLive(current), "the indirect attribute or its source is dead")
+            let index = current.index
+            if table.state[Int(index)] & NodeState.indirect == 0 { return index }
+            if offsetFieldReaders[index] != nil { return index }
+            guard let box = table.box(at: index) as? AnyIndirectNode else {
+                return index
+            }
+            current = box.source
+        }
+    }
     @usableFromInline
     func resolveIndirect<Value>(_ attribute: Attribute<Value>) -> Attribute<Value> {
         var current = attribute

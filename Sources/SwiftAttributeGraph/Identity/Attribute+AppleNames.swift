@@ -20,6 +20,70 @@ extension Attribute {
             graph.setFlags(newValue, for: self)
         }
     }
+
+    /// The graph value state of the attribute (`AGAttribute.valueState`).
+    public var valueState: ValueState {
+        graph.valueState(of: self)
+    }
+
+    /// The subgraph that owns this attribute (`AGAttribute.subgraph`).
+    public var subgraph: Subgraph {
+        graph.subgraph(of: self)
+    }
+
+    /// The subgraph that owns this attribute, or `nil` if it was freed (`AGAttribute.subgraphOrNil`).
+    public var subgraphOrNil: Subgraph? {
+        graph.subgraphOrNil(of: self)
+    }
+
+    /// The source attribute if this is an indirect attribute (`AGAttribute.source`).
+    public var source: Attribute<Value> {
+        get { graph.source(of: self) }
+        nonmutating set { graph.setSource(newValue, for: self) }
+    }
+}
+
+extension AnyAttribute {
+    /// Whether the attribute has a value (`AGAttribute.hasValue`).
+    public var hasValue: Bool {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else { return false }
+        return graph.hasValue(of: self)
+    }
+
+    /// The attribute's flags (`AGAttribute.flags`).
+    public var flags: AttributeFlags {
+        get {
+            guard let graph = GraphRegistry.graph(forTag: id.graphTag) else { return [] }
+            return graph.flags(of: self)
+        }
+        nonmutating set {
+            guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+                preconditionFailure("Attribute flags set after its graph was released")
+            }
+            graph.setFlags(newValue, for: self)
+        }
+    }
+
+    /// The graph value state of the attribute (`AGAttribute.valueState`).
+    public var valueState: ValueState {
+        graph.valueState(of: self)
+    }
+
+    /// The subgraph that owns this attribute (`AGAttribute.subgraph`).
+    public var subgraph: Subgraph {
+        graph.subgraph(of: self)
+    }
+
+    /// The subgraph that owns this attribute, or `nil` if it was freed (`AGAttribute.subgraphOrNil`).
+    public var subgraphOrNil: Subgraph? {
+        graph.subgraphOrNil(of: self)
+    }
+
+    /// The source attribute if this is an indirect attribute (`AGAttribute.source`).
+    public var source: AnyAttribute {
+        get { graph.source(of: self) }
+        nonmutating set { graph.setSource(newValue, for: self) }
+    }
 }
 
 /// Apple's offset attribute `AGAttribute.create(self:offset:)` and `AGAttribute.create(self:offset:size:)`,
