@@ -30,6 +30,8 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
   `accessing attribute in a different namespace: 536`.
 - Un handle compartido sí puede leer el espacio del grafo del que procede.
 - Leer un nodo sin evaluar de la primera referencia, después de liberarla, aborta con el mismo mensaje.
+- Dos ventanas de la misma app **no** abortan al leerse entre sí: comparten el grafo del proceso (sección siguiente).
+  El aborto solo aparece entre grafos normales independientes.
 
 ## Uso en SwiftUI (firme, medido en apps de prueba)
 
