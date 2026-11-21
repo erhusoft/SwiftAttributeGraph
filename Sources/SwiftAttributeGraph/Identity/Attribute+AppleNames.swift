@@ -33,7 +33,8 @@ extension Attribute {
 
     /// The subgraph that owns this attribute, or `nil` if it was freed (`AGAttribute.subgraphOrNil`).
     public var subgraphOrNil: Subgraph? {
-        graph.subgraphOrNilImpl(of: erased)
+        guard let owner = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+        return owner.subgraphOrNilImpl(of: erased)
     }
 
     /// The source attribute if this is an indirect attribute (`AGAttribute.source`).
@@ -76,7 +77,8 @@ extension AnyAttribute {
 
     /// The subgraph that owns this attribute, or `nil` if it was freed (`AGAttribute.subgraphOrNil`).
     public var subgraphOrNil: Subgraph? {
-        graph.subgraphOrNilImpl(of: self)
+        guard let owner = GraphRegistry.graph(forTag: id.graphTag) else { return nil }
+        return owner.subgraphOrNilImpl(of: self)
     }
 
     /// The source attribute if this is an indirect attribute (`AGAttribute.source`).
