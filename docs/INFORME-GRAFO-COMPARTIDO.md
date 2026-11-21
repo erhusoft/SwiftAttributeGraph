@@ -164,9 +164,13 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
    - **Estado**: Abierto.
    - Las pruebas multicelular de SwiftUI con dos ventanas emplearon `ObservableObject` para la sincronización entre vistas (capa de binding de SwiftUI). Falta verificar y medir cómo reacciona un nodo de grafo puro dependiente conectado directamente a través de dos handles en distintos hilos de UI sin la intermediación de `Combine` / `ObservableObject`.
 
-2. **Detección temprana de use-after-free sin colisión en el heap**:
+2. **Detección temprana de use-after-free sin colisión en el heap (F5)**:
+   - **Estado**: Abierto / Hipótesis pendiente.
+   - En T3 se demostró como hecho medido que la compuerta `cmp x8, x24` en `+144` evalúa únicamente la igualdad de puntero sin verificar generación ni validez del subgrafo. Sin embargo, no se ha medido que la reutilización accidental por un objeto ajeno sin intervención produzca lecturas silenciosas erróneas (el comportamiento observado fue `EXC_BAD_ACCESS` al acceder a metadatos no inicializados). Queda abierta la verificación de si existe algún escenario donde datos ajenos devuelvan un valor plausible sin abortar.
+
+3. **Verificación de M3 en topologías de múltiples subgrafos**:
    - **Estado**: Abierto.
-   - Aunque se demostró empíricamente en T3 que una reasignación con contexto coincidente supera la comprobación `cmp x8, x24` en `+144` (riesgo operativo medido), falta investigar si AttributeGraph cuenta con guardas adicionales en paths de actualización completa antes de llegar a `swift::nameForMetadata`.
+   - Con el mecanismo de M2 refutado por F1/F2 (el campo `+0x28` es un back-pointer a storage central compartido y no un sello de creador), el Modelo M3 postula que el aborto de c5/c6/c9/c10 se debe a la desasignación del descriptor de rango/subgrafo en el heap y no a un conflicto de namespace formal. Falta mapear la totalidad de subgrafos secundarios creados dentro de un mismo handle.
 
 ## 9. Puntos resueltos
 
@@ -196,15 +200,15 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
      `two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2`
      Y el caso de lectura cruzada no permitida entre grafos (`two-hosts-cross`) dispara el aborto de seguridad esperado de espacio de nombres (exit code 134).
 
-3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1)**:
+3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0, E1, F1-F5)**:
    - **Estado**: Firme.
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt`, `context-identity.txt`, `scrub-controls.txt`, `reuse-hazard.txt`.
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt`, `e1-e0-audit.txt`, `context-identity.txt`, `range-descriptor-identity.txt`, `scrub-controls.txt`, `reuse-hazard.txt`.
    - **Control de Storage (E0, 3 repeticiones)**:
-     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`) en las 3 repeticiones (100 % estable).
+     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`*(handle + 0x10)`) distintos (`different=true`) en las 3 repeticiones (100 % estable).
      - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`) en las 3 repeticiones (100 % estable).
      - El modelo de almacenamiento central único compartido queda sostenido de forma concluyente.
    - **Matriz de Lectura Cruzada (E1, 3 repeticiones por celda en procesos independientes)**:
-     - Se evaluó una regla (`rule`) no evaluada antes de compartir (`hasValueBeforeShare=no`) y evaluada antes de compartir (`hasValueBeforeShare=yes`, verificado formalmente mediante `AGGraphHasValue`).
+     - Auditoría formal (`e1-e0-audit.txt`): Se confirmó que en las celdas cruzadas (c2, c4, c5, c6, c9, c10), el atributo target leído (`w1`) es la regla creada en G (AttributeID 536, `owner = rawG`), y el lector caller (`w2`) es el reader creado en S (AttributeID 1048, `owner = rawS`).
      - **c1 (Evaluado + G vivo + leer por G)**: Termina con éxito limpio (`exit=0`, `value=7`).
      - **c2 (Evaluado + G vivo + leer por S)**: Termina con éxito limpio (`exit=0`, `value=7`).
      - **c3 (No evaluado + G vivo + leer por G)**: Termina con éxito limpio (`exit=0`, `value=7`).
@@ -212,23 +216,17 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
      - **c5 y c6 (G liberado + leer por S)**: Abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace: 536`).
      - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Abortan con `exit=134`.
      - **c7 y c8**: Clasificadas formalmente como N/A por construcción (use-after-free en el creador liberado).
-   - **Veredicto de Modelo (etiquetado comúnmente como "M2")**:
-     - c4 exitoso y c6 abortando confirman el modelo dinámico: la validez del enlace y la pertenencia al espacio de nombres depende de la vigencia del `Context` central del handle creador.
-   - **Resolución de la Contradicción fault.txt vs native.txt**:
-     - Las celdas c5 y c9 (evaluadas previamente pero leídas tras invalidar/liberar G) abortan con 134, refutando la hipótesis de fault.txt de que una evaluación previa permita al nodo sobrevivir a la destrucción del grafo creador.
-     - La lectura exitosa en `native.txt` (`readAfterLast=11`) se debió a que el grafo creador permaneció vivo durante toda la prueba.
-   - **Nexo de Identidad y Almacenamiento (T1)**:
-     - En `input_value_ref_slow` +144, `$x24` coincide con `*(rawS + 0x10)` y `*(rawG + 0x10)` (el puntero de almacenamiento central único).
-     - El objeto descriptor del slot almacena este mismo puntero en `+0x28`.
-     - `AGGraphGetAttributeGraph(0x218)` reporta a `rawS` como dueño formal, y `0x418` a `rawG`.
-     - La tabla global `AG::data::_shared_table_bytes` mapea un área de memoria virtual fija en `0x100258000` con ranuras cada 512 IDs (0x200) que apuntan a descriptores de 0x70 bytes en el heap.
-   - **Controles de MallocScribble y Atribución (T2)**:
-     - 4 corridas aisladas confirmaron que `MallocScribble` no es aplicable a bloques de 0x70 bytes en nano/tiny en macOS 15.8.3, ya que el allocator pone a 0 la memoria liberada.
-     - La atribución del borrado a `libsystem_malloc` queda demostrada por el backtrace de free (`_nanov2_free` / `free_tiny`) y la longitud del bloque (0x60/0x70).
-   - **Riesgo Operativo Verificado Experimentalmente (T3)**:
-     - Mediante spray de `malloc(0x70)` sobre memoria viva se reasignó deterministamente la dirección liberada.
-     - Al colocar el contexto legítimo en `+0x28`, la comparación `cmp x8, x24` en `+144` fue superada sin bifurcar al aborto de namespace (completando la lectura limpiamente al restaurar los campos del nodo, o fallando con `EXC_BAD_ACCESS` al acceder a metadatos no inicializados).
-     - El control con contexto falso (0x1) produjo un aborto determinista 134, confirmando que la puerta de namespace evalúa exclusivamente la igualdad del puntero en `+0x28`.
+   - **Veredicto de Modelo: Descarte de M1 y M2-mecanismo, Adopción del Modelo M3**:
+     - **Conducta**: El grafo creador debe permanecer vivo (o sus dependencias haber sido materializadas en vivo) para que el enlace entre handles sea navegable.
+     - **Mecanismo F1 y F2 (M2-mecanismo REFUTADO)**: Se midió que `$x24 == *(rawS + 0x10) == *(rawG + 0x10)` (`0x130f05c70`) es el puntero al STORAGE central compartido, y `*(uintptr_t*)(desc + 0x28)` almacena ese mismo puntero central tanto para descriptores originados en G como en S (`descS + 0x28 == descG + 0x28 == x24`). Por tanto, `+0x28` NO es un sello de creador ni discrimina entre handles compartidos.
+     - **Modelo M3 (Storage-Paging / Subgraph Lifetime)**: Los atributos se agrupan en descriptores de rango ("páginas") de 512 IDs indexados en la tabla compartida `_shared_table_bytes`. Cuando un handle es invalidado (`AGGraphInvalidate`), sus subgrafos son destruidos y los descriptores liberados al heap; el allocator de macOS pone a cero su memoria. La compuerta `cmp x8, x24` en `+144` evalúa `0x0 != x24` y aborta porque el descriptor está muerto en el heap, no por un choque entre identidades de handles vivos.
+     - **Identidad de Creador (F2)**: La verdadera identidad de pertenencia reportada por `AGGraphGetAttributeGraph` reside en un mapa hash central en `storage + 0x90`, indexado por el `context_id` monótono guardado en `desc + 0x30`.
+   - **Granularidad de Rango y Radio de Impacto (F3)**:
+     - Tres atributos creados en el mismo tramo de 512 IDs (p. ej. IDs 536, 584, 632) comparten exactamente la misma dirección de descriptor de 0x70 bytes en la ranura de la tabla.
+     - Si los lectores dependientes fueron evaluados vivos, los tres sobreviven a la invalidación del creador; si no fueron evaluados vivos, los tres abortan simultáneamente al ser liberado su descriptor común. El radio de impacto es el rango/subgrafo completo.
+   - **Riesgo Operativo Experimental (F5)**:
+     - (i) La compuerta `cmp x8, x24` en `+144` valida únicamente igualdad del puntero de storage: HECHO MEDIDO (se demostró que reasignando la memoria viva y estampando el puntero se elude la guarda).
+     - (ii) Que una reutilización accidental por un objeto ajeno produzca lecturas silenciosas erróneas queda como NO REPRODUCIDO (en las pruebas sin restaurar metadata la ejecución falló con `EXC_BAD_ACCESS` en metadatos de Swift).
 
 ---
 
