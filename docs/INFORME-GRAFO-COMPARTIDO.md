@@ -189,12 +189,29 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 2. **Causa raíz del fallo en la prueba de dos hosts con dos grafos independientes**:
    - **Estado**: Firme.
-   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt` (`two-hosts`, `two-hosts-cross`).
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/rules.txt` (`two-hosts`, `two-hosts-cross`).
    - **Causa raíz**: Error en el código de la sonda, **no** un bug de AttributeGraph ni un fallo por tener múltiples grafos en el proceso.
    - **Mecanismo**: La sonda original evaluó `AttributeGraph.Subgraph(graph: s1).apply { ... }` sin retener la instancia de `Subgraph` en una variable local viva. Al terminar la sentencia, ARC destruyó el `Subgraph` (`AG::Subgraph::clear_object()`), disociando el contexto del nodo (`[node + 0x28] = 0`). Al leer `.value`, `AGGraphGetValue` pasó un contexto nulo `0x0` a `AG::Graph::value_ref`, intentando desreferenciar `[0x0 + 0x1e0]` (`SIGSEGV` / exit code 139).
    - **Verificación**: Reteniendo el `Subgraph` en una variable (`let root1 = AttributeGraph.Subgraph(graph: s1)`), `two-hosts` ejecuta 100 % limpio (exit code 0):
      `two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2`
      Y el caso de lectura cruzada no permitida entre grafos (`two-hosts-cross`) dispara el aborto de seguridad esperado de espacio de nombres (exit code 134).
+
+3. **Validación del modelo de espacio de nombres y ciclo de vida (Experimentos E0 y E1)**:
+   - **Estado**: Firme.
+   - **Referencia**: `Results/shared-graph-macos-15.8.3/e1-e0.txt`.
+   - **Control de Storage (E0)**:
+     - Dos grafos independientes creados con `AGGraphCreate()` tienen punteros de almacenamiento central (`handle + 0x10`) distintos (`different=true`).
+     - Un grafo compartido `S = AGGraphCreateShared(A)` tiene exactamente el mismo puntero de almacenamiento central que `A` (`sameAsA=true`).
+     - Se sostiene el modelo de almacenamiento central único por grafo y compartido entre handles.
+   - **Matriz de Lectura Cruzada (E1)**:
+     - Se evaluó una regla (rule) no evaluada antes de compartir (`hasValueBeforeShare=no`) y evaluada antes de compartir (`hasValueBeforeShare=yes`, verificado mediante `AGGraphHasValue`).
+     - **c4 (No evaluado + G vivo + leer por S)**: Termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=no`). Esto **descarta el modelo M1** (espacio de nombres estático cerrado por handle).
+     - **c2 (Evaluado + G vivo + leer por S)**: Termina con éxito limpio (`exit=0`, `value=7`, `hasValueBeforeShare=yes`).
+     - **c5 y c6 (G liberado + leer por S)**: Abortan con `exit=134` (`precondition failure: accessing attribute in a different namespace`).
+     - **c9 y c10 (G invalidado-pero-retenido + leer por S)**: Con el handle CF de G retenido en memoria (`CFRetain`) pero su contexto destruido vía `AGGraphInvalidate`, **ambos abortan con `exit=134`**.
+   - **Conclusión de Modelo**:
+     - Queda **firmemente respaldado el modelo M2** (sello y ciclo de vida ligado al `Context` del creador).
+     - No es la liberación del bloque de memoria de CoreFoundation lo que provoca el fallo de espacio de nombres, sino la destrucción del `Context` (`AG::Graph::Context`) del handle que originó el atributo. Mientras el contexto creador esté vivo, cualquier handle compartido puede leer y evaluar perezosamente sus atributos.
 
 ---
 
