@@ -1,0 +1,111 @@
+# T1: Nexo de Identidad, Contextos de Handles y Sub-medición de Ranura/Página
+# Fecha: 2026-11-21
+# Sistema: macOS 15.8.3 (Darwin 24.3.0 arm64)
+# Módulo AttributeGraph UUID: B8871E2F-044F-31C5-944E-9655E0979E9A
+# Dirección base de carga AttributeGraph: 0x1c2c18000
+
+================================================================================
+1. IDENTIDAD DE REGISTROS EN AG::Graph::input_value_ref_slow (+144)
+================================================================================
+Topología evaluada:
+  G = AGGraphCreate(); S = AGGraphCreateShared(G);
+  Regla `rule` en G (AttributeID 0x418 / slot 0x400);
+  Regla `reader` en S (AttributeID 0x218 / slot 0x200) leyendo rule.value;
+  Lectura: reader.value llamada desde S con G VIVO.
+  Resultado de la ejecución: exit=0, valor devuelto = 7.
+
+Parada en Breakpoint en 0x1c2c2aee4 (+144) durante la lectura exitosa:
+  Instrucción: cmp x8, x24
+
+Valores observados en registros en vivo:
+  $x24 (contexto activo del lector):   0x13d7054c0
+  $x8  (cargado desde [objeto+0x28]): 0x13d7054c0
+  $x27 (AttributeID consultado):       0x218
+  $x8 == $x24:                         TRUE (la comparación es idéntica y no bifurca)
+
+Direcciones de handles y contextos en vivo:
+  rawG (handle CoreFoundation de G):   0x600003d80180
+  rawS (handle CoreFoundation de S):   0x600003d80120
+  rawG + 0x10:                         0x600003d80190
+  rawS + 0x10:                         0x600003d80130
+
+  storageG = *(uintptr_t*)(rawG + 0x10): 0x13d7054c0
+  storageS = *(uintptr_t*)(rawS + 0x10): 0x13d7054c0
+
+  *(uintptr_t*)rawG:                   0x1000001ff68ceb9
+  *(uintptr_t*)rawS:                   0x1000001ff68ceb9
+
+Verificación por API oficial de AG:
+  (void*)AGGraphGetAttributeGraph(0x218) = 0x600003d80120  (rawS, dueño formal de reader)
+  (void*)AGGraphGetAttributeGraph(0x418) = 0x600003d80180  (rawG, dueño formal de rule)
+
+CRITERIO Y RESOLUCIÓN:
+  - $x24 == *(rawS + 0x10): TRUE  (0x13d7054c0 == 0x13d7054c0)
+  - $x24 == *(rawG + 0x10): TRUE  (0x13d7054c0 == 0x13d7054c0)
+  - [reader_obj + 0x28] == *(rawS + 0x10): TRUE (0x13d7054c0)
+  - Explicación de la identidad:
+    El campo en handle + 0x10 es un PUNTERO al estado central compartido `AG::Graph` / `Context`.
+    Tanto rawG como rawS contienen exactamente el mismo puntero central 0x13d7054c0 en offset +0x10.
+    Por lo tanto, el contexto guardado en el objeto en offset +0x28 es este contexto de grafo único.
+    Durante la lectura en S con G vivo, tanto el contexto activo ($x24) como el contexto registrado
+    en el objeto ($x8) son iguales al almacenamiento central compartido (0x13d7054c0), garantizando
+    que el cmp (+144) sea satisfecho.
+
+================================================================================
+2. SUB-MEDICIÓN: ANÁLISIS DE LA RANURA DE TABLA Y ESTRUCTURA DE 0x70 BYTES
+================================================================================
+Símbolo global:
+  image lookup -a 0x1ff93cec0:
+    Address: AttributeGraph[0x00000001ee768ec0] (AttributeGraph.__DATA_DIRTY.__common + 0)
+    Summary: AttributeGraph`AG::data::_shared_table_bytes
+
+Estructura de AG::data::_shared_table_bytes en memoria:
+  +0x00 (ptr0):   0x100257e00  (puntero base con sesgo)
+  +0x08 (ptr1):   0x100258000  (puntero base de página)
+  +0x10 (size):   0x10000000000000
+  +0x18 (max_id): 0x200100200
+
+Mapeo de memoria virtual (memory region):
+  [0x1001f8000 - 0x100258000): --- (guard page, no legible ni escribible)
+  [0x100258000 - 0x100358000): rw- (página mapeada en dirección fija de la tabla)
+
+Aritmética de indexación en input_value_ref_slow:
+  offset_slot = id & 0xfffffe00
+  address_slot = ptr0 + offset_slot
+
+Para AttributeID = 0x218 (reader en S):
+  offset_slot = 0x200
+  address_slot = 0x100257e00 + 0x200 = 0x100258000
+  Contenido en 0x100258000: puntero a objeto de 0x70 bytes (0x6000037c4070)
+
+Para AttributeID = 0x418 (rule en G):
+  offset_slot = 0x400
+  address_slot = 0x100257e00 + 0x400 = 0x100258200
+  Contenido en 0x100258200: puntero a objeto de 0x70 bytes (0x6000037c40e0)
+
+Estructura del bloque de 0x70 bytes alojado en el heap:
+  Slot 0x200 (reader en S):
+    +0x00: 0x0
+    +0x08: 0x0
+    +0x10: 0x200              (ID base de la ranura)
+    +0x18: 0x1                (índice secuencial de subgrafo)
+    +0x20: 0x600001cc5800     (puntero interno a buffer/metadata)
+    +0x28: 0x13f8054c0        (puntero al contexto de almacenamiento central)
+    +0x30: 0x2                (ID único del contexto)
+    +0x38..+0x68: 0x0
+  Slot 0x400 (rule en G):
+    +0x00: 0x0
+    +0x08: 0x0
+    +0x10: 0x400              (ID base de la ranura)
+    +0x18: 0x2                (índice secuencial de subgrafo)
+    +0x20: 0x600001cc5820     (puntero interno a buffer/metadata)
+    +0x28: 0x13f8054c0        (puntero al contexto de almacenamiento central)
+    +0x30: 0x3                (ID único del contexto)
+    +0x38..+0x68: 0x0
+
+Alineación y aritmética del allocator:
+  En NanoZone, node_ptr_s + 0x70 == node_ptr_g:
+    node_ptr_s = 0x6000037c4070
+    node_ptr_g = 0x6000037c40e0
+    Diferencia = 0x70 bytes (tamaño exacto de la asignación del objeto).
+  Cada rango de 512 IDs (tramos de 0x200 en ID) apunta a su propio objeto descriptor de 0x70 bytes.
