@@ -181,16 +181,26 @@ struct SubgraphDAGTests {
         }
     }
 
-    @Test func repeatedAddChildDoesNotDuplicateEdge() {
-        let graph = Graph()
-        let p = graph.makeSubgraph()
-        let c = graph.makeSubgraph(parent: p)
+    @Test func repeatedAddChildFailsPrecondition() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let p = graph.makeSubgraph()
+            let c = graph.makeSubgraph(parent: p)
 
-        p.addChild(c)
-        p.addChild(c)
+            p.addChild(c)
+            p.addChild(c)
+        }
+    }
 
-        #expect(graph.subgraphs.children(of: p.id.index) == [c.id.index])
-        #expect(graph.subgraphs.parents(of: c.id.index) == [p.id.index])
+    @Test func addChildFromDifferentGraphFailsPrecondition() async {
+        await #expect(processExitsWith: .failure) {
+            let g1 = Graph()
+            let g2 = Graph()
+            let p = g1.makeSubgraph()
+            let c = g2.makeSubgraph()
+
+            p.addChild(c)
+        }
     }
 
     @Test func removingNonExistentChildIsNoOp() {

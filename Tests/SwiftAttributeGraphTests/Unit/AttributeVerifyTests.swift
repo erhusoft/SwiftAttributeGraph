@@ -11,4 +11,14 @@ import Testing
         input.verify(type: Int.self)
         #expect(graph.value(of: input) == 7)
     }
+
+    @Test func writingToNonDirectAttributeIDFailsPrecondition() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            let input = graph.makeInput(7)
+            let nonDirectID = AttributeID(rawValue: input.id.rawValue | 1)
+            let badAttr = Attribute<Int>(id: nonDirectID)
+            graph.setValue(10, for: badAttr)
+        }
+    }
 }

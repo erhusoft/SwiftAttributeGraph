@@ -176,16 +176,15 @@ struct SubgraphTable {
         let childHasLiveChildren = rawChildren[c].count > Int(childTombstoneCount[c])
         precondition(!childHasLiveChildren || !isAncestor(child, of: parent),
                      "addChild: cycle detected in subgraph DAG")
-        if !parents[c].contains(parent) {
-            let pos = UInt32(rawChildren[p].count)
-            rawChildren[p].append(child)
-            if rawTags[p] == nil && tag & 0x3 != 0 {
-                rawTags[p] = [UInt8](repeating: 0, count: rawChildren[p].count - 1)
-            }
-            if rawTags[p] != nil { rawTags[p]!.append(tag & 0x3) }
-            parents[c].append(parent)
-            positionInParents[c].append(pos)
+        precondition(!parents[c].contains(parent), "child already attached to new parent")
+        let pos = UInt32(rawChildren[p].count)
+        rawChildren[p].append(child)
+        if rawTags[p] == nil && tag & 0x3 != 0 {
+            rawTags[p] = [UInt8](repeating: 0, count: rawChildren[p].count - 1)
         }
+        if rawTags[p] != nil { rawTags[p]!.append(tag & 0x3) }
+        parents[c].append(parent)
+        positionInParents[c].append(pos)
     }
 
     /// Unlinks `child` from `parent` without invalidating `child`.

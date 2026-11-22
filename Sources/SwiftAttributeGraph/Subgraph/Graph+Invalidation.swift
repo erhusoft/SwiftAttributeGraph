@@ -178,4 +178,20 @@ extension Graph {
 
         flushNotifications()
     }
+
+    /// Invalidates the entire graph (`AGGraphInvalidate` in native AttributeGraph).
+    ///
+    /// Once invalidated, subsequent operations on the graph reject with `"invalidated graph"`.
+    public func invalidate() {
+        assertOwnThread()
+        guard !isInvalidated else { return }
+        isInvalidated = true
+
+        // Clean up contexts and subgraphs.
+        for entry in updateContexts {
+            if let ctx = entry.value, !ctx.isInvalidated {
+                invalidateContext(ctx)
+            }
+        }
+    }
 }

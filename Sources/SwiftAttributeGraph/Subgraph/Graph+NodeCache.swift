@@ -105,10 +105,12 @@ extension Graph {
     public var context: UnsafeRawPointer? {
         get {
             assertOwnThread()
+            precondition(!isInvalidated, "invalidated graph")
             return defaultUpdateContext.context
         }
         set {
             assertOwnThread()
+            precondition(!isInvalidated, "invalidated graph")
             defaultUpdateContext.context = newValue
         }
     }

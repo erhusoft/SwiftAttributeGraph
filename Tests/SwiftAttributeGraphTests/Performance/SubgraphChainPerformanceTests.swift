@@ -84,6 +84,10 @@ import Testing
             times[count] = invalidateSiblings(count)
             print("PERF invalidate \(count) siblings: \(times[count]!) ms")
         }
+        #if !DEBUG
         #expect(times[20_000]! < 50.0, "20,000 sibling invalidations in release must finish under 50 ms (was ~297 ms O(N^2))")
+        #else
+        #expect(times[20_000]! < 500.0, "20,000 sibling invalidations in debug must finish under 500 ms")
+        #endif
     }
 }

@@ -29,7 +29,6 @@ import Testing
     /// `Create; AddChild(parent, child)` followed by the scoped creation of the content.
     static func makeChild<T>(_ graph: Graph, of parent: Subgraph, addChild: Bool = true, _ build: () -> T) -> (Subgraph, T) {
         let child = graph.makeSubgraph(parent: parent)
-        if addChild { parent.addChild(child) }       // idempotent: makeSubgraph(parent:) already linked it [O, test 3]
         let content = inScope(graph, child, build)
         return (child, content)
     }

@@ -19,6 +19,8 @@ public final class Graph {
     @usableFromInline let primary: Graph?
     /// Active graph context for this handle.
     var activeContext: GraphContext?
+    /// Whether the graph has been invalidated (`AGGraphInvalidate`).
+    @exclusivity(unchecked) public internal(set) var isInvalidated: Bool = false
     /// Comparators resolved so far, one per value type and policy (see `ValueComparator.Cache`).
     @exclusivity(unchecked) var comparators = ValueComparator.Cache()
     @exclusivity(unchecked) var subgraphs = SubgraphTable()
@@ -150,6 +152,7 @@ public final class Graph {
     /// Creates a new invalidation context distinct from the root subgraph's default context.
     public func makeSubgraphContext() -> SubgraphContext {
         assertOwnThread()
+        precondition(!isInvalidated, "invalidated graph")
         precondition(nextSubgraphContextID != UInt32.max, "makeSubgraphContext: context ID space exhausted")
         let id = nextSubgraphContextID
         nextSubgraphContextID += 1
@@ -159,6 +162,7 @@ public final class Graph {
     /// Returns the invalidation context of `subgraph`.
     public func context(of subgraph: Subgraph) -> SubgraphContext {
         assertOwnThread()
+        precondition(!isInvalidated, "invalidated graph")
         precondition(subgraphs.isLive(subgraph.id), "context(of:): the subgraph was invalidated")
         return SubgraphContext(rawValue: subgraphs.context(of: subgraph.id.index))
     }
@@ -167,6 +171,7 @@ public final class Graph {
     /// current belong to it, and it dies with its parent when they share the same invalidation context.
     public func makeSubgraph(parent: Subgraph? = nil, context: SubgraphContext? = nil) -> Subgraph {
         assertOwnThread()
+        precondition(!isInvalidated, "invalidated graph")
         let owner = parent?.id ?? currentSubgraph
         precondition(subgraphs.isLive(owner), "makeSubgraph: the parent subgraph was invalidated")
         precondition(!subgraphs.isFalling(index: owner.index), "makeSubgraph: the parent subgraph is being invalidated")
@@ -176,6 +181,7 @@ public final class Graph {
     /// Links `child` under `parent` in the subgraph DAG. Rejects self-links and cycles.
     func addChild(_ child: Subgraph, to parent: Subgraph, tag: UInt8 = 0) {
         assertOwnThread()
+        precondition(child.id.graphTag == parent.id.graphTag, "child subgraph must have same graph")
         precondition(subgraphs.isLive(parent.id) && !subgraphs.isFalling(index: parent.id.index),
                      "addChild: the parent subgraph was invalidated")
         precondition(subgraphs.isLive(child.id) && !subgraphs.isFalling(index: child.id.index),

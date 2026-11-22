@@ -40,4 +40,30 @@ import Testing
         graph.invalidateAllValues()
         #expect(graph.nodeCount == 1)
     }
+
+    @Test func operatingOnInvalidatedGraphFailsPrecondition() async {
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            graph.invalidate()
+            _ = graph.context
+        }
+
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            graph.invalidate()
+            graph.invalidateAllValues()
+        }
+
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            graph.invalidate()
+            _ = graph.makeSubgraph()
+        }
+
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph()
+            graph.invalidate()
+            _ = graph.makeSubgraphContext()
+        }
+    }
 }
