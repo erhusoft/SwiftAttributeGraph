@@ -50,16 +50,24 @@ extension NodeTable {
     mutating func markRead(of source: UInt32, by consumer: Int) -> Int? {
         // Appending at the end is the common case for a new edge: rules usually read in ascending slot order.
         let count = inputs[consumer].count
-        if count == 0 || inputs[consumer][count - 1].source < source { return count }
+        if count == 0 { return 0 }
         let version = versions[Int(source)]
         return inputs[consumer].withUnsafeMutableBufferPointer { edges -> Int? in
+            let lastIndex = count - 1
+            let lastSource = edges[lastIndex].source
+            if lastSource < source { return count }
+            if lastSource == source {
+                edges[lastIndex].read = true
+                edges[lastIndex].seenVersion = version
+                return nil
+            }
             var low = 0
-            var high = count
+            var high = lastIndex
             while low < high {
                 let mid = (low + high) >> 1
                 if edges[mid].source < source { low = mid + 1 } else { high = mid }
             }
-            if low < count, edges[low].source == source {
+            if edges[low].source == source {
                 edges[low].read = true
                 edges[low].seenVersion = version
                 return nil

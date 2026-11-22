@@ -136,4 +136,36 @@ import Testing
 
         #expect(graph.value(of: rule) == [4, 3])
     }
+
+    private struct ParityRule: Rule {
+        var source: Attribute<Int64>
+        var modulo: Int64 = 2
+        var value: Int64 { source.value % modulo }
+    }
+
+    @Test func aTypeRuleAndMapAndFocusCutReadersAndSupportMutateBody() {
+        struct Pair: Equatable { var a: Int64; var b: Int64 }
+        let graph = Graph()
+        let input = graph.makeInput(Int64(1))
+        let typeRule = graph.makeRule(ParityRule(source: input))
+        var readerRuns = 0
+        let reader = graph.makeRule { readerRuns += 1; return typeRule.value * 10 }
+        #expect(graph.value(of: reader) == 10 && readerRuns == 1)
+
+        graph.setValue(3, for: input)
+        #expect(graph.value(of: reader) == 10 && readerRuns == 1)
+
+        graph.mutateBody(of: typeRule, as: ParityRule.self, invalidating: true) { $0.modulo = 4 }
+        #expect(graph.value(of: reader) == 30 && readerRuns == 2)
+
+        let pair = graph.makeInput(Pair(a: 2, b: 9))
+        let focused = graph.makeFocus(pair, keyPath: \Pair.a)
+        let mapped = graph.makeMap(focused) { $0 % 2 }
+        var mapReaderRuns = 0
+        let mapReader = graph.makeRule { mapReaderRuns += 1; return mapped.value }
+        #expect(graph.value(of: mapReader) == 0 && mapReaderRuns == 1)
+
+        graph.setValue(Pair(a: 4, b: 99), for: pair)
+        #expect(graph.value(of: mapReader) == 0 && mapReaderRuns == 1)
+    }
 }

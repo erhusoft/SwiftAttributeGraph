@@ -41,6 +41,7 @@ public final class Graph {
     @exclusivity(unchecked) var updateContexts: [WeakGraphContext] = []
     @exclusivity(unchecked) var nextGraphContextID: UInt32 = 1
     @exclusivity(unchecked) var hasAnyInvalidationCallback = false
+    @exclusivity(unchecked) var hasAnyPendingUpdateCallback = false
     @exclusivity(unchecked) @usableFromInline var readEpoch: UInt32 = 0
     lazy var defaultUpdateContext: GraphContext = {
         let ctx = GraphContext(graph: self, id: 0, contextID: graphCounterID + 1,
@@ -400,6 +401,17 @@ public final class Graph {
         return allocate(node, state: NodeState.isRule | NodeState.dirty | NodeState.pending)
     }
 
+    /// The non-generic end of the `Rule`-type form of `makeRule`.
+    @usableFromInline
+    func allocateTypeRule(_ node: NodeBox) -> AttributeID {
+        if let primary {
+            return primary.withCurrent(Subgraph(id: currentSubgraph)) {
+                primary.allocateTypeRule(node)
+            }
+        }
+        return allocate(node, state: NodeState.isRule | NodeState.dirty)
+    }
+
     /// Creates an indirect attribute that redirects to `source`, in the current subgraph.
     ///
     /// Reading the indirect attribute reads `source`; writing it writes to `source` (if the terminal source is an
@@ -600,16 +612,11 @@ public final class Graph {
     }
 
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
+    @inlinable
     public func makeRule<R: Rule>(_ rule: R, comparison: ValuePolicy = .viewValue) -> Attribute<R.Value> {
-        if let primary {
-            return primary.withCurrent(Subgraph(id: currentSubgraph)) {
-                primary.makeRule(rule, comparison: comparison)
-            }
-        }
         assertOwnThread()
-        let id = allocate(TypeRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self)),
-                         state: NodeState.isRule | NodeState.dirty)
-        return Attribute(id: id)
+        let type = nodeType(comparison, for: R.Value.self)
+        return Attribute(id: allocateTypeRule(TypeRuleNode(rule: rule, type: type)))
     }
 
     /// Creates a rule attribute from a closure, in the current subgraph. The closure runs lazily.

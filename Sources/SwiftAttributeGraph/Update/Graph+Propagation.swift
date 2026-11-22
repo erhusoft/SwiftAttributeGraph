@@ -89,10 +89,12 @@ extension Graph {
         let skipsNoEdge = edgeComparators.isEmpty && offsetIndirects.isEmpty
         while let node = dirtyStack.popLast() {
             let n = Int(node)
-            if table.state[n] & NodeState.dirty != 0 { continue }
-            table.state[n] |= NodeState.dirty
-            if table.flags[n] != 0 { subgraphs.markDirtyFlags(table.flags[n], on: table.owner(at: node)) }
-            if table.state[n] & NodeState.observed != 0 { queueNotification(node) }
+            let state = table.state[n]
+            if state & NodeState.dirty != 0 { continue }
+            table.state[n] = state | NodeState.dirty
+            let flags = table.flags[n]
+            if flags != 0 { subgraphs.markDirtyFlags(flags, on: table.owner(at: node)) }
+            if state & NodeState.observed != 0 { queueNotification(node) }
             if skipsNoEdge {
                 dirtyStack.append(contentsOf: table.outputs[n])
                 continue

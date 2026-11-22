@@ -1,15 +1,16 @@
 /// One entry of the update stack: a node being brought up to date and the next input edge to verify.
 ///
 /// Resuming at `next` instead of rescanning the inputs is the update-stack idea of Compute (`UpdateStack`).
+/// Packed to 16 bytes so 8 frames fit in one 128-byte Apple Silicon L1 cache line (4 in a 64-byte x86_64 line).
 struct UpdateFrame {
     var node: UInt32
     /// A nonnegative input cursor, or `-1` while a resumable rule is suspended.
-    var next: Int
+    var next: Int32
+    /// Source node requested while suspended on a resumable rule; no source is freed while an update is active.
+    var waiting: UInt32 = Graph.noNode
     /// Remembers whether an earlier input edge already had a changed version when the frame leaves to update a later
     /// dirty input edge.
     var inputChanged = false
-    /// Fits the original frame's padding on 64-bit platforms; no source is freed while an update is active.
-    var waiting: UInt32 = Graph.noNode
     /// Cooperative cancellation flag set by `Graph.cancelUpdate()`.
     var isCancelled = false
 }
@@ -75,12 +76,16 @@ extension Graph {
         if let running = ThreadLocalGraph.current() {
             precondition(running === self || running.graphTag == self.graphTag, "a rule cannot read an attribute of another graph")
         }
-        if table.isLive(id), table.state[Int(id.index)] & NodeState.indirect != 0 { return nil }
+        precondition(table.isLive(id), "reading a dead attribute (its subgraph was invalidated)")
+        let index = id.index
+        let n = Int(index)
+        let state = table.state[n]
+        if state & NodeState.indirect != 0 { return nil }
         // Native drains the update callbacks only when a rule is read, never an input [O].
-        if hasPendingUpdateCallback, table.isLive(id), table.state[Int(id.index)] & NodeState.isRule != 0 {
+        if hasAnyPendingUpdateCallback, state & NodeState.isRule != 0 {
             flushUpdateCallbackIfReady()
         }
-        return beginRuleRead(id)
+        return beginValidatedRuleRead(index: index, n: n)
     }
 
     /// The generic slow path of ``value(of:)`` for an indirect attribute (or a dead one, which stops the program).
@@ -89,7 +94,7 @@ extension Graph {
         // An indirect attribute counts as the rule (or input) it resolves to, as `clearNeedsUpdateFlags` does. The
         // resolution is only needed when a callback could fire, so the common read pays nothing for it (an extra
         // `resolveIndirect` per read cost +15 % on the 20,000-indirect benchmark, measured since 5466663).
-        if hasPendingUpdateCallback, table.isLive(attribute.id) {
+        if hasAnyPendingUpdateCallback, table.isLive(attribute.id) {
             let node = table.state[Int(attribute.id.index)] & NodeState.indirect != 0
                 ? resolveIndirect(attribute).id.index : attribute.id.index
             if table.state[Int(node)] & NodeState.isRule != 0 { flushUpdateCallbackIfReady() }
@@ -105,9 +110,18 @@ extension Graph {
         let index = id.index
         let n = Int(index)
         if table.state[n] & NodeState.indirect != 0 { return nil }
+        return beginValidatedRuleRead(index: index, n: n)
+    }
+
+    @inline(__always)
+    func beginValidatedRuleRead(index: UInt32, n: Int) -> NodeBox {
         readEpoch &+= 1
-        if frames.isEmpty && table.state[n] & NodeState.isRule != 0 { transactionCount &+= 1; if needsUpdateFlag { clearNeedsUpdateFlags() } }
-        if table.state[n] & NodeState.dirty != 0 {
+        let state = table.state[n]
+        if frames.isEmpty && state & NodeState.isRule != 0 {
+            transactionCount &+= 1
+            if needsUpdateFlag { clearNeedsUpdateFlags() }
+        }
+        if state & NodeState.dirty != 0 {
             precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
             update(index)
         }
@@ -132,6 +146,7 @@ extension Graph {
     }
 
     /// Runs the subgraph invalidations deferred during the read once no rule is running.
+    @inline(__always)
     @usableFromInline
     func endRead() {
         if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
@@ -558,48 +573,48 @@ extension Graph {
             var mustRun = table.state[n] & NodeState.hasValue == 0 || table.state[n] & NodeState.pending != 0
                 || frames[top].inputChanged
 
-            var i = frames[top].next
+            var i = Int(frames[top].next)
             // Common case: no partial edge comparator on this node and no offset attribute in the graph, so any changed
             // version means "must run" and the scan needs no dictionary lookup.
             if offsetIndirects.isEmpty && (edgeComparators.isEmpty || edgeComparators[node] == nil) {
                 let scan = table.scanInputs(of: n, from: i)
                 if scan.changed { mustRun = true }
                 if scan.stop < table.inputs[n].count {
-                    frames[top].next = scan.stop
+                    frames[top].next = Int32(scan.stop)
                     frames[top].inputChanged = mustRun
                     push(table.inputs[n][scan.stop].source)
                     continue outer
                 }
-                i = scan.stop
-            }
-            while i < table.inputs[n].count {
-                let edge = table.inputs[n][i]
-                let source = Int(edge.source)
-                if table.state[source] & NodeState.dirty != 0 {
-                    frames[top].next = i
-                    frames[top].inputChanged = mustRun
-                    push(edge.source)
-                    continue outer
-                }
-                if table.versions[source] != edge.seenVersion {
-                    if edgeComparators[node]?[edge.source] != nil || hasOffsetInChain(edge.source) {
-                        if stickyChangedEdges[node]?.contains(edge.source) == true {
-                            mustRun = true
-                        } else {
-                            table.inputs[n][i].seenVersion = table.versions[source]
-                        }
-                    } else {
-                        mustRun = true
+            } else {
+                while i < table.inputs[n].count {
+                    let edge = table.inputs[n][i]
+                    let source = Int(edge.source)
+                    if table.state[source] & NodeState.dirty != 0 {
+                        frames[top].next = Int32(i)
+                        frames[top].inputChanged = mustRun
+                        push(edge.source)
+                        continue outer
                     }
+                    if table.versions[source] != edge.seenVersion {
+                        if edgeComparators[node]?[edge.source] != nil || hasOffsetInChain(edge.source) {
+                            if stickyChangedEdges[node]?.contains(edge.source) == true {
+                                mustRun = true
+                            } else {
+                                table.inputs[n][i].seenVersion = table.versions[source]
+                            }
+                        } else {
+                            mustRun = true
+                        }
+                    }
+                    i += 1
                 }
-                i += 1
             }
 
             if table.state[n] & NodeState.indirect != 0 {
                 if let box = table.box(at: node) as? AnyIndirectNode {
                     let s = Int(box.source.index)
                     if table.state[s] & NodeState.dirty != 0 {
-                        frames[top].next = table.inputs[n].count
+                        frames[top].next = Int32(table.inputs[n].count)
                         frames[top].inputChanged = mustRun
                         push(box.source.index)
                         continue outer
@@ -693,14 +708,18 @@ extension Graph {
             changeCount &+= 1
             table.versions[n] &+= 1
         } else {
-            for dependent in table.outputs[n] {
-                let dep = Int(dependent)
-                if table.state[dep] & NodeState.dirty != 0,
-                   table.state[dep] & (NodeState.pending | NodeState.stateful) == 0,
-                   table.inputs[dep].count == 1,
-                   table.inputs[dep][0].source == node,
-                   table.inputs[dep][0].seenVersion == table.versions[n] {
-                    table.state[dep] &= ~NodeState.dirty
+            let currentVersion = table.versions[n]
+            table.outputs[n].withUnsafeBufferPointer { dependents in
+                for dependent in dependents {
+                    let dep = Int(dependent)
+                    let depState = table.state[dep]
+                    if depState & NodeState.dirty != 0,
+                       depState & (NodeState.pending | NodeState.stateful) == 0,
+                       table.inputs[dep].count == 1,
+                       table.inputs[dep][0].source == node,
+                       table.inputs[dep][0].seenVersion == currentVersion {
+                        table.state[dep] = depState & ~NodeState.dirty
+                    }
                 }
             }
         }

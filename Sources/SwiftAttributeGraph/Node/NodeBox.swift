@@ -91,17 +91,22 @@
 }
 
 /// A rule given as a type that conforms to ``Rule``.
-final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
-    var rule: R
+@usableFromInline final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
+    @usableFromInline var rule: R
+    @usableFromInline let runTypeRule: (TypeRuleNode<R>) -> Bool
 
+    @inlinable
     init(rule: R, type: NodeType<R.Value>) {
         self.rule = rule
+        self.runTypeRule = { node in
+            let result = node.rule.value
+            return node.store(result)
+        }
         super.init(value: nil, type: type)
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
-        let result = rule.value
-        return store(result)
+        runTypeRule(self)
     }
 
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {

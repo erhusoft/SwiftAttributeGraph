@@ -9,18 +9,19 @@ public struct AttributeID: Hashable, Sendable {
     public let rawValue: UInt64
 
     /// Creates an ID from its packed representation.
-    public init(rawValue: UInt64) { self.rawValue = rawValue }
+    @inlinable public init(rawValue: UInt64) { self.rawValue = rawValue }
 
     /// The null attribute identifier (`AGAttributeNil`).
     public static let `nil` = AttributeID(rawValue: 0)
 
+    @usableFromInline
     init(index: UInt32, generation: UInt32) {
         rawValue = (UInt64(generation) << 32) | UInt64(index)
     }
 
     @inlinable var index: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
-    var generation: UInt32 { UInt32(truncatingIfNeeded: rawValue >> 32) }
+    @inlinable var generation: UInt32 { UInt32(truncatingIfNeeded: rawValue >> 32) }
 
     /// The tag of the graph that created the attribute, `0` if the graph had none (see `GraphRegistry`).
-    var graphTag: UInt32 { generation >> 16 }
+    @inlinable var graphTag: UInt32 { generation >> 16 }
 }

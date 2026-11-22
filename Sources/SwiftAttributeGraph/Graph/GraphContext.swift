@@ -76,6 +76,7 @@ public final class GraphContext {
         needsUpdate = true
         counterNeedsUpdate = true
         graph.needsUpdateFlag = true
+        graph.hasAnyPendingUpdateCallback = true
     }
 
     /// The graph this context belongs to, or `nil` once it was released.

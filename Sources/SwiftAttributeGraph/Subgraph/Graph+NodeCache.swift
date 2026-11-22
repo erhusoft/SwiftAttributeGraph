@@ -76,6 +76,7 @@ extension Graph {
         context.invalidationCallback = nil
         context.needsUpdate = false
         refreshHasAnyInvalidationCallback()
+        refreshHasAnyPendingUpdateCallback()
         let targetCtx = context.subgraphContext.rawValue
         for index in 0..<subgraphs.slotCount {
             let sgID = subgraphs.id(at: UInt32(index))
@@ -98,6 +99,17 @@ extension Graph {
             }
         }
         hasAnyInvalidationCallback = any
+    }
+
+    func refreshHasAnyPendingUpdateCallback() {
+        var any = false
+        for entry in updateContexts {
+            if let ctx = entry.value, !ctx.isInvalidated, ctx.needsUpdate {
+                any = true
+                break
+            }
+        }
+        hasAnyPendingUpdateCallback = any
     }
 
     /// User-supplied opaque context pointer on the graph's default context (`AGGraphGetContext` / `AGGraphSetContext` in
@@ -139,18 +151,19 @@ extension Graph {
         defaultUpdateContext.setNeedsUpdate()
     }
 
-    /// Whether any live update context is waiting to fire its callback (cheap: the list is tiny).
+    /// Whether any live update context is waiting to fire its callback (O(1) cached flag).
+    @inline(__always)
     var hasPendingUpdateCallback: Bool {
-        for entry in updateContexts {
-            if let ctx = entry.value, !ctx.isInvalidated, ctx.needsUpdate { return true }
-        }
-        return false
+        hasAnyPendingUpdateCallback
     }
 
     func flushUpdateCallbackIfReady() {
         guard !isInUpdateCallback, batchDepth == 0, evaluatingNode == Graph.noNode, !isInvalidating else { return }
         isInUpdateCallback = true
-        defer { isInUpdateCallback = false }
+        defer {
+            isInUpdateCallback = false
+            refreshHasAnyPendingUpdateCallback()
+        }
         var iterations = 0
         let maxIterations = 1024
         while batchDepth == 0 && evaluatingNode == Graph.noNode && !isInvalidating {

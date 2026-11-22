@@ -110,6 +110,11 @@ import Testing
 
     // MARK: - Memory footprint
 
+    @Test func updateFrameAndInputEdgeFitCompactCacheLineStrides() {
+        #expect(MemoryLayout<UpdateFrame>.stride == 16)
+        #expect(MemoryLayout<InputEdge>.stride == 16)
+    }
+
     @Test func estimatedMemoryFootprintIsPositiveAndGrows() {
         let graph = Graph()
         let first = graph.estimatedMemoryFootprint

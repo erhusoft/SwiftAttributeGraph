@@ -10,12 +10,14 @@ public struct Focus<Root, Value>: Rule, _AttributeBody, CustomStringConvertible 
     public var keyPath: KeyPath<Root, Value>
 
     /// Creates a key-path projection rule from `root` and `keyPath`.
+    @inlinable
     public init(root: Attribute<Root>, keyPath: KeyPath<Root, Value>) {
         self.root = root
         self.keyPath = keyPath
     }
 
     /// Reads `root` in the current graph and returns the projected member.
+    @inlinable
     public var value: Value {
         root.value[keyPath: keyPath]
     }

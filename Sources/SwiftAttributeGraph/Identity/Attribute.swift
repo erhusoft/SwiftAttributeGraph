@@ -6,17 +6,17 @@ public struct Attribute<Value>: Hashable, Sendable {
     public let id: AttributeID
 
     /// Creates a handle from an ID. The caller is responsible for the type matching the stored value.
-    public init(id: AttributeID) { self.id = id }
+    @inlinable public init(id: AttributeID) { self.id = id }
 
     /// Creates a handle copying `attribute`.
-    public init(_ attribute: Attribute<Value>) { self = attribute }
+    @inlinable public init(_ attribute: Attribute<Value>) { self = attribute }
 
     /// The value of the attribute read from the graph whose rule is running on this thread (for `@Attribute` property
     /// wrapper usage inside a ``Rule`` or ``StatefulRule``).
     @inlinable public var wrappedValue: Value { value }
 
     /// The attribute handle itself (`$property` when used as `@Attribute`).
-    public var projectedValue: Attribute<Value> {
+    @inlinable public var projectedValue: Attribute<Value> {
         get { self }
         set { self = newValue }
     }
@@ -35,7 +35,7 @@ public struct Attribute<Value>: Hashable, Sendable {
     }
 
     /// The handle without its value type.
-    public var erased: AnyAttribute { AnyAttribute(id: id) }
+    @inlinable public var erased: AnyAttribute { AnyAttribute(id: id) }
 }
 
 /// A handle to an attribute whose value type is not known at the use site.
@@ -44,5 +44,5 @@ public struct AnyAttribute: Hashable, Sendable {
     public let id: AttributeID
 
     /// Creates a handle from an ID.
-    public init(id: AttributeID) { self.id = id }
+    @inlinable public init(id: AttributeID) { self.id = id }
 }

@@ -10,12 +10,14 @@ public struct Map<Source, Value>: Rule, _AttributeBody, CustomStringConvertible 
     public let body: (Source) -> Value
 
     /// Creates a transformation rule over `arg` using `body`.
+    @inlinable
     public init(_ arg: Attribute<Source>, _ body: @escaping (Source) -> Value) {
         self.arg = arg
         self.body = body
     }
 
     /// Reads `arg` in the current graph and transforms its value with `body`.
+    @inlinable
     public var value: Value {
         body(arg.value)
     }

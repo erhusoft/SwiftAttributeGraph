@@ -53,12 +53,14 @@ public struct OptionalAttribute<Value>: Hashable, Sendable {
 
     /// The value of the referenced attribute read from the graph whose rule is running on this thread, or `nil` if
     /// `attribute` is `nil`.
+    @inlinable
     public var value: Value? {
         guard let attribute else { return nil }
         return attribute.value
     }
 
     /// The value of the referenced attribute when used as `@OptionalAttribute` inside a rule, or `nil` if empty.
+    @inlinable
     public var wrappedValue: Value? { value }
 
     /// The underlying optional `Attribute<Value>?` handle (`$property` when used as `@OptionalAttribute`).
