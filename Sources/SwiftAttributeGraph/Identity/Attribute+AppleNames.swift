@@ -41,6 +41,15 @@ extension Attribute {
         graph.addInput(self.erased, dependency)
     }
 
+    /// Performs a breadth-first traversal starting at this attribute (`Attribute.breadthFirstSearch(options:_:)`).
+    @discardableResult
+    public func breadthFirstSearch(options: SearchOptions = [], _ body: (AnyAttribute) -> Bool) -> Bool {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("breadthFirstSearch called after graph was released")
+        }
+        return graph.breadthFirstSearch(from: self, options: options, body)
+    }
+
     /// The graph value state of the attribute (`AGAttribute.valueState`).
     public var valueState: ValueState {
         graph.valueStateImpl(of: erased)
@@ -103,6 +112,15 @@ extension AnyAttribute {
             preconditionFailure("addInput called after graph was released")
         }
         graph.addInput(self, dependency)
+    }
+
+    /// Performs a breadth-first traversal starting at this attribute (`Attribute.breadthFirstSearch(options:_:)`).
+    @discardableResult
+    public func breadthFirstSearch(options: SearchOptions = [], _ body: (AnyAttribute) -> Bool) -> Bool {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("breadthFirstSearch called after graph was released")
+        }
+        return graph.breadthFirstSearch(from: self, options: options, body)
     }
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).

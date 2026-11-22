@@ -177,5 +177,13 @@ import Testing
         }
         #expect(!foundEmpty)
         #expect(visitedEmpty == [r2.id])
+
+        // Attribute handle breadthFirstSearch matches graph method
+        var handleVisited: [AttributeID] = []
+        r2.breadthFirstSearch(options: .searchInputs) { attr in
+            handleVisited.append(attr.id)
+            return false
+        }
+        #expect(handleVisited == visitedInputs)
     }
 }

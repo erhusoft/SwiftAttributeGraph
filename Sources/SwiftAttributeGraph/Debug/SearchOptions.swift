@@ -1,5 +1,7 @@
 /// Options controlling which neighbor edges ``Graph/breadthFirstSearch(from:options:_:)`` traverses (`AGSearchOptions`
 /// in native AttributeGraph).
+public typealias AGSearchOptions = SearchOptions
+
 public struct SearchOptions: OptionSet, Hashable, Sendable {
     /// The underlying option bitmask.
     public var rawValue: UInt32
