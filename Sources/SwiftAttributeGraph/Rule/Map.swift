@@ -3,7 +3,7 @@
 /// Because `Map` is a ``Rule``, its output value goes through the attribute's comparison policy: when `arg` changes
 /// to a new value whose mapped result `body(arg.value)` is equal to the previous output, downstream dependents of the
 /// `Map` attribute are cut.
-public struct Map<Source, Value>: Rule, CustomStringConvertible {
+public struct Map<Source, Value>: Rule, _AttributeBody, CustomStringConvertible {
     /// The source attribute read by the rule.
     public var arg: Attribute<Source>
     /// The transformation applied to `arg.value`.

@@ -7,7 +7,7 @@
 ///
 /// Inside ``updateValue(_:)`` the rule reads other attributes with ``Attribute/value``, as a plain rule does. If
 /// several writes happen before the attribute is read, the rule runs once and sees the last values.
-public protocol StatefulRule {
+public protocol StatefulRule: _AttributeBody {
     /// The type of the attribute the rule computes.
     associatedtype Value
     /// The value before the first run, if the rule has one. Without it, the first run must write a value.

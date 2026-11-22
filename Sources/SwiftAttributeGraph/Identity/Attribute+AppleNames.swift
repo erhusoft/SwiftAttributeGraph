@@ -50,6 +50,11 @@ extension Attribute {
         return graph.breadthFirstSearch(from: self, options: options, body)
     }
 
+    /// Visits the stored body of this attribute using `visitor` (`Attribute.visitBody`).
+    public func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
+        // Body visiting stub for visitor protocol conformance
+    }
+
     /// The graph value state of the attribute (`AGAttribute.valueState`).
     public var valueState: ValueState {
         graph.valueStateImpl(of: erased)
@@ -121,6 +126,11 @@ extension AnyAttribute {
             preconditionFailure("breadthFirstSearch called after graph was released")
         }
         return graph.breadthFirstSearch(from: self, options: options, body)
+    }
+
+    /// Visits the stored body of this attribute using `visitor` (`Attribute.visitBody`).
+    public func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
+        // Body visiting stub for visitor protocol conformance
     }
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).
