@@ -1,9 +1,0 @@
-/Users/erhusoft/SwiftAttributeGraph/NativeProbe/Sources/Probe/main.swift:115:14: warning: weak variable 'weakPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
-113 |     let d = Driver()
-114 |     var payload: Payload? = Payload(7)
-115 |     weak var weakPayload = payload
-    |              `- warning: weak variable 'weakPayload' was never mutated; consider changing to 'let' constant [#WeakMutability]
-116 |     let input = d.input(payload!)
-117 |     payload = nil
-
-[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>

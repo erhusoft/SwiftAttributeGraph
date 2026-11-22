@@ -1,7 +1,0 @@
-PASS debug run 1: 8 direct graph traces match
-PASS debug run 2: 8 direct graph traces match
-PASS debug run 3: 8 direct graph traces match
-PASS release run 1: 8 direct graph traces match
-PASS release run 2: 8 direct graph traces match
-PASS release run 3: 8 direct graph traces match
-Results: NativeProbe/Results/diamonds-macos-15.7.9

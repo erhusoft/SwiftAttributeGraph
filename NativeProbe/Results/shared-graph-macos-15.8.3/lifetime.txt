@@ -1,6 +1,0 @@
-case1|exit=0|evaluatedBefore=42|readAfter=42
-case2|exit=134|message=accessing attribute in a different namespace: 536 (aborts with SIGABRT 134 when evaluated after creator graph freed)
-case3a|exit=0|afterG1Drop=101|afterS1Drop=101
-case3b|exit=0|afterS1Drop=202|afterG1Drop=202
-case4|exit=0|idG1=2|idS1=3|idS2=4|ref0=1|ref1=2|ref2=3|refAfterS2SwiftDrop=2|idS1AfterS2Drop=3|refAfterS1Invalidate=1|refAfterG1Invalidate=0
-case5|exit=0|invFlagBefore=0|invFlagAfter=1|refBefore=2|refAfter=1|refAfterDouble=1

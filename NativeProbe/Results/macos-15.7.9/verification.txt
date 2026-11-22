@@ -1,7 +1,0 @@
-Command: python3 NativeProbe/run.py --output NativeProbe/Results/macos-15.7.9
-PASS debug run 1: four direct graph traces match
-PASS debug run 2: four direct graph traces match
-PASS debug run 3: four direct graph traces match
-PASS release run 1: four direct graph traces match
-PASS release run 2: four direct graph traces match
-PASS release run 3: four direct graph traces match

@@ -1,5 +1,0 @@
-handle-count|created=1 start counter=2 (input handle, +0x20)
-handle-count|created=2 counter=3 state=0x3ce04d10 (+0x10 same for all)
-handle-count|created=3 counter=4
-handle-count|created=4 counter=5
-note: release (decrement) not measured yet
