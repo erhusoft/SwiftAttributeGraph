@@ -132,17 +132,19 @@ import Testing
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/i2-check.txt` (10/10 repetitions abort with code 134: `precondition failure: accessing attribute in a different namespace: 536`)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/routing-and-interop.txt` (Case I2 control)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/rules.txt` (Scenario R2: independent-read aborts)
-    @Test(.disabled("Traps in-process with precondition failure (SIGABRT / exit 134) matching native"))
-    func i2_independentGraphsCannotReadEachOther() {
-        let g1 = Graph()
-        let g2 = Graph()
+    @Test
+    func i2_independentGraphsCannotReadEachOther() async {
+        await #expect(processExitsWith: .failure) {
+            let g1 = Graph()
+            let g2 = Graph()
 
-        let input1 = g1.makeInput(100)
-        let rule2 = g2.makeRule { g2.value(of: input1) }
+            let input1 = g1.makeInput(100)
+            let rule2 = g2.makeRule { g1.value(of: input1) }
 
-        // In native AttributeGraph, accessing an attribute belonging to a different namespace traps
-        // with precondition failure "accessing attribute in a different namespace" (exit code 134).
-        _ = g2.value(of: rule2)
+            // In native AttributeGraph, accessing an attribute belonging to a different namespace traps
+            // with precondition failure "accessing attribute in a different namespace" (exit code 134).
+            _ = g2.value(of: rule2)
+        }
     }
 
     // MARK: - Invalidación selectiva: Subgrafo invalidado vs subgrafo vivo
