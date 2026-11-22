@@ -9,12 +9,17 @@ extension Graph {
     /// The untyped form of ``addInput(_:_:)-(Attribute<Value1>,Attribute<Value2>)``.
     public func addInput(_ attribute1: AnyAttribute, _ attribute2: AnyAttribute) {
         assertOwnThread()
-        precondition(table.isLive(attribute1.id), "addInput: attribute1 is dead")
-        precondition(table.isLive(attribute2.id), "addInput: attribute2 is dead")
+        precondition(table.isLive(attribute1.id), "attribute being read has no value: \(attribute1.id.rawValue)")
+        precondition(table.isLive(attribute2.id), "reading from invalid source attribute: \(attribute2.id.rawValue)")
+        precondition(attribute1.id != attribute2.id, "cyclic edge: \(attribute2.id.rawValue) -> \(attribute1.id.rawValue)")
+        precondition(
+            attribute1.id.graphTag == attribute2.id.graphTag,
+            "attribute references can't cross graph namespaces"
+        )
         precondition(
             subgraphs.context(of: table.owner(at: attribute1.id.index)) ==
                 subgraphs.context(of: table.owner(at: attribute2.id.index)),
-            "addInput: attributes in different namespaces")
+            "attribute references can't cross graph namespaces")
         recordRead(of: attribute2.id.index, by: attribute1.id.index)
     }
 }

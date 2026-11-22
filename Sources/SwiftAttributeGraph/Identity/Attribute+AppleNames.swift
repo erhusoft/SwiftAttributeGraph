@@ -33,6 +33,14 @@ extension Attribute {
         graph.setFlags(updated, for: self)
     }
 
+    /// Makes `target` depend on `dependency` as an input (`AGGraphAddInput`).
+    public func addInput(_ dependency: AnyAttribute) {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("addInput called after graph was released")
+        }
+        graph.addInput(self.erased, dependency)
+    }
+
     /// The graph value state of the attribute (`AGAttribute.valueState`).
     public var valueState: ValueState {
         graph.valueStateImpl(of: erased)
@@ -87,6 +95,14 @@ extension AnyAttribute {
         let current = graph.flags(of: self)
         let updated = AttributeFlags(rawValue: (current.rawValue & ~mask.rawValue) | (newFlags.rawValue & mask.rawValue))
         graph.setFlags(updated, for: self)
+    }
+
+    /// Makes `target` depend on `dependency` as an input (`AGGraphAddInput`).
+    public func addInput(_ dependency: AnyAttribute) {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("addInput called after graph was released")
+        }
+        graph.addInput(self, dependency)
     }
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).

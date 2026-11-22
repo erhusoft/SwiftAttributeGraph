@@ -38,4 +38,18 @@ import Testing
         _ = graph.value(of: rule)
         #expect(runs == 2)
     }
+
+    @Test func addInputOnAttributeHandleMatchesGraphMethod() {
+        let graph = Graph()
+        let source = graph.makeInput(10)
+        var runs = 0
+        let rule = graph.makeRule { () -> Int in runs += 1; return 100 }
+        _ = graph.value(of: rule)
+        #expect(runs == 1)
+
+        rule.addInput(source.erased)
+        graph.setValue(20, for: source)
+        _ = graph.value(of: rule)
+        #expect(runs == 2)
+    }
 }
