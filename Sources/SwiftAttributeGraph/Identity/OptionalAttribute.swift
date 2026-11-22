@@ -23,6 +23,34 @@ public struct OptionalAttribute<Value>: Hashable, Sendable {
         self.attribute = attribute
     }
 
+    /// Creates an optional attribute wrapping a weak reference.
+    public init(_ weak: WeakAttribute<Value>) {
+        self.attribute = weak.attribute
+    }
+
+    /// Creates an optional attribute from an untyped ``AnyOptionalAttribute``.
+    public init(base: AnyOptionalAttribute) {
+        if let attr = base.attribute {
+            self.attribute = Attribute<Value>(id: attr.id)
+        } else {
+            self.attribute = nil
+        }
+    }
+
+    /// The underlying ``AnyOptionalAttribute`` representation.
+    public var base: AnyOptionalAttribute {
+        get {
+            AnyOptionalAttribute(self)
+        }
+        set {
+            if let attr = newValue.attribute {
+                self.attribute = Attribute<Value>(id: attr.id)
+            } else {
+                self.attribute = nil
+            }
+        }
+    }
+
     /// The value of the referenced attribute read from the graph whose rule is running on this thread, or `nil` if
     /// `attribute` is `nil`.
     public var value: Value? {
@@ -43,7 +71,17 @@ public struct OptionalAttribute<Value>: Hashable, Sendable {
     public func map<V>(_ body: (Attribute<Value>) -> V) -> V? {
         attribute.map(body)
     }
+
+    /// Textual description matching Apple's formatting.
+    public var description: String {
+        if let attribute {
+            return "OptionalAttribute<\(Value.self)>(\(attribute))"
+        }
+        return "nil"
+    }
 }
+
+extension OptionalAttribute: CustomStringConvertible {}
 
 extension Graph {
     /// Returns the wrapped `Attribute` handle if present, or `nil` if empty.

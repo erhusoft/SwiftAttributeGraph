@@ -11,6 +11,9 @@ public struct AttributeID: Hashable, Sendable {
     /// Creates an ID from its packed representation.
     public init(rawValue: UInt64) { self.rawValue = rawValue }
 
+    /// The null attribute identifier (`AGAttributeNil`).
+    public static let `nil` = AttributeID(rawValue: 0)
+
     init(index: UInt32, generation: UInt32) {
         rawValue = (UInt64(generation) << 32) | UInt64(index)
     }
