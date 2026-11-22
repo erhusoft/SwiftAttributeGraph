@@ -86,7 +86,7 @@ extension Graph {
         assertOwnThread()
         guard let id = weakAttribute.id else { return nil }
         if let running = ThreadLocalGraph.current() {
-            precondition(running === self && id.graphTag == graphTag, "a rule cannot read an attribute of another graph")
+            precondition((running === self || running.graphTag == self.graphTag) && id.graphTag == graphTag, "a rule cannot read an attribute of another graph")
             guard table.isLive(id) else { return nil }
             return value(of: Attribute<Value>(id: id))
         }

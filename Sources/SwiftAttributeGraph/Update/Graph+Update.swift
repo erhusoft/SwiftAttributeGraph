@@ -55,6 +55,9 @@ extension Graph {
     /// non-generic ``beginRead(_:)`` (see there for why).
     @inlinable
     public func value<Value>(of attribute: Attribute<Value>) -> Value {
+        if let primary {
+            return primary.value(of: attribute)
+        }
         guard let box = beginRead(attribute.id) else { return readIndirect(attribute) }
         return finishRead(box, as: Value.self)
     }
@@ -70,7 +73,7 @@ extension Graph {
     func beginRead(_ id: AttributeID) -> NodeBox? {
         assertOwnThread()
         if let running = ThreadLocalGraph.current() {
-            precondition(running === self, "a rule cannot read an attribute of another graph")
+            precondition(running === self || running.graphTag == self.graphTag, "a rule cannot read an attribute of another graph")
         }
         if table.isLive(id), table.state[Int(id.index)] & NodeState.indirect != 0 { return nil }
         // Native drains the update callbacks only when a rule is read, never an input [O].
@@ -453,6 +456,10 @@ extension Graph {
     /// `Optional<Value>` and copied the old and new values through value witnesses [O].
     @inlinable
     public func setValue<Value>(_ value: Value, for attribute: Attribute<Value>) {
+        if let primary {
+            primary.setValue(value, for: attribute)
+            return
+        }
         guard let box = beginWrite(attribute.id) else { return setValueSlowly(value, for: attribute) }
         #if DEBUG && !SAG_UNCHECKED
         guard let node = box as? TypedNode<Value> else {

@@ -15,6 +15,10 @@ public final class Graph {
     @exclusivity(unchecked) var table = NodeTable()
     /// The tag that the IDs of this graph carry (see `GraphRegistry`).
     let graphTag: UInt32
+    /// Primary graph backing this instance if this is a shared handle.
+    @usableFromInline let primary: Graph?
+    /// Active graph context for this handle.
+    var activeContext: GraphContext?
     /// Comparators resolved so far, one per value type and policy (see `ValueComparator.Cache`).
     @exclusivity(unchecked) var comparators = ValueComparator.Cache()
     @exclusivity(unchecked) var subgraphs = SubgraphTable()
@@ -85,7 +89,10 @@ public final class Graph {
     public let rootSubgraph: Subgraph
 
     /// Number of live attributes.
-    public var nodeCount: Int { table.liveCount }
+    public var nodeCount: Int {
+        let target = primary ?? self
+        return target.table.liveCount
+    }
 
     /// The deadline in effect (set by ``withDeadline(_:_:)``), or `nil` when none is.
     public internal(set) var deadline: ContinuousClock.Instant?
@@ -94,6 +101,8 @@ public final class Graph {
     public init() {
         let tag = GraphRegistry.reserveTag()
         graphTag = tag
+        primary = nil
+        activeContext = nil
         graphCounterID = GraphRegistry.reserveCounterIDs()
         table.generationBase = tag << 16
         subgraphs.generationBase = tag << 16
@@ -104,8 +113,20 @@ public final class Graph {
         GraphRegistry.bind(tag: tag, to: self)
     }
 
+    /// Internal initializer for shared graph handles (`Graph(shared:)`).
+    init(sharedPrimary: Graph, context: GraphContext, rootSubgraph: Subgraph) {
+        self.primary = sharedPrimary
+        self.activeContext = context
+        self.graphTag = sharedPrimary.graphTag
+        self.graphCounterID = sharedPrimary.graphCounterID
+        self.rootSubgraph = rootSubgraph
+        self.currentSubgraph = rootSubgraph.id
+    }
+
     deinit {
-        GraphRegistry.release(tag: graphTag)
+        if primary == nil {
+            GraphRegistry.release(tag: graphTag)
+        }
     }
 
     /// Stops the program in debug builds if the graph is used from another thread than the one that created it.
@@ -352,6 +373,11 @@ public final class Graph {
     /// The non-generic end of ``makeInput(_:comparison:)``.
     @usableFromInline
     func allocateInput(_ node: NodeBox) -> AttributeID {
+        if let primary {
+            return primary.withCurrent(Subgraph(id: currentSubgraph)) {
+                primary.allocateInput(node)
+            }
+        }
         let id = allocate(node, state: NodeState.hasValue)
         changeCount &+= 1
         return id
@@ -360,7 +386,12 @@ public final class Graph {
     /// The non-generic end of the closure form of `makeRule`.
     @usableFromInline
     func allocateRule(_ node: NodeBox) -> AttributeID {
-        allocate(node, state: NodeState.isRule | NodeState.dirty | NodeState.pending)
+        if let primary {
+            return primary.withCurrent(Subgraph(id: currentSubgraph)) {
+                primary.allocateRule(node)
+            }
+        }
+        return allocate(node, state: NodeState.isRule | NodeState.dirty | NodeState.pending)
     }
 
     /// Creates an indirect attribute that redirects to `source`, in the current subgraph.
@@ -560,6 +591,11 @@ public final class Graph {
 
     /// Creates a rule attribute from a type that conforms to ``Rule``, in the current subgraph. The rule runs lazily.
     public func makeRule<R: Rule>(_ rule: R, comparison: ValuePolicy = .viewValue) -> Attribute<R.Value> {
+        if let primary {
+            return primary.withCurrent(Subgraph(id: currentSubgraph)) {
+                primary.makeRule(rule, comparison: comparison)
+            }
+        }
         assertOwnThread()
         let id = allocate(TypeRuleNode(rule: rule, type: comparators.nodeType(comparison, for: R.Value.self)),
                          state: NodeState.isRule | NodeState.dirty)
