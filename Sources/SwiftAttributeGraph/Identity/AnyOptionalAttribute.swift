@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the SwiftAttributeGraph open source project
-//
-// Copyright (c) 2024 Apple Inc. and the SwiftAttributeGraph project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See https://swift.org/LICENSE.txt for license information
-//
-//===----------------------------------------------------------------------===//
-
 /// A type-erased optional attribute reference (`AttributeGraph.AnyOptionalAttribute`).
 ///
 /// Unlike ``AnyWeakAttribute``, an `AnyOptionalAttribute` holds an attribute reference that

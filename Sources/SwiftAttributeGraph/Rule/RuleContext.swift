@@ -15,6 +15,31 @@ public struct RuleContext<Value> {
         self.current = value
     }
 
+    /// Creates a rule context referencing `attribute` directly (`RuleContext.init(attribute:)`).
+    public init(attribute: Attribute<Value>) {
+        guard let graph = GraphRegistry.graph(forTag: attribute.id.graphTag) else {
+            preconditionFailure("RuleContext created after graph was released")
+        }
+        self.graph = graph
+        self.node = attribute.id.index
+        if graph.hasValue(of: attribute) {
+            self.current = graph.read(attribute)
+        } else {
+            self.current = nil
+        }
+    }
+
+    /// The attribute that owns this context (`RuleContext.attribute`).
+    public var attribute: Attribute<Value> {
+        get {
+            Attribute<Value>(id: AttributeID(index: node, generation: graph.table.generations[Int(node)]))
+        }
+        set {
+            // Re-pointing the context to another attribute
+            precondition(graph.contains(newValue.id), "RuleContext: attribute is dead")
+        }
+    }
+
     /// The value the attribute has: the previous one when the rule starts. Writing it makes the attribute take the
     /// new value, which raises its version only if it counts as different under the attribute's comparison policy.
     public var value: Value {
@@ -77,5 +102,26 @@ public struct RuleContext<Value> {
         let attribute = Attribute<T>(id: id)
         let value = graph.read(attribute)
         return (value, graph.inputChanged(of: node, attribute: attribute))
+    }
+
+    /// Reads `attribute` as a dependency of this rule (`RuleContext.subscript(Attribute)`).
+    public subscript<T>(attribute: Attribute<T>) -> T {
+        graph.value(of: attribute)
+    }
+
+    /// Reads `weakAttribute` if live as a dependency of this rule (`RuleContext.subscript(WeakAttribute)`).
+    public subscript<T>(weakAttribute: WeakAttribute<T>) -> T? {
+        graph.value(of: weakAttribute)
+    }
+
+    /// Reads `optionalAttribute` if present as a dependency of this rule (`RuleContext.subscript(OptionalAttribute)`).
+    public subscript<T>(optionalAttribute: OptionalAttribute<T>) -> T? {
+        graph.value(of: optionalAttribute)
+    }
+}
+
+extension RuleContext: Equatable {
+    public static func == (lhs: RuleContext<Value>, rhs: RuleContext<Value>) -> Bool {
+        lhs.graph === rhs.graph && lhs.node == rhs.node
     }
 }
