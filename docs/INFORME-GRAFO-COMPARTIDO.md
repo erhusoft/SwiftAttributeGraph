@@ -322,3 +322,18 @@ Estado: medido en nativo (macOS 15.8.3). Sin implementar en el motor. Todas las 
 
 - **Modelo idéntico al de SwiftUI**: SwiftUI mantiene un único estado central `AG::Graph` por proceso y entrega handles ligeros (`AGGraphCreateShared`) a cada consumidor de UI.
 - **Implementación en SwiftAttributeGraph**: Cualquier soporte futuro de grafos compartidos en el motor debe seguir este patrón: un grafo central poseedor de los atributos, y handles de contexto que incrementan/decrementan el recuento del grafo central (`+0x1a4`), manteniendo IDs secuenciales independientes (`+0x20`) y liberando limpiamente sus recursos mediante ARC/CFRelease sin incurrir en dobles liberaciones.
+
+---
+
+## 4. Estado de implementación y veredicto de ingeniería: PENDIENTE
+
+- **Fecha de resolución**: 2026-11-21
+- **Veredicto**: **Dejar pendiente `Graph(shared:)`**. No se incorpora al motor principal en `master`.
+- **Fundamento empírico**:
+  1. **Regresión en camino caliente**: Todas las variantes arquitectónicas evaluadas para soportar `Graph(shared:)` violaron la puerta dura de rendimiento ($\le 5.0\ \%$ de regresión contra `master` en `HotReadPerformanceTests`, release, 10 rondas alternadas medianas):
+     - Prototipo de reenvío polimórfico (`if let primary`): **+14.52 %** (input) y **+15.76 %** (rule).
+     - Variante V1 (indirección de almacenamiento fuerte `let storage: GraphStorage`): **+24.79 %** (input) y **+25.99 %** (rule) debido a saltos de puntero y sobrecoste de llamadas ARC (`_swift_retain`/`_swift_release`).
+     - Variante V2 (bifurcación condicional en `value(of:)`): **+13.26 %** (input) y **+14.13 %** (rule) debido a que cualquier rama condicional opcional rompe el inlining del bucle en Swift/LLVM, forzando un despacho de llamada externa en cada lectura.
+  2. **Diferencia con el diseño nativo de Apple**:
+     El desensamblado nativo de Apple (`AttributeGraph.framework`, verificado en `0x1b1a6c42c` y `0x1b1a6da84`) demuestra que `_AGGraphGetValue` **no toma `AGGraphRef` ni desreferencia el handle**, sino que accede directamente a una tabla de datos global compartida en memoria (`AG::data::_shared_table_bytes`).
+  3. **Decisión**: Para no degradar el rendimiento del motor mono-grafo ni introducir sobrecostes permanentes en `value(of:)`, la funcionalidad de `Graph(shared:)` queda documentada, caracterizada y tipificada en la suite de especificación (`SharedGraphSpecTests.swift` en `shared-spec`), pero su implementación activa en el motor se pospone hasta que se aborde una reestructuración a bajo nivel del almacenamiento similar a la tabla nativa sin sobrecoste en Swift.
