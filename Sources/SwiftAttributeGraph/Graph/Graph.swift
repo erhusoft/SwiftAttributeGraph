@@ -453,6 +453,8 @@ public final class Graph {
     /// Redirects `indirect` to `newSource` (untyped).
     public func setSource(_ newSource: AnyAttribute, for indirect: AnyAttribute) {
         assertOwnThread()
+        precondition(indirect.id.graphTag == newSource.id.graphTag,
+                     "attribute references can't cross graph namespaces")
         precondition(table.isLive(indirect.id), "setSource(_:for:): the indirect attribute is dead")
         precondition(table.isLive(newSource.id), "setSource(_:for:): the source attribute is dead")
         let index = indirect.id.index
@@ -569,12 +571,14 @@ public final class Graph {
                      "setDependency(_:for:): cannot set dependency on an offset-field attribute")
         let n = Int(index)
         precondition(table.state[n] & NodeState.indirect != 0,
-                     "setDependency(_:for:): the attribute is not an indirect attribute")
+                     "not an indirect attribute: \(indirect.id.rawValue)")
         if let dep = dependency {
-            precondition(table.isLive(dep.id), "setDependency(_:for:): the dependency attribute is dead")
+            precondition(dep.id.graphTag == indirect.id.graphTag,
+                         "indirect dependencies can't cross graph namespaces")
+            precondition(table.isLive(dep.id), "indirect dependencies must be attributes")
             precondition(dep.id.index != index, "setDependency(_:for:): an indirect attribute cannot depend on itself")
             precondition(table.owner(at: dep.id.index) == table.owner(at: index),
-                         "setDependency(_:for:): the dependency must belong to the same subgraph as the indirect attribute")
+                         "indirect dependencies must share a subgraph with their attribute")
         }
         let box = table.box(at: index) as! IndirectNode<Value>
         if box.dependency == dependency?.id { return }

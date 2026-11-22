@@ -400,6 +400,28 @@ import Testing
         }
     }
 
+    @Test func settingDependencyFromDifferentGraphStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph1 = Graph()
+            let graph2 = Graph()
+            let a = graph1.makeInput(10)
+            let ind = graph1.makeIndirect(a)
+            let dep = graph2.makeInput(20)
+            graph1.setDependency(dep.erased, for: ind)
+        }
+    }
+
+    @Test func settingSourceFromDifferentGraphStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            let graph1 = Graph()
+            let graph2 = Graph()
+            let a = graph1.makeInput(10)
+            let ind = graph1.makeIndirect(a)
+            let b = graph2.makeInput(20)
+            graph1.setSource(b, for: ind)
+        }
+    }
+
     // MARK: - C33: Attribute[keyPath:] and @dynamicMemberLookup
 
     @Test func attributeDynamicMemberAndKeyPathSubscriptsProjectFieldsAndCutOnUnchangedField() {

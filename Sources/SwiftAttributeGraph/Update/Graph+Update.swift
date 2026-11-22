@@ -477,7 +477,7 @@ extension Graph {
     @usableFromInline
     func beginWrite(_ id: AttributeID) -> NodeBox? {
         assertOwnThread()
-        precondition(evaluatingNode == Graph.noNode, "setValue(_:for:): a rule must not write to the graph")
+        precondition(evaluatingNode == Graph.noNode, "setting value during update: \(id.rawValue)")
         precondition(table.isLive(id), "setValue(_:for:): the attribute is dead (its subgraph was invalidated)")
         let index = Int(id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
