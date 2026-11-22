@@ -1,17 +1,6 @@
 import Testing
 @testable import SwiftAttributeGraph
 
-// MARK: - Prototype Stub (Test Specification Only)
-
-extension Graph {
-    /// Prototype stub for test specification compilation.
-    ///
-    /// - Note: Marked with `fatalError` pending the actual engine prototype implementation.
-    public convenience init(shared: Graph) {
-        fatalError("pending Graph(shared:) prototype")
-    }
-}
-
 /// Specification test suite comparing native AttributeGraph behavior against the future own-engine prototype.
 ///
 /// Each test mirrors a concrete measured behavior from macOS 15.8.3 native telemetry and references
@@ -26,7 +15,7 @@ extension Graph {
     /// - Backed by native telemetry:
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/rules.txt` (Scenario R1: read 7, after write 9 in first read 9)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/native.txt` (`share|readFromShared=7`, `share|afterWriteInFirst=9`)
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test
     func r1_sharedReferenceReadsAndObservesChangesFromOriginal() {
         let g = Graph()
         let input = g.makeInput(7)
@@ -46,7 +35,7 @@ extension Graph {
     /// - Backed by native telemetry:
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/routing-and-interop.txt` (Case I1: S2 reads inputs created in G and S1 before and after)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/rules.txt` (`two-hosts|s1ReadsG1=10|s2ReadsG2=20|nodesS1=2|nodesS2=2|nodesG1=2|nodesG2=2`)
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test
     func inheritance_nodesCreatedBeforeAndAfterInBothDirectionsAreVisible() {
         let g = Graph()
         // Created in G before sharing
@@ -89,7 +78,7 @@ extension Graph {
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/rules.txt` (Scenario R1: `nodesFirst=2|nodesShared=2`)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/native.txt` (`share|nodesFirst=2|nodesShared=2`)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/handle-count.txt` (Shared handles share underlying node storage)
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test
     func counters_nodeCountIsEqualInBothReferences() {
         let g = Graph()
         let s = Graph(shared: g)
@@ -117,7 +106,7 @@ extension Graph {
     /// - Backed by native telemetry:
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/lifetime.txt` (`case1|exit=0|evaluatedBefore=42|readAfter=42`)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/e1-e0.txt` (Case c1/c2 vs c5/c6: evaluated rules survive creator drop)
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test
     func survival_sharedReferenceReadsAfterOriginalFreedIfEvaluated() {
         var g: Graph? = Graph()
         let s = Graph(shared: g!)
@@ -143,7 +132,7 @@ extension Graph {
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/i2-check.txt` (10/10 repetitions abort with code 134: `precondition failure: accessing attribute in a different namespace: 536`)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/routing-and-interop.txt` (Case I2 control)
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/rules.txt` (Scenario R2: independent-read aborts)
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test(.disabled("Traps in-process with precondition failure (SIGABRT / exit 134) matching native"))
     func i2_independentGraphsCannotReadEachOther() {
         let g1 = Graph()
         let g2 = Graph()
@@ -165,7 +154,7 @@ extension Graph {
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/subgraph-rule-dependency.txt`
     ///     (Cell c1: invalidating SG1 aborts R1 read from S with exit 134 / different namespace;
     ///      Cell c2: R2 in surviving SG2 completes cleanly with exit 0, value 12).
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test
     func selectiveInvalidation_invalidatingSubgraphFailsOnlyItsRulesWhileOthersRemainReadable() {
         let g = Graph()
         let s = Graph(shared: g)
@@ -199,7 +188,7 @@ extension Graph {
     ///     (Case 1B: Topology `input -> R -> R2` in S: writing `input` from G increments cntS to 1, cntG remains 0).
     ///   - `NativeProbe/Results/shared-graph-macos-15.8.3/two-host-routing.txt`
     ///     (Case W1: writing input1 triggers cnt1=1, cnt2=0, cntG=0; Case W2: writing input2 triggers cnt1=0, cnt2=1, cntG=0).
-    @Test(.disabled("pending Graph(shared:) prototype"))
+    @Test
     func routing_invalidationNoticeRoutesExclusivelyToHandleWithDependent() {
         let g = Graph()
         let s = Graph(shared: g)
