@@ -1,0 +1,84 @@
+================================================================================
+REPORTE DE VERIFICACIÓN NATIVA Y MEDIDA DE RENDIMIENTO (PUERTA DURA ≤ 5 %)
+Sonda: NativeProbe/Results/shared-graph-macos-15.8.3/storage-split-proto.txt
+Fecha: 2026-11-21
+================================================================================
+
+1. VERIFICACIÓN DEL DESENSAMBLADO NATIVO (TAREA 0)
+--------------------------------------------------------------------------------
+Se analizó el desensamblado completo de AttributeGraph (/System/Library/PrivateFrameworks/AttributeGraph.framework/AttributeGraph, extraído en NativeProbe/phase16/AttributeGraph_full_disass.txt).
+
+Pieza A: _AGGraphCreate
+- Dirección en binario: 0x1b1a6c42c
+- Instrucciones:
+    0x1b1a6c42c:  00 00 80 d2   mov   x0, #0
+    0x1b1a6c430:  c3 ff ff 17   b     _AGGraphCreateShared
+- Veredicto: VERIFICADO. _AGGraphCreate es un simple trampolín incondicional (tail-call) que carga x0 = 0 (null) y salta directamente a _AGGraphCreateShared.
+
+Pieza B: _AGGraphCreateShared
+- Dirección en binario: 0x1b1a6c33c
+- Comportamiento clave con x0 = 0 (grafo nuevo) frente a x0 != 0 (grafo compartido):
+    * Asigna un bloque CFRuntime de 0x50 bytes (el handle AGGraphStorage / AGGraphRef) con j___CFRuntimeCreateInstance.
+    * Si x20 == 0: asigna 0x1e8 bytes para AG::Graph con operator new (0x1b1a6c3a8: mov w0, #0x1e8) y llama a su constructor __ZN2AG5GraphC1Ev (0x1b1a6c3b8).
+    * Si x20 != 0: lee el puntero al AG::Graph compartido en [x20, #0x10] (0x1b1a6c384: ldr x20, [x20, #0x10]) e incrementa el contador de referencias atómicas/handles en offset #0x1a4 (0x1b1a6c388: ldr w8, [x20, #0x1a4]; add w8, w8, #1; str w8, [x20, #0x1a4]).
+    * En ambos casos: inicializa el contexto propio del handle en handle + 0x10 llamando a AG::Graph::Context::Context(AG::Graph&) (0x1b1a6c3bc: add x0, x19, #0x10; bl __ZN2AG5Graph7ContextC1ERS0_).
+    * Limpia el byte 0x58 (is_invalidated = 0).
+
+Pieza C: _AGGraphGetValue
+- Dirección en binario: 0x1b1a6da84
+- Firma nativa C ABI: (attribute: AttributeID, options: ReadOptions, type: Metadata) -> UnsafeRawPointer?
+- Instrucciones de acceso a tabla:
+    0x1b1a6daec:  ca 67 1e f0   adrp  x10, 0x1ee768000
+    0x1b1a6daf0:  4a 01 3b 91   add   x10, x10, #0xec0 ; __ZN2AG4data19_shared_table_bytesE
+    0x1b1a6daf4:  4d 01 40 f9   ldr   x13, [x10]
+    0x1b1a6db74:  ca 67 1e f0   adrp  x9, 0x1ee768000
+    0x1b1a6db78:  29 a1 3b 91   add   x9, x9, #0xec0 ; __ZN2AG4data19_shared_table_bytesE
+    0x1b1a6db7c:  2a 61 40 b9   ldr   w10, [x9, #0x18]
+- Veredicto: VERIFICADO. _AGGraphGetValue NO toma como argumento ningún AGGraphRef ni desreferencia el handle. Lee directamente de la tabla global compartida de atributos (__ZN2AG4data19_shared_table_bytesE).
+
+2. ANÁLISIS DE LA RAÍZ DEL COSTE (+14 %) EN shared-proto
+--------------------------------------------------------------------------------
+Al comparar el código máquina generado en release de HotReadPerformanceTests:
+- master: Swiftc inlina value(of:) en el bucle principal de prueba llamando directamente a beginRead(attribute.id).
+- shared-proto: value(of:) incluía la comprobación:
+    if let primary { return primary.value(of: attribute) }
+  Esta recursión/bifurcación polimórfica impidió a LLVM aplanar la llamada inlinable en el bucle del llamador, emitiendo una llamada externa `bl Graph.value(of:)` en cada una de las 10.000.000 de iteraciones.
+
+En microbenchmark aislado:
+- Sin recursión / let storage: GraphStorage: inlining completo a nivel de bucle (0 % de regresión).
+- Con if let primary: llamada de función externa (+14 % a +15 %).
+
+3. MEDICIÓN DE LA PUERTA DE RENDIMIENTO (10 RONDAS ALTERNADAS, RELEASE)
+--------------------------------------------------------------------------------
+Protocolo de medición:
+- Binario: SwiftAttributeGraphPackageTests.xctest (-c release).
+- Toolchain: DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer.
+- Suite: HotReadPerformanceTests (10M lecturas de entrada y 10M lecturas de regla).
+- Comparación directa y alternada entre rama master y rama shared-proto (commit 0461603):
+
+Ronda 01: master = 105.80 ms / 107.94 ms | shared-proto = 120.44 ms / 125.59 ms
+Ronda 02: master = 104.74 ms / 107.29 ms | shared-proto = 119.89 ms / 128.15 ms
+Ronda 03: master = 104.81 ms / 107.82 ms | shared-proto = 121.19 ms / 122.90 ms
+Ronda 04: master = 104.71 ms / 107.59 ms | shared-proto = 126.30 ms / 123.15 ms
+Ronda 05: master = 112.13 ms / 107.38 ms | shared-proto = 119.41 ms / 130.44 ms
+Ronda 06: master = 104.76 ms / 110.75 ms | shared-proto = 120.08 ms / 133.48 ms
+Ronda 07: master = 104.82 ms / 107.26 ms | shared-proto = 119.98 ms / 123.44 ms
+Ronda 08: master = 104.15 ms / 112.65 ms | shared-proto = 120.01 ms / 127.31 ms
+Ronda 09: master = 104.67 ms / 109.23 ms | shared-proto = 119.82 ms / 122.98 ms
+Ronda 10: master = 104.94 ms / 107.46 ms | shared-proto = 119.72 ms / 123.77 ms
+
+Resumen de medianas:
+- master:       input = 104.78 ms,  rule = 107.71 ms
+- shared-proto: input = 120.00 ms,  rule = 124.68 ms
+
+Regresión medida:
+- Lectura caliente de entrada: +14.52 %  (puerta ≤ 5.0 %: NO SE CUMPLE)
+- Lectura caliente de regla:   +15.76 %  (puerta ≤ 5.0 %: NO SE CUMPLE)
+
+4. VEREDICTO DE LA PUERTA Y ESTADO DE LA RAMA
+--------------------------------------------------------------------------------
+- Veredicto: RECHAZADO POR PUERTA DE RENDIMIENTO (+14.52 % / +15.76 % > 5.0 %).
+- Regla de entrega: "Si se supera, para y repórtalo... no se hace merge; se documenta y se para. Si la puerta no se cumple, solo commitea storage-split-proto.txt sin tocar Sources/."
+- Estado de Sources/: INTACTO (limpio en shared-proto contra 0461603). No se han commiteado alteraciones al motor que violen la puerta de rendimiento.
+- Documento generado y registrado: NativeProbe/Results/shared-graph-macos-15.8.3/storage-split-proto.txt.
+================================================================================
