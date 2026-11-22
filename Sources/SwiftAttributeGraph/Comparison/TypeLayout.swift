@@ -50,7 +50,7 @@ enum TypeLayout {
         var fields: [Field] = []
         fields.reserveCapacity(count)
         for index in 0..<count {
-            var metadata = FieldMetadata()
+            var metadata = FieldReflectionMetadata()
             let fieldType = recursiveChildMetadata(type, index: index, fieldMetadata: &metadata)
             metadata.freeName?(metadata.name)
             fields.append(Field(offset: recursiveChildOffset(type, index: index), type: fieldType))
@@ -59,21 +59,4 @@ enum TypeLayout {
     }
 }
 
-// MARK: - Runtime reflection entry points
 
-/// The layout of the runtime's `_FieldReflectionMetadata`: a name, the function that frees it, and two flags.
-private struct FieldMetadata {
-    var name: UnsafePointer<CChar>? = nil
-    var freeName: (@convention(c) (UnsafePointer<CChar>?) -> Void)? = nil
-    var flags: Int = 0
-}
-
-@_silgen_name("swift_reflectionMirror_recursiveCount")
-private func recursiveChildCount(_: Any.Type) -> Int
-
-@_silgen_name("swift_reflectionMirror_recursiveChildMetadata")
-private func recursiveChildMetadata(_: Any.Type, index: Int,
-                                    fieldMetadata: UnsafeMutablePointer<FieldMetadata>) -> Any.Type
-
-@_silgen_name("swift_reflectionMirror_recursiveChildOffset")
-private func recursiveChildOffset(_: Any.Type, index: Int) -> Int
