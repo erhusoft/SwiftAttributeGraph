@@ -43,9 +43,11 @@ A high-performance, zero-recursion reactive attribute graph engine written in pu
 
 ---
 
-## Performance Benchmarks
+## Comprehensive Benchmark Suites
 
-Measured on Apple Silicon ARM64 (macOS Sequoia, Swift 6 toolchain, `-c release`):
+`SwiftAttributeGraph` includes a comprehensive suite of performance benchmarks covering every critical execution path. All metrics below are measured on Apple Silicon ARM64 under `-c release` (Swift 6 toolchain, median of 5 warm runs):
+
+### 1. Comparative Engine Benchmarks (Native Apple vs SwiftAttributeGraph)
 
 | Benchmark Scenario | Workload | Native Apple | SwiftAttributeGraph | Ratio (Engine vs Native) |
 |---|---|---|---|---|
@@ -60,41 +62,74 @@ Measured on Apple Silicon ARM64 (macOS Sequoia, Swift 6 toolchain, `-c release`)
 
 ---
 
-## Real-World UI Stress Simulation
+### 2. Specialized Production Benchmarks
 
-Tested against a synthetic reactive UI tree simulating 10,000 dynamic components with virtualized scrolling (`tools/Benchmarks/UISimulator`):
-- **Mounting 10,000 reactive components (30,000 nodes)**: **$5.27\text{ ms}$**
-- **60 consecutive UI frames with 5% random state mutation (500 mutations/frame)**:
-  - Average latency: **$0.165\text{ ms}$**
-  - 99th percentile ($p99$): **$0.252\text{ ms}$** (well within a $1.6\text{ ms}$ frame budget)
-- **Fan-Out (Global Environment/Theme across 50,000 readers)**:
-  - Dirty propagation time: **$0.519\text{ ms}$**
-  - Lazy re-evaluation time: **$5.110\text{ ms}$**
-- **Complete teardown**: 10,000 subgraphs unmounted and freed in **$9.65\text{ ms}$**, returning graph node count cleanly to **0**.
+The engine features dedicated benchmark suites located in `Tests/SwiftAttributeGraphTests/Performance/`:
+
+#### A. Batch Writes Performance (`BatchWritesPerformanceTests`)
+- **100,000 sequential writes with dependents**: **$6.29\text{ ms}$** ($\sim 15.9\text{M}$ writes/sec, $63\text{ ns}$ per mutation with propagation).
+- **50,000 batched writes under `withoutUpdate`**: **$4.88\text{ ms}$** ($\sim 10.2\text{M}$ writes/sec).
+
+#### B. Memory Footprint & Density (`MemoryFootprintPerformanceTests`)
+- **100,000 reactive nodes across 10,000 subgraphs**: **$14.16\text{ MB}$ Mach Resident Memory (RSS)**.
+- **Unit density**: **$\sim 148.4\text{ bytes/node}$** (including typed node value, node table entry, and dependency edge list).
+- **Reclamation**: Calling `subgraph.invalidate()` reclaims **100% of nodes**, returning `nodeCount` and live storage cleanly to **0**.
+
+#### C. Indirect Dynamic Redirection (`IndirectRedirectPerformanceTests`)
+- **100,000 dynamic redirects (`setSource`) across 10,000 active indirect attributes**: **$55.73\text{ ms}$**.
+- **Unit latency**: **$\sim 0.56\ \mu\text{s}$ per redirection** ($\sim 1.79\text{M}$ redirects/sec).
+
+#### D. Multi-Threaded Scalability (`MultiThreadContextPerformanceTests`)
+- **800,000 concurrent evaluations across 8 worker threads (`TaskGroup`)**: **$51.75\text{ ms}$**.
+- **Aggregate throughput**: **$\sim 15.46\text{M}$ evaluations/sec**.
+- **Thread-Local Storage (TLS)**: 0 lock contention during evaluation passes.
+
+#### E. Dynamic Edge Pruning (`DynamicEdgePruningPerformanceTests`)
+- **250,000 dynamic branch switch & edge-relinking operations (`if/else` simulation)**: **$42.21\text{ ms}$**.
+- **Unit latency**: **$\sim 0.17\ \mu\text{s}$ per edge** ($\sim 5.92\text{M}$ dynamic edge mutations/sec, $O(1)$ edge removal).
 
 ---
 
-## Building and Testing
+### 3. Real-World UI Stress Simulation (`tools/Benchmarks/UISimulator`)
 
-### Prerequisites
-- Swift 6.0+ toolchain
-- macOS 13+ or Windows 10/11 (with Windows SDK)
+A stress test simulating a complex, real-world reactive UI application with 10,000 dynamic components and virtualized scrolling:
 
-### Quick Start
+- **Component Tree Mounting**: 10,000 components ($30,000$ active reactive attributes) mounted in **$5.27\text{ ms}$**.
+- **60-Frame Steady State Animation**:
+  - Each frame performs 500 random state mutations across the tree.
+  - Mean frame computation latency: **$0.165\text{ ms}$**.
+  - 99th percentile frame latency ($p99$): **$0.252\text{ ms}$** (comfortably below the $1.6\text{ ms}$ 120 FPS UI budget).
+- **Global Theme / Fan-Out Invalidation**:
+  - 1 root environment change broadcast to 50,000 reading rules.
+  - Dirty notification propagation: **$0.519\text{ ms}$**.
+  - Complete lazy update pass: **$5.110\text{ ms}$**.
+- **Unmounting & Teardown**: 10,000 subgraphs destroyed in **$9.65\text{ ms}$**, returning graph node count cleanly to **0**.
+
+---
+
+## Running the Benchmarks
+
+All benchmark targets can be executed directly using the Swift toolchain:
 
 ```bash
-# Clone the repository
-git clone https://github.com/erhusoft/SwiftAttributeGraph.git
-cd SwiftAttributeGraph
-
-# Build the library
-swift build
-
-# Run complete test suite (645+ tests across 107 suites)
-swift test
-
-# Run hot-path performance benchmarks in Release mode
+# 1. Run ultra-hot read microbenchmarks (10M warm reads)
 swift test -c release --filter HotReadPerformanceTests
+
+# 2. Run memory footprint and RSS density benchmark
+swift test -c release --filter MemoryFootprintPerformanceTests
+
+# 3. Run high-throughput batch writes benchmark
+swift test -c release --filter BatchWritesPerformanceTests
+
+# 4. Run multi-threaded concurrency benchmark (8 threads)
+swift test -c release --filter MultiThreadContextPerformanceTests
+
+# 5. Run dynamic edge pruning benchmark
+swift test -c release --filter DynamicEdgePruningPerformanceTests
+
+# 6. Run the standalone Real-World UI Stress Benchmark (from tools/)
+cd ../tools/Benchmarks
+swift run -c release StressBenchmark
 ```
 
 ---
