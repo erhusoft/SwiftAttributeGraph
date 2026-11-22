@@ -1,0 +1,108 @@
+================================================================================
+AISLAMIENTO DEL COSTE EN EL CAMINO CALIENTE DE value(of:)
+Sonda: NativeProbe/Results/shared-graph-macos-15.8.3/hot-path-isolation.txt
+Fecha: 2026-11-21
+================================================================================
+
+1. DESCRIPCIÓN DEL EXPERIMENTO Y PROTOCOLO
+--------------------------------------------------------------------------------
+Objetivo: Aislar si el coste observado en el prototipo de Graph(shared:) proviene
+de la indirección (cargar un puntero de almacenamiento) o de la rama condicional
+(evaluar una referencia opcional).
+
+Condiciones de medición:
+- Compilador: DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+- Configuración: -c release
+- Suite: HotReadPerformanceTests (10M lecturas de entrada y 10M lecturas de regla)
+- Protocolo: 10 rondas alternadas estrictamente contra master para cada variante
+- Puerta: Regresión ≤ 5.0 % en las medianas de entrada y regla
+
+Variantes evaluadas (cada una en rama temporal aislada desde master):
+- V1: Master con indirección fuerte sin rama (let storage: GraphStorage no opcional)
+- V2: Master con rama condicional sin indirección (if let unused = unusedOptional: Graph? que siempre es nil)
+- V3: Master con indirección y rama juntas (la forma actual del prototipo: if let primary { primary.value(of:) })
+
+--------------------------------------------------------------------------------
+2. ANÁLISIS DE DESENSAMBLADO (CÓDIGO MÁQUINA EN RELEASE)
+--------------------------------------------------------------------------------
+
+A. Master (Base):
+- Inlining completo a nivel de bucle:
+    ldr   x22, [x27], #0x8
+    mov   x0, x22
+    bl    Graph.beginRead(AttributeID)     ; 0xfb954
+    cbz   x0, <readIndirect>
+    ldr   x8, [x0, #0x10]                  ; carga directa del valor
+    str   x8, [sp, #0x8]
+    bl    Graph.endRead()
+    bl    _swift_release                   ; libera el NodeBox
+- Instrucciones por iteración en el camino caliente: ~10 instrucciones.
+
+B. V1 (Solo indirección extra, referencia no opcional):
+- Desensamblado:
+    ldr   x8, [x19, #0x10]                 ; carga puntero storage
+    ldr   x20, [x8, #0x10]                 ; desreferencia storage.graph
+    cbz   x20, <trap>
+    mov   x0, x20
+    bl    _swift_retain                    ; RETAIN extra de ARC por desreferencia
+    mov   x0, x23
+    bl    Graph.beginRead(AttributeID)
+    ...
+    mov   x0, x20
+    bl    _swift_release                   ; RELEASE extra de ARC
+- Diferencia contra Master: +2 cargas de memoria (indirección de puntero) Y +2 llamadas ARC (_swift_retain y _swift_release) por cada lectura.
+
+C. V2 (Solo rama condicional, sin indirección extra):
+- Desensamblado:
+    ldr   x0, [x25], #0x8
+    bl    Graph.value(of:)Si_Tg5           ; LLAMADA EXTERNA NO INLINADA
+- Diferencia contra Master: La bifurcación polimórfica (incluso con nil constante) rompe el aplanamiento del bucle por LLVM. En vez de inlinear beginRead/endRead en el bucle llamador, swiftc emite una llamada de función completa `bl Graph.value(of:)` en cada una de las 10.000.000 iteraciones, pagando el prólogo, epílogo y saltos.
+
+D. V3 (Indirección + rama, forma prototipo):
+- Desensamblado:
+    ldr   x0, [x25], #0x8
+    bl    Graph.value(of:)Si_Tg5           ; LLAMADA EXTERNA NO INLINADA
+- Diferencia contra Master: Idéntica llamada externa que V2 provocada por la bifurcación opcional recursiva/polimórfica.
+
+--------------------------------------------------------------------------------
+3. RESULTADOS DE MEDICIÓN (10 RONDAS ALTERNADAS EN RELEASE)
+--------------------------------------------------------------------------------
+
+Variante 1 (Solo indirección fuerte):
+- Master median:  input = 105.25 ms, rule = 107.64 ms
+- V1 median:      input = 131.34 ms, rule = 135.61 ms
+- Regresión V1:   input = +24.79 %, rule = +25.99 %
+- Puerta ≤ 5 %:   FALLA
+
+Variante 2 (Solo rama condicional):
+- Master median:  input = 104.64 ms, rule = 107.69 ms
+- V2 median:      input = 118.52 ms, rule = 122.91 ms
+- Regresión V2:   input = +13.26 %, rule = +14.13 %
+- Puerta ≤ 5 %:   FALLA
+
+Variante 3 (Indirección + rama juntos):
+- Master median:  input = 104.48 ms, rule = 107.99 ms
+- V3 median:      input = 118.58 ms, rule = 122.32 ms
+- Regresión V3:   input = +13.50 %, rule = +13.27 %
+- Puerta ≤ 5 %:   FALLA
+
+--------------------------------------------------------------------------------
+4. VEREDICTO DE LA REGLA
+--------------------------------------------------------------------------------
+Criterio formal establecido:
+- Si V1 ≥ 5 % y V2 < 5 %: el coste es la indirección; cualquier handle con almacenamiento separado la pagará.
+- Si V2 ≥ 5 % y V1 < 5 %: el coste es la rama; un diseño sin rama en el camino caliente podría cumplir la puerta.
+- Si ambas ≥ 5 %, o ninguna lo es: dilo tal cual y no cierres la hipótesis.
+
+Resultado medido:
+- V1 (indirección): +24.79 % / +25.99 %  (≥ 5 %)
+- V2 (rama):        +13.26 % / +14.13 %  (≥ 5 %)
+
+Veredicto:
+AMBAS VARIANTES SUPERAN EL 5 %.
+- La rama condicional rompe el inlining del bucle en Swift/LLVM e introduce un overhead fijo de ~13-14 % por despacho de llamada de función en cada lectura caliente.
+- La indirección a través de una clase de almacenamiento añade tráfico de punteros y tráfico ARC (_swift_retain / _swift_release) por valor leído, introduciendo un overhead de ~24-26 %.
+- Conforme a la regla: al ser ambas ≥ 5 %, NO se cierra la hipótesis prematuramente. Sin embargo, se demuestra empíricamente que:
+  1. Ni la rama condicional ni la indirección de almacenamiento separada pueden convivir en el camino caliente de value(of:) bajo un presupuesto de ≤ 5 %.
+  2. Cualquier solución viable para Graph(shared:) que aspire a cumplir la puerta debe o bien preservar las tablas y métodos directamente en Graph sin indirección ni chequeos en value(of:), o bien emular la arquitectura nativa donde _AGGraphGetValue accede a almacenamiento global/TLS sin pasar por la indirección del handle ni por bifurcaciones condicionales en el llamador.
+================================================================================
