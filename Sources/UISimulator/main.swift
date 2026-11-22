@@ -229,8 +229,72 @@ struct UISimulator {
         }
         print("  ✓ ¡ÉXITO! Fila eliminada limpiamente sin dejar residuos en el grafo.")
 
-        // 8. Inspección y diagnóstico (M8)
-        print("\n[Paso 8] Métricas y volcado del grafo (M8):")
+        // 8. Benchmark de Estrés Real: Lista de 10,000 filas con Scroll y Mutaciones en Vivo
+        print("\n[Paso 8] Benchmark de Estrés Real: Lista viva de 10,000 filas con Scroll Virtualizado...")
+        let stressStart = DispatchTime.now()
+        let rowCount = 10_000
+        var virtualList: [TodoItemNode] = []
+        virtualList.reserveCapacity(rowCount)
+
+        for i in 0..<rowCount {
+            virtualList.append(TodoItemNode(graph: graph, id: i, text: "Fila reactiva número #\(i)", isCompleted: i % 2 == 0))
+        }
+
+        let mountTime = Double(DispatchTime.now().uptimeNanoseconds - stressStart.uptimeNanoseconds) / 1_000_000.0
+        print("  ✓ Montadas \(rowCount) filas reactivas con subgrafos dedicados en: \(String(format: "%.2f", mountTime)) ms")
+        print("  ✓ Nodos activos en el grafo: \(graph.nodeCount)")
+        print("  ✓ Subgrafos vivos: \(graph.liveSubgraphCount)")
+
+        // Simular un scroll virtualizado por una ventana visible de 50 filas a lo largo de 100 frames
+        print("\n  Simulando scroll de 100 frames (ventana visible de 50 filas)...")
+        let scrollStart = DispatchTime.now()
+        let windowSize = 50
+        var totalFrameTime: Double = 0.0
+
+        for frame in 0..<100 {
+            let offset = (frame * 50) % (rowCount - windowSize)
+            let frameStart = DispatchTime.now()
+
+            // Lectura de la ventana visible
+            for j in offset..<(offset + windowSize) {
+                _ = virtualList[j].render(in: graph)
+            }
+
+            let frameDuration = Double(DispatchTime.now().uptimeNanoseconds - frameStart.uptimeNanoseconds) / 1_000_000.0
+            totalFrameTime += frameDuration
+        }
+
+        let avgFrameTime = totalFrameTime / 100.0
+        let simulatedFPS = 1000.0 / avgFrameTime
+        let fpsStr = String(format: "%.0f", simulatedFPS)
+        print("  ✓ 100 frames de scroll completados en: \(String(format: "%.2f", totalFrameTime)) ms")
+        print("  ✓ Tiempo promedio por frame: \(String(format: "%.4f", avgFrameTime)) ms (~\(fpsStr) FPS teóricos)")
+
+        // Simular 500 mutaciones en vivo aleatorias durante el scroll
+        print("\n  Simulando 500 mutaciones de estado aleatorias en la lista...")
+        let mutateStart = DispatchTime.now()
+        for m in 0..<500 {
+            let targetIdx = (m * 17) % rowCount
+            graph.setValue(true, for: virtualList[targetIdx].isCompletedAttr)
+            _ = virtualList[targetIdx].render(in: graph)
+        }
+        let mutateDuration = Double(DispatchTime.now().uptimeNanoseconds - mutateStart.uptimeNanoseconds) / 1_000_000.0
+        let microsPerMutate = (mutateDuration / 500.0) * 1000.0
+        let mutateStr = String(format: "%.2f", microsPerMutate)
+        print("  ✓ 500 mutaciones + recálculos completados en: \(String(format: "%.2f", mutateDuration)) ms (~\(mutateStr) µs/mutación)")
+
+        // Desmontaje y liberación de las 10,000 filas
+        print("\n  Desmontando y liberando las \(rowCount) filas (invalidando sus 10,000 subgrafos)...")
+        let unmountStart = DispatchTime.now()
+        for item in virtualList {
+            item.subgraph.invalidate()
+        }
+        let unmountDuration = Double(DispatchTime.now().uptimeNanoseconds - unmountStart.uptimeNanoseconds) / 1_000_000.0
+        print("  ✓ \(rowCount) filas liberadas en: \(String(format: "%.2f", unmountDuration)) ms")
+        print("  ✓ Nodos restantes en el grafo: \(graph.nodeCount)")
+
+        // 9. Inspección y diagnóstico (M8)
+        print("\n[Paso 9] Métricas finales y volcado del grafo (M8):")
         print("  Total de recálculos del motor: \(graph.recalculationCount)")
         print("  Total de aristas activas: \(graph.edgeCount)")
         print("  Memoria estimada de tablas: \(graph.estimatedMemoryFootprint) bytes")
