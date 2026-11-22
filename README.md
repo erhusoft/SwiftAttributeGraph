@@ -141,5 +141,3 @@ swift run -c release StressBenchmark
 1. **`AttributeGraph`** (This project): Reactive computation DAG, change detection, and memory isolation.
 2. **`SwiftUICore`**: Pure declarative types (`View`, `State`, `Binding`, `Environment`, `Layout`).
 3. **`SwiftUI`**: High-level controls, scenes, and windowing backends (Direct2D/Win32 on Windows).
-
-For architecture guidelines, developer documentation, and reverse-engineering research, refer to `../docs/AttributeGraph/` and the root `../AGENTS.md` guide.
