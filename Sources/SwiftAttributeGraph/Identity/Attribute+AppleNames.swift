@@ -21,6 +21,18 @@ extension Attribute {
         }
     }
 
+    /// Updates this attribute's flags using a bitmask (`AGAttribute.setFlags(_:mask:)`).
+    ///
+    /// Bitwise equivalent to `flags = (flags & ~mask) | (newFlags & mask)`.
+    public func setFlags(_ newFlags: AttributeFlags, mask: AttributeFlags) {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("Attribute flags set after its graph was released")
+        }
+        let current = graph.flags(of: self)
+        let updated = AttributeFlags(rawValue: (current.rawValue & ~mask.rawValue) | (newFlags.rawValue & mask.rawValue))
+        graph.setFlags(updated, for: self)
+    }
+
     /// The graph value state of the attribute (`AGAttribute.valueState`).
     public var valueState: ValueState {
         graph.valueStateImpl(of: erased)
@@ -63,6 +75,18 @@ extension AnyAttribute {
             }
             graph.setFlags(newValue, for: self)
         }
+    }
+
+    /// Updates this attribute's flags using a bitmask (`AGAttribute.setFlags(_:mask:)`).
+    ///
+    /// Bitwise equivalent to `flags = (flags & ~mask) | (newFlags & mask)`.
+    public func setFlags(_ newFlags: AttributeFlags, mask: AttributeFlags) {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("Attribute flags set after its graph was released")
+        }
+        let current = graph.flags(of: self)
+        let updated = AttributeFlags(rawValue: (current.rawValue & ~mask.rawValue) | (newFlags.rawValue & mask.rawValue))
+        graph.setFlags(updated, for: self)
     }
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).

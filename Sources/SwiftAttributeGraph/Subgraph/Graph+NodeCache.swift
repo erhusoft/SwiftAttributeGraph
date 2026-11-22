@@ -188,7 +188,7 @@ extension Graph {
             ownerSubgraph = Subgraph(id: currentSubgraph)
         }
         precondition(subgraphs.isLive(ownerSubgraph.id) && !subgraphs.isFalling(index: ownerSubgraph.id.index),
-                     "readCachedAttribute: owner subgraph is not valid")
+                     "accessing invalidated subgraph")
 
         let cacheKey = SubgraphNodeCache.Key(typeID: ObjectIdentifier(Value.self), key: AnyHashable(key))
         if let entry = nodeCaches[ownerSubgraph.id.index]?.lookup(key: cacheKey) {

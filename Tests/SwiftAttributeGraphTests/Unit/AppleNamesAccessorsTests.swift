@@ -35,6 +35,21 @@ struct AppleNamesAccessorsTests {
         anyInd.source = a.erased
         #expect(anyInd.source == a.erased)
         #expect(ind.source == a)
+
+        // Test setFlags(_:mask:)
+        let f1 = AttributeFlags(rawValue: 0b0001)
+        let f2 = AttributeFlags(rawValue: 0b0010)
+        let mask = AttributeFlags(rawValue: 0b0011)
+
+        a.flags = f1
+        #expect(a.flags == f1)
+        a.setFlags(f2, mask: mask)
+        #expect(a.flags == f2)
+
+        anyA.flags = f1
+        #expect(anyA.flags == f1)
+        anyA.setFlags(f2, mask: mask)
+        #expect(anyA.flags == f2)
     }
 
     @Test func subgraphShouldRecordTreeCanBeSetAndQueried() {
