@@ -3,7 +3,7 @@
 /// The generation changes every time a slot is reused, so the ID of a dead attribute never resolves to the attribute
 /// that later takes its slot. The null ID (`rawValue == 0`) is never handed out because generations start at 1.
 ///
-/// Idea adapted from Salsa (index + generation) and measured in the SwiftGraph storage study (G1).
+/// Idea adapted from Salsa (index + generation) and measured in the storage study (G1).
 public struct AttributeID: Hashable, Sendable {
     /// The packed representation: generation in the high half, slot index in the low half.
     public let rawValue: UInt64

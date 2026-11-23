@@ -1,7 +1,7 @@
 /// Slot table of the nodes of a graph, as parallel arrays indexed by slot.
 ///
 /// The common part of a node (state bits, version, edges, owner) is not generic and holds no reference counting, which
-/// is what made propagation 3.8× faster in the SwiftGraph storage study (G1–G3). Only `boxes` holds a reference.
+/// is what made propagation 3.8× faster in the storage study (G1–G3). Only `boxes` holds a reference.
 struct NodeTable {
     private(set) var generations: [UInt32] = []
     /// The graph tag in the top 16 bits of every generation of this table (see `GraphRegistry`).

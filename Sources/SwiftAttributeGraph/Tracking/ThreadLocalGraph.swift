@@ -1,7 +1,7 @@
 // The only file of the engine that touches platform thread-local storage.
 //
 // A graph belongs to one thread. While a rule runs, the engine stores the graph in a thread-local slot so that
-// `Attribute.value` can find it without a global dictionary: the SwiftGraph tracking study (G5) measured an 18×
+// `Attribute.value` can find it without a global dictionary: the tracking study (G5) measured an 18×
 // gain from replacing `threadDictionary` with a native slot. The slot holds an *unretained* pointer: the graph is
 // alive for the whole time a rule of it runs.
 //
