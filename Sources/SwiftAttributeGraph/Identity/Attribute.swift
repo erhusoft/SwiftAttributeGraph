@@ -26,10 +26,14 @@ public struct Attribute<Value>: Hashable, Sendable {
         self[keyPath: keyPath]
     }
 
-    /// Projects a field of `Value` into a ``Focus`` child attribute in the graph whose rule is running on this thread.
+    /// Projects a field of `Value` into a ``Focus`` child attribute in the graph whose rule is running on this thread,
+    /// or in the owning graph if called outside a running rule.
     public subscript<Member>(keyPath keyPath: KeyPath<Value, Member>) -> Attribute<Member> {
-        guard let graph = ThreadLocalGraph.current() else {
-            preconditionFailure("Attribute[keyPath:] can only be used inside a rule; use Graph.makeFocus(_:keyPath:) elsewhere")
+        if let graph = ThreadLocalGraph.current() {
+            return graph.makeFocus(self, keyPath: keyPath)
+        }
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("Attribute[keyPath:] requires either a running rule or a registered owning Graph")
         }
         return graph.makeFocus(self, keyPath: keyPath)
     }
