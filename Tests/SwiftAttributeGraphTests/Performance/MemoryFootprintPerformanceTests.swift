@@ -24,7 +24,7 @@ struct MemoryFootprintPerformanceTests {
         #elseif canImport(WinSDK)
         var pmc = PROCESS_MEMORY_COUNTERS()
         pmc.cb = DWORD(MemoryLayout<PROCESS_MEMORY_COUNTERS>.size)
-        if GetProcessMemoryInfo(GetCurrentProcess(), &pmc, pmc.cb) {
+        if K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, pmc.cb) {
             return UInt64(pmc.WorkingSetSize)
         }
         return 0
