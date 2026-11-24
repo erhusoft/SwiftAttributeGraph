@@ -1,12 +1,17 @@
 import Testing
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(WinSDK)
+import WinSDK
+#endif
 @testable import SwiftAttributeGraph
 
 @Suite("MemoryFootprintPerformanceTests")
 struct MemoryFootprintPerformanceTests {
 
     private func getResidentMemoryBytes() -> UInt64 {
+        #if canImport(Darwin)
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / 4)
         let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
@@ -16,6 +21,16 @@ struct MemoryFootprintPerformanceTests {
         }
         guard kerr == KERN_SUCCESS else { return 0 }
         return info.resident_size
+        #elseif canImport(WinSDK)
+        var pmc = PROCESS_MEMORY_COUNTERS()
+        pmc.cb = DWORD(MemoryLayout<PROCESS_MEMORY_COUNTERS>.size)
+        if GetProcessMemoryInfo(GetCurrentProcess(), &pmc, pmc.cb) {
+            return UInt64(pmc.WorkingSetSize)
+        }
+        return 0
+        #else
+        return 0
+        #endif
     }
 
     /// Measures the resident memory cost of allocating 100,000 attributes across 10,000 subgraphs,
