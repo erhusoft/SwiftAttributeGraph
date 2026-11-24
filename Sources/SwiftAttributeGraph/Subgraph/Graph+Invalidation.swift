@@ -46,7 +46,7 @@ extension Graph {
     ///
     /// Rules outside the set that read what it owned have those input edges detached, keeping their cached value until
     /// another live input dirties them (matching native AttributeGraph).
-    func invalidate(_ subgraph: Subgraph) {
+    public func invalidate(_ subgraph: Subgraph) {
         assertOwnThread()
         precondition(subgraph != rootSubgraph, "invalidate: the root subgraph cannot be invalidated")
         precondition(subgraphs.isLive(subgraph.id), "invalidate: the subgraph was already invalidated")

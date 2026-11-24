@@ -220,7 +220,7 @@ public final class Graph {
     func isLive(_ subgraph: Subgraph) -> Bool { subgraphs.isLive(subgraph.id) }
 
     /// Whether the subgraph is valid (it is alive and has not been invalidated).
-    func isValid(_ subgraph: Subgraph) -> Bool {
+    public func isValid(_ subgraph: Subgraph) -> Bool {
         assertOwnThread()
         return subgraphs.isLive(subgraph.id) && !subgraphs.isFalling(index: subgraph.id.index)
     }
