@@ -97,13 +97,14 @@ import Testing
         #expect(graph.nodeCount == 0)
     }
 
-    @Test func aSubgraphThatWasInvalidatedCannotBeInvalidatedTwice() async {
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let sub = graph.makeSubgraph()
-            sub.invalidate()
-            sub.invalidate()
-        }
+    /// Native AttributeGraph does nothing when a subgraph that is already invalidated is invalidated again (oracle scenario
+    /// `subgraph-single-observer`): no observer runs and the program does not stop.
+    @Test func aSubgraphInvalidatedTwiceStaysInvalidatedWithoutTrapping() {
+        let graph = Graph()
+        let sub = graph.makeSubgraph()
+        sub.invalidate()
+        sub.invalidate()
+        #expect(!graph.isLive(sub))
     }
 
     @Test func theRootSubgraphCannotBeInvalidated() async {

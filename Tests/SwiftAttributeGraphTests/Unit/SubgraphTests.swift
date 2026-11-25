@@ -210,13 +210,14 @@ import Testing
         #expect(!graph.isLive(branch) && graph.nodeCount == 1)
     }
 
-    @Test func invalidatingAnAlreadyFreedSubgraphStopsTheProgram() async {
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let sub = graph.makeSubgraph()
-            sub.invalidate()
-            sub.invalidate()
-        }
+    /// Native AttributeGraph ignores an invalidation of a subgraph that is already freed (oracle scenario
+    /// `subgraph-single-observer`).
+    @Test func invalidatingAnAlreadyFreedSubgraphDoesNothing() {
+        let graph = Graph()
+        let sub = graph.makeSubgraph()
+        sub.invalidate()
+        sub.invalidate()
+        #expect(!graph.isLive(sub))
     }
 
     @Test func theRootCannotBeInvalidated() async {

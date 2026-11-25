@@ -49,7 +49,9 @@ extension Graph {
     public func invalidate(_ subgraph: Subgraph) {
         assertOwnThread()
         precondition(subgraph != rootSubgraph, "invalidate: the root subgraph cannot be invalidated")
-        precondition(subgraphs.isLive(subgraph.id), "invalidate: the subgraph was already invalidated")
+        // Invalidating a subgraph that is already gone does nothing, as native AttributeGraph does (oracle scenario
+        // `subgraph-single-observer`: the second invalidation runs no observer and does not trap).
+        guard subgraphs.isLive(subgraph.id) else { return }
         if subgraphs.isFalling(index: subgraph.id.index) { return }
 
         if evaluatingNode != Graph.noNode || isInvalidating || deferringSubgraphInvalidationDepth > 0 {
