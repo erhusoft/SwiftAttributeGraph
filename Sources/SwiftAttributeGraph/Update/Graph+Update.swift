@@ -74,7 +74,7 @@ extension Graph {
     func beginRead(_ id: AttributeID) -> NodeBox? {
         assertOwnThread()
         if let running = ThreadLocalGraph.current() {
-            precondition(running === self || running.graphTag == self.graphTag, "a rule cannot read an attribute of another graph")
+            precondition(running === self || running.graphTag == self.graphTag, "attribute references can't cross graph namespaces")
         }
         precondition(table.isLive(id), "reading a dead attribute (its subgraph was invalidated)")
         let index = id.index
