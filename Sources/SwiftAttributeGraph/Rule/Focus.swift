@@ -40,6 +40,20 @@ extension Graph {
                                        comparison: ValuePolicy = .viewValue) -> Attribute<Value> {
         assertOwnThread()
         precondition(table.isLive(root.id), "makeFocus: the root attribute is dead")
-        return makeRule(Focus(root: root, keyPath: keyPath), comparison: comparison)
+        return makeResumableRule(FocusRule(root: root, keyPath: keyPath), comparison: comparison)
+    }
+}
+
+/// The resumable form of ``Focus``: it polls `root`, so a dirty root is brought up to date without a nested update.
+struct FocusRule<Root, Member>: ResumableRule {
+    typealias Value = Member
+    let root: Attribute<Root>
+    let keyPath: KeyPath<Root, Member>
+
+    mutating func resume(_ context: inout ResumableRuleContext<Member>) -> RuleStep {
+        switch context.poll(root) {
+        case .pending: return .needsInput(root.erased)
+        case .ready(let value): context.value = value[keyPath: keyPath]; return .finished
+        }
     }
 }
