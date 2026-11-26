@@ -122,7 +122,7 @@ extension Graph {
             if needsUpdateFlag { clearNeedsUpdateFlags() }
         }
         if state & NodeState.dirty != 0 {
-            precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
+            // Parity with Apple: a dirty input read here, even inside a resumable rule, updates synchronously.
             // Only a read made while a rule runs nests: the top-level read from outside a rule starts from the loop.
             let nests = evaluatingNode != Graph.noNode
             if nests {

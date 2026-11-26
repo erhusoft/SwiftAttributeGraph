@@ -7,6 +7,16 @@ final class ResumableRuleNode<R: ResumableRule>: TypedNode<R.Value> {
         super.init(value: nil, type: type)
     }
 
+    override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
+        guard R.self == Target.self else { return false }
+        return withUnsafeMutablePointer(to: &rule) { ptr in
+            ptr.withMemoryRebound(to: Target.self, capacity: 1) { targetPtr in
+                body(&targetPtr.pointee)
+                return true
+            }
+        }
+    }
+
     override func resume(in graph: Graph, node: AttributeID, firstStep: Bool) -> (step: RuleStep, changed: Bool) {
         if firstStep {
             if evaluation == nil {
