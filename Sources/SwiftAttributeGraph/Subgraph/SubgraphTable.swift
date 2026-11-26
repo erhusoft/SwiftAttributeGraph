@@ -187,14 +187,35 @@ struct SubgraphTable {
         positionInParents[c].append(pos)
     }
 
-    /// Unlinks `child` from `parent` without invalidating `child`.
+    /// Unlinks `child` from `parent` without invalidating `child`. Native `AG::Subgraph::remove_child` moves the last child
+    /// into the removed slot (swap-remove), so the sibling order is not preserved: the last live child takes `child`'s
+    /// place (oracle scenario `subgraph-sibling-order-after-remove`).
     mutating func removeChild(_ child: UInt32, from parent: UInt32) {
         let c = Int(child)
         guard let k = parents[c].firstIndex(of: parent) else { return }
-        let pos = positionInParents[c][k]
+        let pos = Int(positionInParents[c][k])
         parents[c].remove(at: k)
         positionInParents[c].remove(at: k)
-        markChildTombstone(in: parent, at: pos)
+        let p = Int(parent)
+        // Drop trailing tombstones so the last entry is a live child.
+        var last = rawChildren[p].count - 1
+        while last >= 0 && rawChildren[p][last] == SubgraphTable.none {
+            childTombstoneCount[p] &-= 1
+            rawChildren[p].removeLast()
+            rawTags[p]?.removeLast()
+            last -= 1
+        }
+        if last > pos {
+            let moved = rawChildren[p][last]
+            rawChildren[p][pos] = moved
+            if rawTags[p] != nil { rawTags[p]![pos] = rawTags[p]![last] }
+            let m = Int(moved)
+            if let mk = parents[m].firstIndex(of: parent) {
+                positionInParents[m][mk] = UInt32(pos)
+            }
+        }
+        rawChildren[p].removeLast()
+        rawTags[p]?.removeLast()
     }
 
     private mutating func nextEpoch() -> UInt32 {
