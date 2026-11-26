@@ -60,6 +60,12 @@ public final class Graph {
 
     // Update machinery (see `Graph+Update.swift`).
     @exclusivity(unchecked) var frames: [UpdateFrame] = []
+    /// How many `update` calls are currently nested on the native stack, because a rule read a dirty input.
+    var nestedUpdateDepth = 0
+    /// The deepest nesting reached since the graph was created.
+    public internal(set) var maxNestedUpdateDepth = 0
+    /// Stack that a nested rule update must leave free; see ``nestedUpdateWouldExhaustStack()``.
+    var stackMarginBytes = Graph.defaultStackMarginBytes
     @exclusivity(unchecked) @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
     @exclusivity(unchecked) var isResumingStep = false
     /// Number of times a rule has been executed (recalculations) since the graph was created.
