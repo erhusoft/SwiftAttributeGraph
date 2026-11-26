@@ -13,6 +13,13 @@ public final class SubgraphLease {
         self.subgraph = Subgraph(graph: graph)
     }
 
+    /// Takes over the lifetime of an existing subgraph: releasing the lease invalidates it. Used by containers that
+    /// create their children under a parent in a given context.
+    public init(adopting subgraph: Subgraph, graph: Graph) {
+        self.graph = graph
+        self.subgraph = subgraph
+    }
+
     deinit {
         // A subgraph already invalidated by other means is left alone; the root is never invalidated.
         guard graph.subgraphs.isLive(subgraph.id), subgraph != graph.rootSubgraph else { return }

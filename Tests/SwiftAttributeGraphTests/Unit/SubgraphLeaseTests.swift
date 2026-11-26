@@ -28,3 +28,17 @@ import Testing
         _ = copy
     }
 }
+
+extension SubgraphLeaseTests {
+    @Test func aLeaseAdoptingAnExistingSubgraphInvalidatesItWhenReleased() {
+        let graph = Graph()
+        let existing = graph.makeSubgraph(parent: graph.rootSubgraph)
+        var lease: SubgraphLease? = SubgraphLease(adopting: existing, graph: graph)
+        #expect(lease?.subgraph == existing)
+        #expect(existing.isValid)
+
+        lease = nil
+
+        #expect(!existing.isValid)
+    }
+}
