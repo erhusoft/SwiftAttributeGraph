@@ -54,6 +54,13 @@ extension Graph {
         guard subgraphs.isLive(subgraph.id) else { return }
         if subgraphs.isFalling(index: subgraph.id.index) { return }
 
+        // Native `AG::Subgraph::invalidate_and_delete_` unlinks the subgraph from each of its parents with `remove_child`
+        // (swap-remove) before anything else, so the parents keep the swap-remove sibling order (oracle scenarios
+        // `child-death-middle-then-invalidate-parent` and `child-death-first-then-invalidate-parent`).
+        for parent in subgraphs.parents(of: subgraph.id.index) {
+            subgraphs.removeChild(subgraph.id.index, from: parent)
+        }
+
         if evaluatingNode != Graph.noNode || isInvalidating || deferringSubgraphInvalidationDepth > 0 {
             let plan = subgraphs.invalidationPlan(from: subgraph.id.index)
             for index in plan.toInvalidate { subgraphs.setFalling(index: index, true) }

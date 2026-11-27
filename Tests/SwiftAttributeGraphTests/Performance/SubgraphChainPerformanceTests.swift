@@ -48,8 +48,10 @@ import Testing
     }
 
     @Test func invalidatingTwentyThousandSiblingSubgraphsIsLinearAndPreservesChildOrder() {
-        // 1. Verify that invalidating a middle sibling preserves reverse-creation order of remaining siblings
-        // for `forEach`, `update(flags:)`, `children(of:)`, and parent invalidation observer notices.
+        // 1. Verify the sibling order after a middle sibling dies: native `invalidate_and_delete_` unlinks it with
+        // swap-remove, so the last sibling takes its slot (oracle scenario `child-death-middle-then-invalidate-parent`:
+        // native `[B, P, C, D, A]`). The order is then seen by `forEach`, `update(flags:)`, `children(of:)` and the
+        // parent invalidation observer notices.
         let graph = Graph()
         let parent = graph.makeSubgraph(parent: graph.rootSubgraph)
         let c1 = graph.makeSubgraph(parent: parent)
@@ -62,13 +64,13 @@ import Testing
         let a3 = graph.withCurrent(c3) { let r = graph.makeRule { 3 }; graph.setFlags(flag, for: r); return r }
         let a4 = graph.withCurrent(c4) { let r = graph.makeRule { 4 }; graph.setFlags(flag, for: r); return r }
 
-        // Invalidate the middle child c2; remaining children must stay in creation order [c1, c3, c4],
-        // visited in reverse creation order [c4, c3, c1] by `forEach` and by `observe` when `parent` is invalidated.
+        // Invalidate the middle child c2; the last child c4 moves into its slot, leaving [c1, c4, c3], visited
+        // last-first as [c3, c4, c1] by `forEach` and by `observe` when `parent` is invalidated.
         c2.invalidate()
-        #expect(graph.children(of: parent) == [c1, c3, c4])
+        #expect(graph.children(of: parent) == [c1, c4, c3])
         var visited: [AttributeID] = []
         graph.forEach(in: parent, flags: flag) { visited.append($0.id) }
-        #expect(visited == [a4.id, a3.id, a1.id])
+        #expect(visited == [a3.id, a4.id, a1.id])
 
         var notices: [String] = []
         graph.observe(parent) { notices.append("parent") }
@@ -76,7 +78,7 @@ import Testing
         graph.observe(c3) { notices.append("c3") }
         graph.observe(c4) { notices.append("c4") }
         parent.invalidate()
-        #expect(notices == ["parent", "c4", "c3", "c1"])
+        #expect(notices == ["parent", "c3", "c4", "c1"])
 
         // 2. Cost scaling across 1,000, 5,000, and 20,000 siblings must be linear, not O(N^2) (~297 ms in release before fix).
         var times: [Int: Double] = [:]

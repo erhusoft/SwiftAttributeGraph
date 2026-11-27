@@ -187,14 +187,35 @@ struct SubgraphTable {
         positionInParents[c].append(pos)
     }
 
-    /// Unlinks `child` from `parent` without invalidating `child`.
+    /// Unlinks `child` from `parent` without invalidating `child`. Native `AG::Subgraph::remove_child` moves the last child
+    /// into the removed slot (swap-remove), so the sibling order is not preserved: the last live child takes `child`'s
+    /// place (oracle scenario `subgraph-sibling-order-after-remove`).
     mutating func removeChild(_ child: UInt32, from parent: UInt32) {
         let c = Int(child)
         guard let k = parents[c].firstIndex(of: parent) else { return }
-        let pos = positionInParents[c][k]
+        let pos = Int(positionInParents[c][k])
         parents[c].remove(at: k)
         positionInParents[c].remove(at: k)
-        markChildTombstone(in: parent, at: pos)
+        let p = Int(parent)
+        // Drop trailing tombstones so the last entry is a live child.
+        var last = rawChildren[p].count - 1
+        while last >= 0 && rawChildren[p][last] == SubgraphTable.none {
+            childTombstoneCount[p] &-= 1
+            rawChildren[p].removeLast()
+            rawTags[p]?.removeLast()
+            last -= 1
+        }
+        if last > pos {
+            let moved = rawChildren[p][last]
+            rawChildren[p][pos] = moved
+            if rawTags[p] != nil { rawTags[p]![pos] = rawTags[p]![last] }
+            let m = Int(moved)
+            if let mk = parents[m].firstIndex(of: parent) {
+                positionInParents[m][mk] = UInt32(pos)
+            }
+        }
+        rawChildren[p].removeLast()
+        rawTags[p]?.removeLast()
     }
 
     private mutating func nextEpoch() -> UInt32 {
@@ -252,6 +273,10 @@ struct SubgraphTable {
     /// Computes the context-aware invalidation closure from `root`:
     /// - Children sharing `contexts[root]` are invalidated (deduplicated) and returned in parent-before-child LIFO order.
     /// - Children in a different context are NOT invalidated; their `(parent, child)` edges are returned in `detachedEdges`.
+    ///
+    /// Like native `invalidate_now`, it swap-removes each same-context child from the child lists of the child's other
+    /// parents at the moment it processes the dying parent, so a parent that is itself part of the cascade and is
+    /// processed later walks its already-modified list (oracle fuzzer seed 230).
     mutating func invalidationPlan(from root: UInt32) -> (toInvalidate: [UInt32], detachedEdges: [(parent: UInt32, child: UInt32)]) {
         let rootContext = contexts[Int(root)]
         let epoch = nextEpoch()
@@ -265,6 +290,9 @@ struct SubgraphTable {
             for child in rawChildren[Int(current)] where child != SubgraphTable.none {
                 let ci = Int(child)
                 if contexts[ci] == rootContext {
+                    for other in parents[ci] where other != current {
+                        removeChild(child, from: other)
+                    }
                     if visitedEpoch[ci] != epoch {
                         visitedEpoch[ci] = epoch
                         stack.append(child)
@@ -288,10 +316,11 @@ struct SubgraphTable {
     /// bumps the generation and queues the slot for reuse.
     mutating func release(index: UInt32) {
         let i = Int(index)
-        for k in 0..<parents[i].count {
-            let p = parents[i][k]
-            let pos = positionInParents[i][k]
-            markChildTombstone(in: p, at: pos)
+        // Native `invalidate_now` removes a dying child from the child list of every other parent with swap-remove, so a
+        // parent that stays alive keeps the swap-remove order (oracle scenario
+        // `sibling-shared-child-cascade-from-parent-death`).
+        while let p = parents[i].first {
+            removeChild(index, from: p)
         }
         for c in rawChildren[i] where c != SubgraphTable.none {
             let ci = Int(c)

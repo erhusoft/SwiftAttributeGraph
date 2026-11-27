@@ -60,7 +60,7 @@ extension Subgraph {
     /// The child at `index` in link order, with its tag (`AGSubgraphGetChild` in native AttributeGraph).
     public func child(at index: UInt32) -> (subgraph: Subgraph, tag: UInt8) { owningGraph().child(of: self, at: index) }
 
-    /// The number of parents, the root and every secondary parent (`AGSubgraphGetParentCount` in native AttributeGraph).
+    /// The number of parents linked to this subgraph (`AGSubgraphGetParentCount` in native AttributeGraph).
     public var parentCount: UInt64 { owningGraph().parentCount(of: self) }
 
     /// The parent at `index` in link order (`AGSubgraphGetParent` in native AttributeGraph).
