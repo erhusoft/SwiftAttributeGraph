@@ -308,6 +308,7 @@ public final class Graph {
     public func update(_ subgraph: Subgraph, flags: AttributeFlags = .all) {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return }
+        defer { runCachePass() }
         withoutUpdate {
             var updatedAny = true
             while updatedAny {

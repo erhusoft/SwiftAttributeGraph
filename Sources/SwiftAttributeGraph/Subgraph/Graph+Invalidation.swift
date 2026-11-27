@@ -70,6 +70,7 @@ extension Graph {
         }
         perform(subgraph)
         flushDeferredInvalidations()
+        runCachePass()
     }
 
     /// Defers the physical freeing and observer callbacks of any ``invalidate(_:)`` calls executed inside `body` until
@@ -101,6 +102,7 @@ extension Graph {
         if !wasDeferring && deferringSubgraphInvalidationDepth == 0 && evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty {
             flushDeferredInvalidations()
         }
+        if !wasDeferring { runCachePass() }
     }
 
     /// Runs the invalidations that were asked for while a rule was running. Called when the outermost update ends.

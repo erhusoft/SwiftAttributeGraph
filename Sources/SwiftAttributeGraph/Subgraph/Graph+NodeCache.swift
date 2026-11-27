@@ -233,6 +233,12 @@ extension Graph {
         }
         guard let create else { return nil }
 
+        // A new key takes over the oldest parked entry of the same type that a pass aged to 2 or more. Native reuses its
+        // node; here it is freed and a fresh one made, so the old key is gone either way.
+        if let recycled = nodeCaches[ownerSubgraph.id.index]?.takeOldestRecyclable(typeID: typeKey) {
+            freeCachedNode(recycled)
+        }
+
         let attribute = withCurrent(ownerSubgraph) { create() }
         let idx = Int(attribute.id.index)
         table.state[idx] |= NodeState.cached
@@ -259,17 +265,27 @@ extension Graph {
         assertOwnThread()
         for sgIndex in Array(nodeCaches.keys) {
             guard let expired = nodeCaches[sgIndex]?.collect(maxAge: maxAge), !expired.isEmpty else { continue }
-            for node in expired {
-                let id = AttributeID(index: node, generation: table.generations[Int(node)])
-                if table.isLive(id) {
-                    for edge in table.inputs[Int(node)] {
-                        removeOutput(node, from: edge.source, at: edge.positionInOutputs)
-                    }
-                    table.inputs[Int(node)].removeAll(keepingCapacity: false)
-                    observers[node] = nil
-                    table.free(index: node)
-                }
-            }
+            for node in expired { freeCachedNode(node) }
         }
+    }
+
+    /// Frees a cached node, disconnecting its input edges from the sources' output lists first.
+    func freeCachedNode(_ node: UInt32) {
+        let id = AttributeID(index: node, generation: table.generations[Int(node)])
+        guard table.isLive(id) else { return }
+        for edge in table.inputs[Int(node)] {
+            removeOutput(node, from: edge.source, at: edge.positionInOutputs)
+        }
+        table.inputs[Int(node)].removeAll(keepingCapacity: false)
+        observers[node] = nil
+        table.free(index: node)
+    }
+
+    /// One collection pass over the node caches, run where native AttributeGraph runs `invalidate_subgraphs`: the end of an
+    /// invalidation, of ``update(_:flags:)`` and of a deferral of invalidations (oracle scenarios `p1`, `p2`, `p3`). Not while
+    /// a rule runs or invalidations are deferred.
+    func runCachePass() {
+        guard evaluatingNode == Graph.noNode, !isInvalidating, deferringSubgraphInvalidationDepth == 0 else { return }
+        collectCachedNodes()
     }
 }
