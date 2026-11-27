@@ -72,6 +72,11 @@ public final class Graph {
     @exclusivity(unchecked) var mainThreadHandler: ((() -> Void) -> Void)?
     /// How many updates went through a main thread handler (each adds one to ``Graph/mainUpdates``).
     @exclusivity(unchecked) var mainHandlerPasses: UInt64 = 0
+    /// Nodes that changed their own value through ``Graph/setOutputValue(_:)`` while they evaluated; the update takes the change
+    /// when the body returns.
+    @exclusivity(unchecked) var outputWrites: Set<UInt32> = []
+    /// Copies of values handed out by ``Graph/outputValue()``, freed when the outermost update ends.
+    @exclusivity(unchecked) var outputScratch: [AnyObject] = []
     @exclusivity(unchecked) var changeCount: UInt64 = 0
     @exclusivity(unchecked) var createdNodeCount: UInt64 = 0
     @exclusivity(unchecked) var countsUpdateOnNextRule = false

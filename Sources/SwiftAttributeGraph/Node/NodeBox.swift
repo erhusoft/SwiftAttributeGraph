@@ -1,6 +1,9 @@
 /// Type-erased holder of the value of a node. The common, non-generic parts of a node live in `NodeTable` arrays;
 /// only the typed value (and the rule, if any) lives here.
 @usableFromInline class NodeBox {
+    /// The type of the value the node holds (`AnyAttribute.valueType` in native AttributeGraph).
+    var valueType: Any.Type { Void.self }
+
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
     func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
     /// Performs one step; only resumable rule nodes override this.
@@ -38,6 +41,8 @@
     /// larger, and creating 100,000 closure rules 7 % slower [O]; the shared descriptor also takes the place of the
     /// comparison function the node used to store (16 bytes and a retain of its context).
     @usableFromInline let type: NodeType<Value>
+
+    override var valueType: Any.Type { Value.self }
 
     /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
     @inlinable var isEqual: (Value, Value) -> Bool { type.isEqual }

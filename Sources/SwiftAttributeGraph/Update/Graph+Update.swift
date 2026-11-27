@@ -567,7 +567,10 @@ extension Graph {
         if base == 0 {
             if table.state[Int(root)] & NodeState.indirect != 0 { countsUpdateOnNextRule = true } else { updateCount &+= 1 }
         }
-        defer { countsUpdateOnNextRule = false }
+        defer {
+            countsUpdateOnNextRule = false
+            if base == 0, !outputScratch.isEmpty { outputScratch.removeAll() }
+        }
         push(root)
         outer: while frames.count > base {
             let top = frames.count - 1
@@ -701,7 +704,8 @@ extension Graph {
         }
 
         recalculationCount &+= 1
-        let changed = table.box(at: node).evaluate(in: self, node: node)
+        var changed = table.box(at: node).evaluate(in: self, node: node)
+        if !outputWrites.isEmpty, outputWrites.remove(node) != nil { changed = true }
 
         currentSubgraph = previousSubgraph
         if swapsGraph { ThreadLocalGraph.set(previousGraph) }
