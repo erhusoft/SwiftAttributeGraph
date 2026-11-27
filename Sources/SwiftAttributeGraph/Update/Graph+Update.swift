@@ -550,6 +550,18 @@ extension Graph {
     /// A rule that reads an input it did not read before reaches this function again from inside the rule; that
     /// nested call still uses the native stack and is the documented limit that M4 removes.
     func update(_ root: UInt32) {
+        // A main-thread rule updated from the top goes through the handler once: native `update_attribute` gets result 3 from
+        // `UpdateStack::update`, calls `call_main_handler`, which turns the handler off while the closure runs (so the rules
+        // read inside do not call it again) and counts one more main update (oracle scenarios `f0` to `f7`, `c1`, `c4`, `c7`).
+        if frames.isEmpty, let handler = mainThreadHandler {
+            mainThreadHandler = nil
+            mainHandlerPasses &+= 1
+            var ran = false
+            handler { ran = true; self.update(root) }
+            mainThreadHandler = handler
+            precondition(ran, "the main thread handler did not run the update")
+            return
+        }
         let base = frames.count
         // An indirect attribute is transparent: the update it starts is counted when it reaches its first rule.
         if base == 0 {

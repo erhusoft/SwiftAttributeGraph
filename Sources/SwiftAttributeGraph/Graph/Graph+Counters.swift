@@ -51,8 +51,9 @@ extension Graph {
         case contextNeedsUpdate
         /// Same as ``contextNeedsUpdate`` for the graph as a whole [O].
         case needsUpdate
-        /// Updates started on the main thread. Equal to ``updates`` in every probe, including graphs driven from a
-        /// background `Thread`, so the engine returns ``updates`` and does not look at the thread [?].
+        /// Updates of main-thread rules: ``updates`` plus one for each update that went through a handler of
+        /// ``Graph/withMainThreadHandler(_:do:)`` [O]. Every rule made with the Swift API is a main-thread rule, from any thread,
+        /// so without a handler it equals ``updates`` (oracle scenarios `h0`, `h8`, `f0` to `f7`, `c1` to `c7`).
         case mainThreadUpdates
     }
 
@@ -78,7 +79,7 @@ extension Graph {
         case .contextThreadUpdating: return isRunning(in: defaultUpdateContext) ? 1 : 0
         case .needsUpdate: return needsUpdateFlag ? 1 : 0
         case .contextNeedsUpdate: return defaultUpdateContext.counterNeedsUpdate ? 1 : 0
-        case .mainThreadUpdates: return updateCount
+        case .mainThreadUpdates: return updateCount &+ mainHandlerPasses
         }
     }
 }

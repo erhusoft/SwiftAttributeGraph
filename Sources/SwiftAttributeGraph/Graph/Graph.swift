@@ -68,6 +68,10 @@ public final class Graph {
     // Counters behind `counter(for:)` (see `Graph+Counters.swift`).
     @exclusivity(unchecked) var transactionCount: UInt64 = 0
     @exclusivity(unchecked) var updateCount: UInt64 = 0
+    /// The handler ``withMainThreadHandler(_:do:)`` installed, or `nil`. It is `nil` while its own closure runs.
+    @exclusivity(unchecked) var mainThreadHandler: ((() -> Void) -> Void)?
+    /// How many updates went through a main thread handler (each adds one to ``Graph/mainUpdates``).
+    @exclusivity(unchecked) var mainHandlerPasses: UInt64 = 0
     @exclusivity(unchecked) var changeCount: UInt64 = 0
     @exclusivity(unchecked) var createdNodeCount: UInt64 = 0
     @exclusivity(unchecked) var countsUpdateOnNextRule = false
