@@ -273,6 +273,10 @@ struct SubgraphTable {
     /// Computes the context-aware invalidation closure from `root`:
     /// - Children sharing `contexts[root]` are invalidated (deduplicated) and returned in parent-before-child LIFO order.
     /// - Children in a different context are NOT invalidated; their `(parent, child)` edges are returned in `detachedEdges`.
+    ///
+    /// Like native `invalidate_now`, it swap-removes each same-context child from the child lists of the child's other
+    /// parents at the moment it processes the dying parent, so a parent that is itself part of the cascade and is
+    /// processed later walks its already-modified list (oracle fuzzer seed 230).
     mutating func invalidationPlan(from root: UInt32) -> (toInvalidate: [UInt32], detachedEdges: [(parent: UInt32, child: UInt32)]) {
         let rootContext = contexts[Int(root)]
         let epoch = nextEpoch()
@@ -286,6 +290,9 @@ struct SubgraphTable {
             for child in rawChildren[Int(current)] where child != SubgraphTable.none {
                 let ci = Int(child)
                 if contexts[ci] == rootContext {
+                    for other in parents[ci] where other != current {
+                        removeChild(child, from: other)
+                    }
                     if visitedEpoch[ci] != epoch {
                         visitedEpoch[ci] = epoch
                         stack.append(child)

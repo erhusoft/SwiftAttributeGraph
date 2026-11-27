@@ -78,4 +78,39 @@ import Testing
 
         #expect(graph.children(of: q) == [y, x])
     }
+
+    /// While native `invalidate_now` processes a dying parent it swap-removes each same-context child from the child
+    /// lists of the child's other parents, even when such a parent is itself part of the cascade and has not been
+    /// processed yet; that parent then walks its already-modified list. A child in another context is only detached
+    /// from the dying parent: it is not invalidated and stays in the other parent's list. Oracle fuzzer seed 230
+    /// (reduced): native notices `[s1, s0, s5, s4, s6, s8, s7, s3]`, and `s2` (context B) survives.
+    @Test func aDyingParentWalksTheListSwapRemovedWhileItsParentWasProcessed() {
+        let graph = Graph()
+        let contextB = graph.makeSharedContext()
+        let s0 = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let s1 = graph.makeSubgraph(parent: graph.rootSubgraph)
+        // s0 → [s2 (context B), s3, s4, s5, s6].
+        let s2 = contextB.makeSubgraph(parent: s0)
+        let s3 = graph.makeSubgraph(parent: s0)
+        let s4 = graph.makeSubgraph(parent: s0)
+        let s5 = graph.makeSubgraph(parent: s0)
+        let s6 = graph.makeSubgraph(parent: s0)
+        // s1 → [s2, s3, s7, s8, s0]: s2 and s3 are shared with s0, and s0 itself is a child of s1.
+        graph.addChild(s2, to: s1)
+        graph.addChild(s3, to: s1)
+        let s7 = graph.makeSubgraph(parent: s1)
+        let s8 = graph.makeSubgraph(parent: s1)
+        graph.addChild(s0, to: s1)
+        #expect(graph.children(of: s0) == [s2, s3, s4, s5, s6])
+        #expect(graph.children(of: s1) == [s2, s3, s7, s8, s0])
+
+        var notices: [String] = []
+        let names: [(String, Subgraph)] = [("s0", s0), ("s1", s1), ("s3", s3), ("s4", s4), ("s5", s5), ("s6", s6), ("s7", s7), ("s8", s8)]
+        for (name, subgraph) in names { _ = graph.observe(subgraph) { notices.append(name) } }
+
+        graph.invalidate(s1)
+
+        #expect(notices == ["s1", "s0", "s5", "s4", "s6", "s8", "s7", "s3"])
+        #expect(s2.isValid)
+    }
 }
