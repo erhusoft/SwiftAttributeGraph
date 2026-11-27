@@ -692,14 +692,22 @@ public final class Graph {
 extension Attribute {
     /// The value of the attribute, read from the graph whose rule is running on this thread.
     ///
-    /// Reading inside a rule records a dependency. Outside a rule there is no current graph: use
-    /// ``Graph/value(of:)``.
+    /// Reading inside a rule records a dependency. Outside a rule the graph is the attribute's own and the read records
+    /// nothing (measured on macOS 15.8, oracle scenarios `hueco-b2` to `hueco-b6` and `hueco-b11`).
     @inlinable
     public var value: Value {
-        guard let graph = ThreadLocalGraph.current() else {
-            preconditionFailure("Attribute.value can only be read inside a rule; use Graph.value(of:) elsewhere")
-        }
+        guard let graph = ThreadLocalGraph.current() else { return valueOutsideRule() }
         guard let box = graph.beginRuleRead(id) else { return graph.read(self) }
         return graph.finishRead(box, as: Value.self)
+    }
+}
+
+extension Attribute {
+    @usableFromInline
+    func valueOutsideRule() -> Value {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("Attribute.value: the graph of the attribute was released")
+        }
+        return graph.value(of: self)
     }
 }
