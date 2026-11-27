@@ -39,24 +39,41 @@ public struct AGTupleType: Sendable {
         @usableFromInline
         let offsets: [Int]
         @usableFromInline
+        let sizes: [Int]
+        @usableFromInline
         let totalSize: Int
+        @usableFromInline
+        let alignment: Int
 
+        /// Lays the elements out as Swift does for a tuple (`swift_getTupleTypeMetadata`): each element at the next
+        /// multiple of its own alignment, and a size that ends at the last element, without trailing padding. Measured on
+        /// macOS 15.8 (oracle scenarios `hueco-a0` to `hueco-a9`).
         init(types: [Any.Type]) {
             self.types = types
             var currentOffset = 0
+            var maxAlignment = 1
             var computedOffsets = [Int]()
+            var computedSizes = [Int]()
             computedOffsets.reserveCapacity(types.count)
-            for _ in types {
-                let alignment = MemoryLayout<Int>.alignment
+            computedSizes.reserveCapacity(types.count)
+            for type in types {
+                let (size, alignment) = Self.measure(type)
                 let remainder = currentOffset % alignment
-                if remainder != 0 {
-                    currentOffset += (alignment - remainder)
-                }
+                if remainder != 0 { currentOffset += alignment - remainder }
                 computedOffsets.append(currentOffset)
-                currentOffset += MemoryLayout<Int>.size
+                computedSizes.append(size)
+                currentOffset += size
+                maxAlignment = max(maxAlignment, alignment)
             }
             self.offsets = computedOffsets
+            self.sizes = computedSizes
             self.totalSize = currentOffset
+            self.alignment = maxAlignment
+        }
+
+        /// Opens the element type to read its size and alignment.
+        private static func measure<T>(_ type: T.Type) -> (size: Int, alignment: Int) {
+            (MemoryLayout<T>.size, MemoryLayout<T>.alignment)
         }
     }
 
@@ -72,6 +89,17 @@ public struct AGTupleType: Sendable {
     /// Creates a tuple type representing a sequence of types.
     public init(_ types: [Any.Type]) {
         self.storage = Storage(types: types)
+    }
+
+    /// The size in bytes of the whole tuple, without trailing padding (`TupleType.size`).
+    @inlinable
+    public var size: Int { storage.totalSize }
+
+    /// The size in bytes of the element at `index` (`TupleType.elementSize(at:)`).
+    @inlinable
+    public func elementSize(at index: Int) -> Int {
+        precondition(index >= 0 && index < storage.sizes.count, "index out of range: \(index)")
+        return storage.sizes[index]
     }
 
     /// The number of elements in the tuple type.
@@ -222,7 +250,7 @@ public struct AGUnsafeMutableTuple {
     @inlinable
     public init(with tupleType: AGTupleType) {
         let totalSize = max(tupleType.storage.totalSize, 16)
-        let raw = UnsafeMutableRawPointer.allocate(byteCount: totalSize, alignment: 16)
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: totalSize, alignment: max(16, tupleType.storage.alignment))
         self.init(tupleType: tupleType, buffer: raw)
     }
 
@@ -312,9 +340,10 @@ public func withUnsafeTuple(
     count: Int,
     _ body: (AGUnsafeMutableTuple) -> Void
 ) {
-    let elementSize = max(tupleType.storage.totalSize, 16)
-    let totalBytes = max(elementSize * count, 16)
-    withUnsafeTemporaryAllocation(byteCount: totalBytes, alignment: 16) { buffer in
+    let alignment = tupleType.storage.alignment
+    let stride = (tupleType.storage.totalSize + alignment - 1) / alignment * alignment
+    let totalBytes = max(max(stride, 16) * count, 16)
+    withUnsafeTemporaryAllocation(byteCount: totalBytes, alignment: max(16, alignment)) { buffer in
         guard let base = buffer.baseAddress else {
             preconditionFailure("memory allocation failure")
         }
