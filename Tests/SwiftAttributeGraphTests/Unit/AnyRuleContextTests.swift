@@ -64,4 +64,21 @@ struct AnyRuleContextTests {
         #expect(insideEvaluatingNode == ruleNode.id.index)
         #expect(graph.evaluatingNode == Graph.noNode)
     }
+
+    /// Building a context for the attribute that is being evaluated must not read that attribute again: it only refers
+    /// to it. Oracle scenario `cov79-a-unsafe-cast`: a stateful rule builds a typed context with `unsafeCast` and reads a
+    /// dependency through it; native returns `[20, 30]` across two evaluations, while reading the attribute inside its own
+    /// rule aborted with a cycle.
+    @Test func castingTheContextOfTheRuleThatIsRunningDoesNotReadItself() {
+        let graph = Graph()
+        let input = graph.makeInput(10)
+        var own: Attribute<Int>!
+        own = graph.makeStatefulRule(initialValue: 0) { (context: inout RuleContext<Int>) in
+            let cast = AnyRuleContext(attribute: own.erased).unsafeCast(to: Int.self)
+            context.value = cast[input] * 2
+        }
+        #expect(graph.value(of: own) == 20)
+        graph.setValue(15, for: input)
+        #expect(graph.value(of: own) == 30)
+    }
 }

@@ -20,13 +20,13 @@ public struct RuleContext<Value> {
         guard let graph = GraphRegistry.graph(forTag: attribute.id.graphTag) else {
             preconditionFailure("RuleContext created after graph was released")
         }
+        precondition(graph.table.isLive(attribute.id), "RuleContext: the attribute is dead")
         self.graph = graph
         self.node = attribute.id.index
-        if graph.hasValue(of: attribute) {
-            self.current = graph.read(attribute)
-        } else {
-            self.current = nil
-        }
+        // Only refers to the attribute: its stored value is taken as it is, without evaluating it. Reading it through the
+        // graph would make a rule that builds a context for itself read itself (a cycle); native does not read it either
+        // (oracle scenario `cov79-a-unsafe-cast`).
+        self.current = (graph.table.box(at: attribute.id.index) as? TypedNode<Value>)?.value
     }
 
     /// The attribute that owns this context (`RuleContext.attribute`).
