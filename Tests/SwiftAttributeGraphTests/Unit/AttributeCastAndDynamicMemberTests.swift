@@ -68,4 +68,27 @@ import Testing
         graph.setValue(Pair(left: 30, right: 40), for: pair)
         #expect(right.map { graph.value(of: $0) } == 40)
     }
+
+    /// Oracle scenario `cov79-a-unsafe-cast` (native `eq=[true, true, true, true, true, true]`): casting an erased optional or weak
+    /// attribute back keeps the handle and its target.
+    @Test func castingAnErasedOptionalOrWeakAttributeBackKeepsItsTarget() {
+        let graph = Graph()
+        let a1 = graph.makeInput(10)
+        let a2 = graph.makeInput(20)
+
+        let someOptional = OptionalAttribute(a1)
+        let castSome: OptionalAttribute<Int> = AnyOptionalAttribute(someOptional).unsafeCast(to: Int.self)
+        let emptyOptional = OptionalAttribute<Int>()
+        let castEmpty: OptionalAttribute<Int> = AnyOptionalAttribute(emptyOptional).unsafeCast(to: Int.self)
+        let weak = WeakAttribute(a2)
+        let castWeak: WeakAttribute<Int> = AnyWeakAttribute(weak).unsafeCast(to: Int.self)
+        graph.setValue(15, for: a1)
+
+        #expect(castSome == someOptional)
+        #expect(castEmpty == emptyOptional)
+        #expect(castWeak == weak)
+        #expect(castSome.value == 15)
+        #expect(castEmpty.value == nil)
+        #expect(castWeak.value == 20)
+    }
 }
