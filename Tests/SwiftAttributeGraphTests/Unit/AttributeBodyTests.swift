@@ -9,7 +9,7 @@ struct AttributeBodyTests {
 
     struct CustomBody: _AttributeBody {
         static var comparisonMode: ComparisonMode { .bitwise }
-        static var flags: AttributeTypeFlags { [.dynamicDestruction] }
+        static var flags: AttributeTypeFlags { [.hasDestroySelf] }
     }
 
     struct DummyVisitor: AttributeBodyVisitor {
@@ -20,11 +20,11 @@ struct AttributeBodyTests {
     }
 
     @Test func attributeBodyDefaults() {
-        #expect(TestRule.comparisonMode == .equatableAlways)
-        #expect(TestRule.flags == [])
+        #expect(TestRule.comparisonMode == .equatableUnlessPOD)   // native: mode 2, flags 8 (oracle scenarios f1 to f3)
+        #expect(TestRule.flags == [.mainThread])
         #expect(TestRule._hasDestroySelf == false)
         #expect(CustomBody.comparisonMode == .bitwise)
-        #expect(CustomBody.flags.contains(.dynamicDestruction))
+        #expect(CustomBody.flags.contains(.hasDestroySelf))
     }
 
     @Test func externalBodyTypes() {
@@ -40,12 +40,12 @@ struct AttributeBodyTests {
         let graph = Graph()
         let a = graph.makeInput(10)
         let map = Map(a) { $0 * 2 }
-        #expect(type(of: map).comparisonMode == .equatableAlways)
+        #expect(type(of: map).comparisonMode == .equatableUnlessPOD)
 
         struct Container: Equatable { var x: Int }
         let c = graph.makeInput(Container(x: 5))
         let focus = Focus(root: c, keyPath: \Container.x)
-        #expect(type(of: focus).comparisonMode == .equatableAlways)
+        #expect(type(of: focus).comparisonMode == .equatableUnlessPOD)
     }
 
     @Test func visitBodyMethodIsCallable() {
