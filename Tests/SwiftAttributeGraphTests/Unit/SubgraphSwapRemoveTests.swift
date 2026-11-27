@@ -29,4 +29,35 @@ import Testing
 
         #expect(graph.children(of: parent) == [a, b])
     }
+
+    /// A child that dies is unlinked from its parents with the same swap-remove as `removeChild` (native
+    /// `invalidate_and_delete_` calls `remove_child` on each parent). Oracle scenarios `child-death-middle-then-invalidate-parent`
+    /// (native `[B, P, C, D, A]`) and `child-death-first-then-invalidate-parent`.
+    @Test func aChildThatIsInvalidatedLeavesItsParentWithTheSwapRemoveOrder() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let a = graph.makeSubgraph(parent: parent)
+        let b = graph.makeSubgraph(parent: parent)
+        let c = graph.makeSubgraph(parent: parent)
+        let d = graph.makeSubgraph(parent: parent)
+        #expect(graph.children(of: parent) == [a, b, c, d])
+
+        graph.invalidate(b)
+
+        #expect(graph.children(of: parent) == [a, d, c])
+    }
+
+    @Test func invalidatingTheFirstChildMovesTheLastIntoItsSlot() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let a = graph.makeSubgraph(parent: parent)
+        let b = graph.makeSubgraph(parent: parent)
+        let c = graph.makeSubgraph(parent: parent)
+        let d = graph.makeSubgraph(parent: parent)
+
+        graph.invalidate(a)
+
+        #expect(graph.children(of: parent) == [d, b, c])
+        _ = (b, c, d)
+    }
 }
