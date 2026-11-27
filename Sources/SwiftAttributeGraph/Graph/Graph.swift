@@ -586,23 +586,27 @@ public final class Graph {
     /// `dependency` updates before `indirect`'s `source`. If `dependency` finishes without redirecting `indirect` and
     /// `source`'s value did not change, `indirect`'s version does not rise and downstream readers are cut.
     public func setDependency<Value>(_ dependency: AnyAttribute?, for indirect: Attribute<Value>) {
+        setDependencyErased(dependency, forID: indirect.id)
+    }
+
+    func setDependencyErased(_ dependency: AnyAttribute?, forID id: AttributeID) {
         assertOwnThread()
-        precondition(table.isLive(indirect.id), "setDependency(_:for:): the indirect attribute is dead")
-        let index = indirect.id.index
+        precondition(table.isLive(id), "setDependency(_:for:): the indirect attribute is dead")
+        let index = id.index
         precondition(offsetFieldReaders[index] == nil,
                      "setDependency(_:for:): cannot set dependency on an offset-field attribute")
         let n = Int(index)
         precondition(table.state[n] & NodeState.indirect != 0,
-                     "not an indirect attribute: \(indirect.id.rawValue)")
+                     "not an indirect attribute: \(id.rawValue)")
         if let dep = dependency {
-            precondition(dep.id.graphTag == indirect.id.graphTag,
+            precondition(dep.id.graphTag == id.graphTag,
                          "indirect dependencies can't cross graph namespaces")
             precondition(table.isLive(dep.id), "indirect dependencies must be attributes")
             precondition(dep.id.index != index, "setDependency(_:for:): an indirect attribute cannot depend on itself")
             precondition(table.owner(at: dep.id.index) == table.owner(at: index),
                          "indirect dependencies must share a subgraph with their attribute")
         }
-        let box = table.box(at: index) as! IndirectNode<Value>
+        let box = table.box(at: index) as! AnyIndirectNode
         if box.dependency == dependency?.id { return }
         box.dependency = dependency?.id
         rebuildIndirectEdges(for: index)

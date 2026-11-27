@@ -4,6 +4,16 @@
     /// The type of the value the node holds (`AnyAttribute.valueType` in native AttributeGraph).
     var valueType: Any.Type { Void.self }
 
+    /// The type of the body the node runs (`AnyAttribute._bodyType` in native AttributeGraph).
+    var bodyType: Any.Type { Void.self }
+
+    /// A pointer to the body the node runs (`AnyAttribute._bodyPointer`); valid while the node lives. A node with no body of its own
+    /// gives its own address.
+    var bodyPointer: UnsafeRawPointer { UnsafeRawPointer(Unmanaged.passUnretained(self).toOpaque()) }
+
+    /// Whether this is an offset attribute (`unsafeOffset`), which native does not count as a direct attribute.
+    var isOffsetAttribute: Bool { false }
+
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
     func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
     /// Performs one step; only resumable rule nodes override this.
@@ -70,6 +80,8 @@
 
 /// A leaf whose value is written from outside.
 @usableFromInline final class InputNode<Value>: TypedNode<Value> {
+    override var bodyType: Any.Type { External<Value>.self }
+
     @inlinable
     override init(value: Value?, type: NodeType<Value>) {
         super.init(value: value, type: type)
@@ -79,6 +91,8 @@
 /// A rule given as a closure.
 @usableFromInline final class ClosureRuleNode<Value>: TypedNode<Value> {
     @usableFromInline let body: () -> Value
+
+    override var bodyType: Any.Type { (() -> Value).self }
 
     /// Creates the node. `type` must already hold ``NodeType/runClosureRule`` (see `Graph.makeRule`).
     @inlinable
@@ -103,6 +117,9 @@
 /// A rule given as a type that conforms to ``Rule``.
 @usableFromInline final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
     @usableFromInline var rule: R
+
+    override var bodyType: Any.Type { R.self }
+    override var bodyPointer: UnsafeRawPointer { withUnsafeMutablePointer(to: &rule) { UnsafeRawPointer($0) } }
     @usableFromInline let runTypeRule: (TypeRuleNode<R>) -> Bool
 
     @inlinable
@@ -137,6 +154,10 @@
 /// A rule given as a type that conforms to ``StatefulRule``.
 final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     var rule: R
+
+    override var bodyType: Any.Type { R.self }
+    override var bodyPointer: UnsafeRawPointer { withUnsafeMutablePointer(to: &rule) { UnsafeRawPointer($0) } }
+    override var isOffsetAttribute: Bool { rule is OffsetProjectionRule }
 
     init(rule: R, type: NodeType<R.Value>) {
         self.rule = rule
@@ -193,6 +214,8 @@ final class IndirectNode<Value>: AnyIndirectNode {}
 /// A stateful rule given as a closure.
 final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
     let body: (inout RuleContext<Value>) -> Void
+
+    override var bodyType: Any.Type { ((inout RuleContext<Value>) -> Void).self }
     let initialValue: Value?
 
     init(initialValue: Value?, body: @escaping (inout RuleContext<Value>) -> Void, type: NodeType<Value>) {
