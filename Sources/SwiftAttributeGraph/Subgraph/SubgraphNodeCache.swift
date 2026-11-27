@@ -17,6 +17,9 @@ struct SubgraphNodeCache {
     private(set) var entries: [Key: Entry] = [:]
     private(set) var keyByNode: [UInt32: Key] = [:]
     private var parkCounter: UInt64 = 0
+    /// The inner `update` closure of the first `_cachedValue` call per key type: native asks for it once per type and subgraph, and
+    /// the entries that follow reuse it (oracle scenario `c13`).
+    var updaters: [ObjectIdentifier: (UnsafeMutableRawPointer, AnyAttribute) -> Void] = [:]
     /// Whether a pass ever aged an entry to 2 or more; until then no entry can be taken over, so creating one skips the scan.
     private var mayHaveAged = false
 

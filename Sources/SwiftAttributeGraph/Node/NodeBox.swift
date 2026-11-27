@@ -203,6 +203,59 @@ final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
     }
 }
 
+/// The attribute `Rule._cachedValue` creates: its body is a closure that gets a copy of the rule's storage and the attribute,
+/// and writes the value through a ``RuleContext`` built from that attribute (`c13` in the oracle).
+final class RawCachedRuleNode<Value>: TypedNode<Value> {
+    let storage: UnsafeMutableRawPointer
+    let destroyStorage: (UnsafeMutableRawPointer) -> Void
+    let update: (UnsafeMutableRawPointer, AnyAttribute) -> Void
+    let typeName: String
+    /// A heap copy of the value that ``Rule/_cachedValue(options:owner:hashValue:bodyPtr:update:)`` hands out as a pointer.
+    private var exported: UnsafeMutablePointer<Value>?
+    /// The value a ``RuleContext`` built from this attribute wrote while the body ran (`RuleContext.init(attribute:)`).
+    var written: Value?
+
+    init(storage: UnsafeMutableRawPointer, destroyStorage: @escaping (UnsafeMutableRawPointer) -> Void,
+         update: @escaping (UnsafeMutableRawPointer, AnyAttribute) -> Void, typeName: String, type: NodeType<Value>) {
+        self.storage = storage
+        self.destroyStorage = destroyStorage
+        self.update = update
+        self.typeName = typeName
+        super.init(value: nil, type: type)
+    }
+
+    deinit {
+        destroyStorage(storage)
+        if let exported {
+            exported.deinitialize(count: 1)
+            exported.deallocate()
+        }
+    }
+
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        written = nil
+        update(storage, AnyAttribute(id: AttributeID(index: node, generation: graph.table.generations[Int(node)])))
+        guard let new = written else {
+            precondition(value != nil, "attribute failed to set an initial value: \(node), \(typeName)")
+            return false
+        }
+        written = nil
+        return store(new)
+    }
+
+    /// A pointer to a copy of the current value, valid until the next call or until the node dies.
+    func exportedPointer() -> UnsafePointer<Value> {
+        if let exported {
+            exported.pointee = value.unsafelyUnwrapped
+        } else {
+            let pointer = UnsafeMutablePointer<Value>.allocate(capacity: 1)
+            pointer.initialize(to: value.unsafelyUnwrapped)
+            exported = pointer
+        }
+        return UnsafePointer(exported.unsafelyUnwrapped)
+    }
+}
+
 extension TypedNode {
     /// Takes the outcome of a stateful rule: a written value goes through the comparison; without a write the value
     /// stays (the initial one, on the first run) and the attribute did not change.

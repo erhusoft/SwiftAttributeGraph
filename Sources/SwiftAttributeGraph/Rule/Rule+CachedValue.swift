@@ -23,7 +23,7 @@ extension Rule where Self: Hashable {
     public func cachedValue(options: AGCachedValueOptions = [], owner: AnyAttribute?) -> Value {
         let (graph, ownerSubgraph) = Self.cacheOwner(owner)
         let attribute: Attribute<Value> = graph.cachedAttribute(
-            typeKey: ObjectIdentifier(Self.self), key: AnyHashable(self), owner: ownerSubgraph
+            typeKey: ObjectIdentifier(Self.self), key: AnyHashable(RawCacheKey(hash: hashValue, body: self)), owner: ownerSubgraph
         ) { graph.makeRule(self) }!
         return attribute.value
     }
@@ -34,9 +34,50 @@ extension Rule where Self: Hashable {
     public func cachedValueIfExists(options: AGCachedValueOptions = [], owner: AnyAttribute?) -> Value? {
         let (graph, ownerSubgraph) = Self.cacheOwner(owner)
         let attribute: Attribute<Value>? = graph.existingCachedAttribute(
-            typeKey: ObjectIdentifier(Self.self), key: AnyHashable(self), owner: ownerSubgraph
+            typeKey: ObjectIdentifier(Self.self), key: AnyHashable(RawCacheKey(hash: hashValue, body: self)), owner: ownerSubgraph
         )
         return attribute?.value
+    }
+
+    /// The cached value for an entry named by `hashValue` and the rule `bodyPtr` points to, creating it with `update` the
+    /// first time (`Rule._cachedValue(options:owner:hashValue:bodyPtr:update:)` in native AttributeGraph; oracle scenario `c13`).
+    ///
+    /// `update` is asked for once per rule type and subgraph; it returns the body of the attribute, which gets a copy of the
+    /// rule and the attribute and must write the value through `RuleContext(attribute:)`. Later entries of the same type run
+    /// that first body, so the `update` of later calls is never called. The returned pointer is valid until the next call
+    /// for that entry.
+    public static func _cachedValue(
+        options: AGCachedValueOptions = [],
+        owner: AnyAttribute?,
+        hashValue: Int,
+        bodyPtr: UnsafeRawPointer,
+        update: () -> (UnsafeMutableRawPointer, AnyAttribute) -> Void
+    ) -> UnsafePointer<Value> {
+        let (graph, ownerSubgraph) = cacheOwner(owner)
+        let rule = bodyPtr.assumingMemoryBound(to: Self.self).pointee
+        let key = AnyHashable(RawCacheKey(hash: hashValue, body: rule))
+        let typeKey = ObjectIdentifier(Self.self)
+        let attribute: Attribute<Value> = withoutActuallyEscaping(update) { update in
+            graph.cachedAttribute(typeKey: typeKey, key: key, owner: ownerSubgraph) {
+                let owning = ownerSubgraph ?? graph.runningRuleSubgraph()
+                let inner = graph.rawUpdater(in: owning, typeKey: typeKey, make: update)
+                let storage = UnsafeMutablePointer<Self>.allocate(capacity: 1)
+                storage.initialize(to: rule)
+                let node = RawCachedRuleNode<Value>(
+                    storage: UnsafeMutableRawPointer(storage),
+                    destroyStorage: { raw in
+                        let typed = raw.assumingMemoryBound(to: Self.self)
+                        typed.deinitialize(count: 1)
+                        typed.deallocate()
+                    },
+                    update: inner, typeName: String(describing: Self.self),
+                    type: graph.comparators.nodeType(.viewValue, for: Value.self))
+                return Attribute<Value>(id: graph.allocateTypeRule(node))
+            }!
+        }
+        _ = attribute.value
+        let node = graph.table.box(at: attribute.id.index) as! RawCachedRuleNode<Value>
+        return node.exportedPointer()
     }
 
     /// The graph and the owner subgraph a cached value is looked up in (`nil` subgraph: the running rule's, chosen by the
@@ -53,5 +94,28 @@ extension Rule where Self: Hashable {
         }
         guard let current = Subgraph.current else { preconditionFailure("no subgraph") }
         return (current.graph, current)
+    }
+}
+
+/// The key of a cache entry: the hash value it was asked with and the rule, compared with the rule's `==`.
+struct RawCacheKey<Body: Hashable>: Hashable {
+    let hash: Int
+    let body: Body
+}
+
+extension Graph {
+    /// The subgraph of the rule that is running, or the current one.
+    func runningRuleSubgraph() -> Subgraph {
+        if evaluatingNode != Graph.noNode { return Subgraph(id: subgraphs.id(at: table.owner(at: evaluatingNode))) }
+        return Subgraph(id: currentSubgraph)
+    }
+
+    /// The inner body of the first `_cachedValue` call of a rule type in `subgraph`; `make` is only called for that first one.
+    func rawUpdater(in subgraph: Subgraph, typeKey: ObjectIdentifier,
+                    make: () -> (UnsafeMutableRawPointer, AnyAttribute) -> Void) -> (UnsafeMutableRawPointer, AnyAttribute) -> Void {
+        if let existing = nodeCaches[subgraph.id.index]?.updaters[typeKey] { return existing }
+        let inner = make()
+        nodeCaches[subgraph.id.index, default: SubgraphNodeCache()].updaters[typeKey] = inner
+        return inner
     }
 }
