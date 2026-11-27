@@ -30,7 +30,7 @@ struct ObservedAttributeTests {
 
     @Test
     func observedAttributeBodyFlagsAndModeDefaults() {
-        #expect(TestObservedBody.flags == [])
-        #expect(TestObservedBody.comparisonMode == .equatableAlways)
+        #expect(TestObservedBody.flags == [.mainThread])   // native raw 8 (oracle scenario f6)
+        #expect(TestObservedBody.comparisonMode == .equatableUnlessPOD)   // native mode 2 (f6)
     }
 }

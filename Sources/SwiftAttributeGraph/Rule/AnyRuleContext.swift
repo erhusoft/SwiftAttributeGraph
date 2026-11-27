@@ -79,6 +79,7 @@ public struct AnyRuleContext: Equatable {
         graph.value(of: optionalAttribute)
     }
 
+    /// Whether both contexts are for the same node of the same graph.
     public static func == (lhs: AnyRuleContext, rhs: AnyRuleContext) -> Bool {
         lhs.graph === rhs.graph && lhs.node == rhs.node
     }

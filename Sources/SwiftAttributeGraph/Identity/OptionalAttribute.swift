@@ -3,6 +3,7 @@
 /// Unlike ``WeakAttribute``, reading a non-nil `OptionalAttribute` requires its target attribute to be alive (calling
 /// ``Graph/value(of:)-(OptionalAttribute<Value>)`` on a freed target triggers a `precondition`, just like reading a
 /// direct ``Attribute``). When initialized empty (`nil`), reading returns `nil` without recording any dependency.
+@dynamicMemberLookup
 @propertyWrapper
 public struct OptionalAttribute<Value>: Hashable, Sendable {
     /// The underlying attribute handle, or `nil` if empty.
@@ -49,6 +50,12 @@ public struct OptionalAttribute<Value>: Hashable, Sendable {
                 self.attribute = nil
             }
         }
+    }
+
+    /// Projects a field of the referenced attribute into a child attribute, or `nil` if the optional attribute is empty
+    /// (`OptionalAttribute.subscript(dynamicMember:)` in native AttributeGraph).
+    public subscript<Member>(dynamicMember keyPath: KeyPath<Value, Member>) -> Attribute<Member>? {
+        attribute.map { $0[keyPath: keyPath] }
     }
 
     /// The value of the referenced attribute read from the graph whose rule is running on this thread, or `nil` if

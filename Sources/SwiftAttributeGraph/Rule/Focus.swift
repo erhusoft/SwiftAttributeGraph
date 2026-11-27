@@ -4,6 +4,9 @@
 /// changes only in other fields and the projected member at `keyPath` remains equal, downstream dependents of the
 /// `Focus` attribute are cut.
 public struct Focus<Root, Value>: Rule, _AttributeBody, CustomStringConvertible {
+    /// Not a main-thread body (native raw 0, oracle scenario `f5`).
+    public static var flags: Flags { [] }
+
     /// The source attribute being projected.
     public var root: Attribute<Root>
     /// The key path extracting `Value` from `Root`.

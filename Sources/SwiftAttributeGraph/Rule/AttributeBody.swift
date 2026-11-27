@@ -3,11 +3,14 @@
 /// The base protocol for all rule, map, focus, and stateful bodies attached to attributes
 /// in AttributeGraph (`AttributeGraph._AttributeBody`).
 public protocol _AttributeBody {
+    /// The flags type, as native names it (`_AttributeBody.Flags`).
+    typealias Flags = _AttributeType.Flags
+
     /// The comparison mode used when computing or storing values with this body.
     static var comparisonMode: ComparisonMode { get }
 
     /// Static type flags governing the allocation and lifecycle of this attribute body.
-    static var flags: AttributeTypeFlags { get }
+    static var flags: Flags { get }
 
     /// Whether this body implements custom in-place memory destruction.
     static var _hasDestroySelf: Bool { get }
@@ -23,26 +26,34 @@ public protocol _AttributeBody {
 }
 
 extension _AttributeBody {
+    /// The default mode is `equatableUnlessPOD`, measured on macOS 15.8.3 for a bare body, a rule, a stateful rule and an observed
+    /// attribute (oracle scenarios `f1` to `f6`).
     public static var comparisonMode: ComparisonMode {
-        .equatableAlways
+        .equatableUnlessPOD
     }
 
-    public static var flags: AttributeTypeFlags {
-        []
+    /// Bodies run on the main thread by default (raw 8), whatever their kind; `External`, `Map` and `Focus` do not (oracle scenarios
+    /// `f1` to `f6`). An override is returned as it is and does not touch the comparison mode (`f7`).
+    public static var flags: Flags {
+        [.mainThread]
     }
 
+    /// `false` unless the body asks for its own destruction.
     public static var _hasDestroySelf: Bool {
         false
     }
 
+    /// Destroys the body in place: deinitializes the one value `pointer` holds.
     public static func _destroySelf(_ pointer: UnsafeMutableRawPointer) {
         pointer.assumingMemoryBound(to: Self.self).deinitialize(count: 1)
     }
 
+    /// Does nothing: a body that needs a default update overrides it.
     public static func _updateDefault(_ pointer: UnsafeMutableRawPointer) {
         // Default no-op update pass
     }
 
+    /// `false` unless a body overrides it to report that its update was cancelled.
     public var updateWasCancelled: Bool {
         false
     }

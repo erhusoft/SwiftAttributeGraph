@@ -68,6 +68,15 @@ public final class Graph {
     // Counters behind `counter(for:)` (see `Graph+Counters.swift`).
     @exclusivity(unchecked) var transactionCount: UInt64 = 0
     @exclusivity(unchecked) var updateCount: UInt64 = 0
+    /// The handler ``withMainThreadHandler(_:do:)`` installed, or `nil`. It is `nil` while its own closure runs.
+    @exclusivity(unchecked) var mainThreadHandler: ((() -> Void) -> Void)?
+    /// How many updates went through a main thread handler (each adds one to ``Graph/mainUpdates``).
+    @exclusivity(unchecked) var mainHandlerPasses: UInt64 = 0
+    /// Nodes that changed their own value through ``Graph/setOutputValue(_:)`` while they evaluated; the update takes the change
+    /// when the body returns.
+    @exclusivity(unchecked) var outputWrites: Set<UInt32> = []
+    /// Copies of values handed out by ``Graph/outputValue()``, freed when the outermost update ends.
+    @exclusivity(unchecked) var outputScratch: [AnyObject] = []
     @exclusivity(unchecked) var changeCount: UInt64 = 0
     @exclusivity(unchecked) var createdNodeCount: UInt64 = 0
     @exclusivity(unchecked) var countsUpdateOnNextRule = false
@@ -308,6 +317,7 @@ public final class Graph {
     public func update(_ subgraph: Subgraph, flags: AttributeFlags = .all) {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return }
+        defer { runCachePass() }
         withoutUpdate {
             var updatedAny = true
             while updatedAny {
@@ -576,23 +586,27 @@ public final class Graph {
     /// `dependency` updates before `indirect`'s `source`. If `dependency` finishes without redirecting `indirect` and
     /// `source`'s value did not change, `indirect`'s version does not rise and downstream readers are cut.
     public func setDependency<Value>(_ dependency: AnyAttribute?, for indirect: Attribute<Value>) {
+        setDependencyErased(dependency, forID: indirect.id)
+    }
+
+    func setDependencyErased(_ dependency: AnyAttribute?, forID id: AttributeID) {
         assertOwnThread()
-        precondition(table.isLive(indirect.id), "setDependency(_:for:): the indirect attribute is dead")
-        let index = indirect.id.index
+        precondition(table.isLive(id), "setDependency(_:for:): the indirect attribute is dead")
+        let index = id.index
         precondition(offsetFieldReaders[index] == nil,
                      "setDependency(_:for:): cannot set dependency on an offset-field attribute")
         let n = Int(index)
         precondition(table.state[n] & NodeState.indirect != 0,
-                     "not an indirect attribute: \(indirect.id.rawValue)")
+                     "not an indirect attribute: \(id.rawValue)")
         if let dep = dependency {
-            precondition(dep.id.graphTag == indirect.id.graphTag,
+            precondition(dep.id.graphTag == id.graphTag,
                          "indirect dependencies can't cross graph namespaces")
             precondition(table.isLive(dep.id), "indirect dependencies must be attributes")
             precondition(dep.id.index != index, "setDependency(_:for:): an indirect attribute cannot depend on itself")
             precondition(table.owner(at: dep.id.index) == table.owner(at: index),
                          "indirect dependencies must share a subgraph with their attribute")
         }
-        let box = table.box(at: index) as! IndirectNode<Value>
+        let box = table.box(at: index) as! AnyIndirectNode
         if box.dependency == dependency?.id { return }
         box.dependency = dependency?.id
         rebuildIndirectEdges(for: index)
@@ -692,14 +706,22 @@ public final class Graph {
 extension Attribute {
     /// The value of the attribute, read from the graph whose rule is running on this thread.
     ///
-    /// Reading inside a rule records a dependency. Outside a rule there is no current graph: use
-    /// ``Graph/value(of:)``.
+    /// Reading inside a rule records a dependency. Outside a rule the graph is the attribute's own and the read records
+    /// nothing (measured on macOS 15.8, oracle scenarios `hueco-b2` to `hueco-b6` and `hueco-b11`).
     @inlinable
     public var value: Value {
-        guard let graph = ThreadLocalGraph.current() else {
-            preconditionFailure("Attribute.value can only be read inside a rule; use Graph.value(of:) elsewhere")
-        }
+        guard let graph = ThreadLocalGraph.current() else { return valueOutsideRule() }
         guard let box = graph.beginRuleRead(id) else { return graph.read(self) }
         return graph.finishRead(box, as: Value.self)
+    }
+}
+
+extension Attribute {
+    @usableFromInline
+    func valueOutsideRule() -> Value {
+        guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
+            preconditionFailure("Attribute.value: the graph of the attribute was released")
+        }
+        return graph.value(of: self)
     }
 }

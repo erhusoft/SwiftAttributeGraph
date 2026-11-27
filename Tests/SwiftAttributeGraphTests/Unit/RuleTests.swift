@@ -254,12 +254,11 @@ import Testing
         }
     }
 
-    @Test func readingAnAttributeOutsideARuleWithTheImplicitSpellingStopsTheProgram() async {
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let a = graph.makeInput(1)
-            _ = a.value
-        }
+    /// Native AttributeGraph reads it (oracle scenario `hueco-b2`); the old expectation of a crash was wrong.
+    @Test func readingAnAttributeOutsideARuleWithTheImplicitSpellingReturnsItsValue() {
+        let graph = Graph()
+        let a = graph.makeInput(1)
+        #expect(a.value == 1)
     }
 
     // MARK: Subgraph invalidation seen from outside

@@ -1,6 +1,19 @@
 /// Type-erased holder of the value of a node. The common, non-generic parts of a node live in `NodeTable` arrays;
 /// only the typed value (and the rule, if any) lives here.
 @usableFromInline class NodeBox {
+    /// The type of the value the node holds (`AnyAttribute.valueType` in native AttributeGraph).
+    var valueType: Any.Type { Void.self }
+
+    /// The type of the body the node runs (`AnyAttribute._bodyType` in native AttributeGraph).
+    var bodyType: Any.Type { Void.self }
+
+    /// A pointer to the body the node runs (`AnyAttribute._bodyPointer`); valid while the node lives. A node with no body of its own
+    /// gives its own address.
+    var bodyPointer: UnsafeRawPointer { UnsafeRawPointer(Unmanaged.passUnretained(self).toOpaque()) }
+
+    /// Whether this is an offset attribute (`unsafeOffset`), which native does not count as a direct attribute.
+    var isOffsetAttribute: Bool { false }
+
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
     func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
     /// Performs one step; only resumable rule nodes override this.
@@ -12,6 +25,11 @@
 
     /// Returns the boxed value as `Any?` if available.
     func boxedValue() -> Any? { nil }
+
+    /// Hands the stored body of a rule that is a typed ``Rule`` or ``StatefulRule`` to `visitor`, with its real type
+    /// (`AnyAttribute.visitBody` in native AttributeGraph). A node without a typed body, such as an input or a rule given
+    /// as a closure, visits nothing.
+    func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {}
 
     @usableFromInline init() {}
 }
@@ -33,6 +51,8 @@
     /// larger, and creating 100,000 closure rules 7 % slower [O]; the shared descriptor also takes the place of the
     /// comparison function the node used to store (16 bytes and a retain of its context).
     @usableFromInline let type: NodeType<Value>
+
+    override var valueType: Any.Type { Value.self }
 
     /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
     @inlinable var isEqual: (Value, Value) -> Bool { type.isEqual }
@@ -60,6 +80,8 @@
 
 /// A leaf whose value is written from outside.
 @usableFromInline final class InputNode<Value>: TypedNode<Value> {
+    override var bodyType: Any.Type { External<Value>.self }
+
     @inlinable
     override init(value: Value?, type: NodeType<Value>) {
         super.init(value: value, type: type)
@@ -69,6 +91,8 @@
 /// A rule given as a closure.
 @usableFromInline final class ClosureRuleNode<Value>: TypedNode<Value> {
     @usableFromInline let body: () -> Value
+
+    override var bodyType: Any.Type { (() -> Value).self }
 
     /// Creates the node. `type` must already hold ``NodeType/runClosureRule`` (see `Graph.makeRule`).
     @inlinable
@@ -93,6 +117,9 @@
 /// A rule given as a type that conforms to ``Rule``.
 @usableFromInline final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
     @usableFromInline var rule: R
+
+    override var bodyType: Any.Type { R.self }
+    override var bodyPointer: UnsafeRawPointer { withUnsafeMutablePointer(to: &rule) { UnsafeRawPointer($0) } }
     @usableFromInline let runTypeRule: (TypeRuleNode<R>) -> Bool
 
     @inlinable
@@ -107,6 +134,10 @@
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
         runTypeRule(self)
+    }
+
+    override func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
+        withUnsafePointer(to: &rule) { visitor.visit(body: $0) }
     }
 
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
@@ -124,6 +155,10 @@
 final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     var rule: R
 
+    override var bodyType: Any.Type { R.self }
+    override var bodyPointer: UnsafeRawPointer { withUnsafeMutablePointer(to: &rule) { UnsafeRawPointer($0) } }
+    override var isOffsetAttribute: Bool { rule is OffsetProjectionRule }
+
     init(rule: R, type: NodeType<R.Value>) {
         self.rule = rule
         super.init(value: nil, type: type)
@@ -133,6 +168,10 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
         var context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
         rule.updateValue(&context)
         return finish(context)
+    }
+
+    override func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
+        withUnsafePointer(to: &rule) { visitor.visit(body: $0) }
     }
 
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
@@ -175,6 +214,8 @@ final class IndirectNode<Value>: AnyIndirectNode {}
 /// A stateful rule given as a closure.
 final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
     let body: (inout RuleContext<Value>) -> Void
+
+    override var bodyType: Any.Type { ((inout RuleContext<Value>) -> Void).self }
     let initialValue: Value?
 
     init(initialValue: Value?, body: @escaping (inout RuleContext<Value>) -> Void, type: NodeType<Value>) {
@@ -187,6 +228,59 @@ final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
         var context = RuleContext<Value>(graph: graph, node: node, value: value ?? initialValue)
         body(&context)
         return finish(context)
+    }
+}
+
+/// The attribute `Rule._cachedValue` creates: its body is a closure that gets a copy of the rule's storage and the attribute,
+/// and writes the value through a ``RuleContext`` built from that attribute (`c13` in the oracle).
+final class RawCachedRuleNode<Value>: TypedNode<Value> {
+    let storage: UnsafeMutableRawPointer
+    let destroyStorage: (UnsafeMutableRawPointer) -> Void
+    let update: (UnsafeMutableRawPointer, AnyAttribute) -> Void
+    let typeName: String
+    /// A heap copy of the value that ``Rule/_cachedValue(options:owner:hashValue:bodyPtr:update:)`` hands out as a pointer.
+    private var exported: UnsafeMutablePointer<Value>?
+    /// The value a ``RuleContext`` built from this attribute wrote while the body ran (`RuleContext.init(attribute:)`).
+    var written: Value?
+
+    init(storage: UnsafeMutableRawPointer, destroyStorage: @escaping (UnsafeMutableRawPointer) -> Void,
+         update: @escaping (UnsafeMutableRawPointer, AnyAttribute) -> Void, typeName: String, type: NodeType<Value>) {
+        self.storage = storage
+        self.destroyStorage = destroyStorage
+        self.update = update
+        self.typeName = typeName
+        super.init(value: nil, type: type)
+    }
+
+    deinit {
+        destroyStorage(storage)
+        if let exported {
+            exported.deinitialize(count: 1)
+            exported.deallocate()
+        }
+    }
+
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        written = nil
+        update(storage, AnyAttribute(id: AttributeID(index: node, generation: graph.table.generations[Int(node)])))
+        guard let new = written else {
+            precondition(value != nil, "attribute failed to set an initial value: \(node), \(typeName)")
+            return false
+        }
+        written = nil
+        return store(new)
+    }
+
+    /// A pointer to a copy of the current value, valid until the next call or until the node dies.
+    func exportedPointer() -> UnsafePointer<Value> {
+        if let exported {
+            exported.pointee = value.unsafelyUnwrapped
+        } else {
+            let pointer = UnsafeMutablePointer<Value>.allocate(capacity: 1)
+            pointer.initialize(to: value.unsafelyUnwrapped)
+            exported = pointer
+        }
+        return UnsafePointer(exported.unsafelyUnwrapped)
     }
 }
 

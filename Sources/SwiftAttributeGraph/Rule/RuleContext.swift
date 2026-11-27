@@ -6,13 +6,29 @@
 public struct RuleContext<Value> {
     private unowned(unsafe) let graph: Graph
     private let node: UInt32
-    private var current: Value?
-    private(set) var wasWritten = false
+    /// The value and whether it was written live in a box, so that `value` can be set through a context that is not a
+    /// variable (`RuleContext(attribute:).value = x`, as native allows).
+    private final class State {
+        var current: Value?
+        var wasWritten = false
+        init(_ current: Value?) { self.current = current }
+    }
+    private let state: State
+    private var current: Value? {
+        get { state.current }
+        nonmutating set { state.current = newValue }
+    }
+    private(set) var wasWritten: Bool {
+        get { state.wasWritten }
+        nonmutating set { state.wasWritten = newValue }
+    }
+    /// Set by ``init(attribute:)``: a write is also handed to the node that is evaluating, if it takes writes made this way.
+    private var forwardsWrites = false
 
     init(graph: Graph, node: UInt32, value: Value?) {
         self.graph = graph
         self.node = node
-        self.current = value
+        self.state = State(value)
     }
 
     /// Creates a rule context referencing `attribute` directly (`RuleContext.init(attribute:)`).
@@ -20,13 +36,14 @@ public struct RuleContext<Value> {
         guard let graph = GraphRegistry.graph(forTag: attribute.id.graphTag) else {
             preconditionFailure("RuleContext created after graph was released")
         }
+        precondition(graph.table.isLive(attribute.id), "RuleContext: the attribute is dead")
         self.graph = graph
         self.node = attribute.id.index
-        if graph.hasValue(of: attribute) {
-            self.current = graph.read(attribute)
-        } else {
-            self.current = nil
-        }
+        // Only refers to the attribute: its stored value is taken as it is, without evaluating it. Reading it through the
+        // graph would make a rule that builds a context for itself read itself (a cycle); native does not read it either
+        // (oracle scenario `cov79-a-unsafe-cast`).
+        self.state = State((graph.table.box(at: attribute.id.index) as? TypedNode<Value>)?.value)
+        self.forwardsWrites = true
     }
 
     /// The attribute that owns this context (`RuleContext.attribute`).
@@ -47,9 +64,11 @@ public struct RuleContext<Value> {
             guard let current else { preconditionFailure("RuleContext.value: the rule has no value yet (first run without an initialValue)") }
             return current
         }
-        set {
+        nonmutating set {
             current = newValue
             wasWritten = true
+            if forwardsWrites, graph.evaluatingNode == node,
+               let raw = graph.table.box(at: node) as? RawCachedRuleNode<Value> { raw.written = newValue }
         }
     }
 
@@ -121,6 +140,7 @@ public struct RuleContext<Value> {
 }
 
 extension RuleContext: Equatable {
+    /// Whether both contexts are for the same node of the same graph.
     public static func == (lhs: RuleContext<Value>, rhs: RuleContext<Value>) -> Bool {
         lhs.graph === rhs.graph && lhs.node == rhs.node
     }

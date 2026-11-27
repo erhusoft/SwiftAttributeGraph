@@ -20,8 +20,10 @@ import WinSDK
 /// Options configuring element copy / move operations within tuple buffers.
 @frozen
 public struct AGTupleCopyOptions: OptionSet, Sendable {
+    /// The raw option bits.
     public let rawValue: UInt32
 
+    /// Creates the options from their raw bits.
     @inlinable
     public init(rawValue: UInt32) {
         self.rawValue = rawValue
@@ -39,24 +41,41 @@ public struct AGTupleType: Sendable {
         @usableFromInline
         let offsets: [Int]
         @usableFromInline
+        let sizes: [Int]
+        @usableFromInline
         let totalSize: Int
+        @usableFromInline
+        let alignment: Int
 
+        /// Lays the elements out as Swift does for a tuple (`swift_getTupleTypeMetadata`): each element at the next
+        /// multiple of its own alignment, and a size that ends at the last element, without trailing padding. Measured on
+        /// macOS 15.8 (oracle scenarios `hueco-a0` to `hueco-a9`).
         init(types: [Any.Type]) {
             self.types = types
             var currentOffset = 0
+            var maxAlignment = 1
             var computedOffsets = [Int]()
+            var computedSizes = [Int]()
             computedOffsets.reserveCapacity(types.count)
-            for _ in types {
-                let alignment = MemoryLayout<Int>.alignment
+            computedSizes.reserveCapacity(types.count)
+            for type in types {
+                let (size, alignment) = Self.measure(type)
                 let remainder = currentOffset % alignment
-                if remainder != 0 {
-                    currentOffset += (alignment - remainder)
-                }
+                if remainder != 0 { currentOffset += alignment - remainder }
                 computedOffsets.append(currentOffset)
-                currentOffset += MemoryLayout<Int>.size
+                computedSizes.append(size)
+                currentOffset += size
+                maxAlignment = max(maxAlignment, alignment)
             }
             self.offsets = computedOffsets
+            self.sizes = computedSizes
             self.totalSize = currentOffset
+            self.alignment = maxAlignment
+        }
+
+        /// Opens the element type to read its size and alignment.
+        private static func measure<T>(_ type: T.Type) -> (size: Int, alignment: Int) {
+            (MemoryLayout<T>.size, MemoryLayout<T>.alignment)
         }
     }
 
@@ -72,6 +91,17 @@ public struct AGTupleType: Sendable {
     /// Creates a tuple type representing a sequence of types.
     public init(_ types: [Any.Type]) {
         self.storage = Storage(types: types)
+    }
+
+    /// The size in bytes of the whole tuple, without trailing padding (`TupleType.size`).
+    @inlinable
+    public var size: Int { storage.totalSize }
+
+    /// The size in bytes of the element at `index` (`TupleType.elementSize(at:)`).
+    @inlinable
+    public func elementSize(at index: Int) -> Int {
+        precondition(index >= 0 && index < storage.sizes.count, "index out of range: \(index)")
+        return storage.sizes[index]
     }
 
     /// The number of elements in the tuple type.
@@ -153,49 +183,58 @@ public struct AGUnsafeTuple {
     @usableFromInline
     let buffer: UnsafeRawPointer
 
+    /// Creates a view of `buffer`, which holds elements laid out as `tupleType` describes.
     @inlinable
     public init(tupleType: AGTupleType, buffer: UnsafeRawPointer) {
         self.tupleType = tupleType
         self.buffer = buffer
     }
 
+    /// Creates an immutable view of the buffer of a mutable tuple.
     @inlinable
     public init(_ mutable: AGUnsafeMutableTuple) {
         self.tupleType = mutable.tupleType
         self.buffer = UnsafeRawPointer(mutable.buffer)
     }
 
+    /// The number of elements.
     @inlinable
     public var count: Int {
         tupleType.count
     }
 
+    /// Whether the tuple has no elements.
     @inlinable
     public var isEmpty: Bool {
         tupleType.isEmpty
     }
 
+    /// The range of the element indices.
     @inlinable
     public var indices: Range<Int> {
         tupleType.indices
     }
 
+    /// The address of the first element, as `T`.
     @inlinable
     public func address<T>(as type: T.Type = T.self) -> UnsafePointer<T> {
         address(of: 0, as: type)
     }
 
+    /// The address of the element at `index`, as `T`; the index must be in range.
     @inlinable
     public func address<T>(of index: Int, as type: T.Type = T.self) -> UnsafePointer<T> {
         let offset = tupleType.offset(at: index, as: type)
         return buffer.advanced(by: offset).assumingMemoryBound(to: type)
     }
 
+    /// The first element.
     @inlinable
     public subscript<T>() -> T {
         self[0]
     }
 
+    /// The element at `index`, read as `T`.
     @inlinable
     public subscript<T>(index: Int) -> T {
         unsafeAddress {
@@ -213,51 +252,60 @@ public struct AGUnsafeMutableTuple {
     @usableFromInline
     let buffer: UnsafeMutableRawPointer
 
+    /// Creates a view of `buffer`, which must be big enough and aligned for the elements `tupleType` describes.
     @inlinable
     public init(tupleType: AGTupleType, buffer: UnsafeMutableRawPointer) {
         self.tupleType = tupleType
         self.buffer = buffer
     }
 
+    /// Allocates a buffer for `tupleType`; free it with ``deallocate(initialized:)``.
     @inlinable
     public init(with tupleType: AGTupleType) {
         let totalSize = max(tupleType.storage.totalSize, 16)
-        let raw = UnsafeMutableRawPointer.allocate(byteCount: totalSize, alignment: 16)
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: totalSize, alignment: max(16, tupleType.storage.alignment))
         self.init(tupleType: tupleType, buffer: raw)
     }
 
+    /// The number of elements.
     @inlinable
     public var count: Int {
         tupleType.count
     }
 
+    /// Whether the tuple has no elements.
     @inlinable
     public var isEmpty: Bool {
         tupleType.isEmpty
     }
 
+    /// The range of the element indices.
     @inlinable
     public var indices: Range<Int> {
         tupleType.indices
     }
 
+    /// The address of the first element, as `T`.
     @inlinable
     public func address<T>(as type: T.Type = T.self) -> UnsafeMutablePointer<T> {
         address(of: 0, as: type)
     }
 
+    /// The address of the element at `index`, as `T`; the index must be in range.
     @inlinable
     public func address<T>(of index: Int, as type: T.Type = T.self) -> UnsafeMutablePointer<T> {
         let offset = tupleType.offset(at: index, as: type)
         return buffer.advanced(by: offset).assumingMemoryBound(to: type)
     }
 
+    /// The first element: reading and writing go through its address.
     @inlinable
     public subscript<T>() -> T {
         get { self[0] }
         nonmutating set { self[0] = newValue }
     }
 
+    /// The element at `index`: reading and writing go through its address.
     @inlinable
     public subscript<T>(index: Int) -> T {
         unsafeAddress {
@@ -268,18 +316,28 @@ public struct AGUnsafeMutableTuple {
         }
     }
 
+    /// Initializes the element at `index` with `value`; the element must not be initialized yet.
     @inlinable
     public func initialize<T>(at index: Int, to value: T) {
         address(of: index, as: T.self).initialize(to: value)
     }
 
+    /// Destroys the element at `index` with its own type, so a reference-counted element is released
+    /// (`AGUnsafeMutableTuple.deinitialize(at:)` in native AttributeGraph).
     @inlinable
     public func deinitialize(at index: Int) {
-        let offset = tupleType.offset(at: index, as: Any.self)
-        let ptr = buffer.advanced(by: offset)
-        _ = ptr
+        let type = tupleType.type(at: index)
+        let address = buffer.advanced(by: tupleType.offset(at: index, as: Any.self))
+        Self.destroy(type, at: address)
     }
 
+    /// Opens the element type so the value at `address` is deinitialized as that type.
+    @usableFromInline
+    static func destroy<T>(_ type: T.Type, at address: UnsafeMutableRawPointer) {
+        address.assumingMemoryBound(to: T.self).deinitialize(count: 1)
+    }
+
+    /// Destroys every element, releasing what each one owns.
     @inlinable
     public func deinitialize() {
         for i in indices {
@@ -287,6 +345,7 @@ public struct AGUnsafeMutableTuple {
         }
     }
 
+    /// Frees the buffer, first destroying the elements unless `initialized` is `false`.
     @inlinable
     public func deallocate(initialized: Bool = true) {
         if initialized {
@@ -304,9 +363,10 @@ public func withUnsafeTuple(
     count: Int,
     _ body: (AGUnsafeMutableTuple) -> Void
 ) {
-    let elementSize = max(tupleType.storage.totalSize, 16)
-    let totalBytes = max(elementSize * count, 16)
-    withUnsafeTemporaryAllocation(byteCount: totalBytes, alignment: 16) { buffer in
+    let alignment = tupleType.storage.alignment
+    let stride = (tupleType.storage.totalSize + alignment - 1) / alignment * alignment
+    let totalBytes = max(max(stride, 16) * count, 16)
+    withUnsafeTemporaryAllocation(byteCount: totalBytes, alignment: max(16, alignment)) { buffer in
         guard let base = buffer.baseAddress else {
             preconditionFailure("memory allocation failure")
         }

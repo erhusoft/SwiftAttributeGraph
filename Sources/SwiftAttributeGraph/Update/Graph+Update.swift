@@ -157,7 +157,9 @@ extension Graph {
     /// Values measured on macOS 15.8.3: options `0` and `2` behave the same in every probe [O]; `4` and `6` (`2 | 4`)
     /// also behave the same [O]. What bit `2` means beyond that is not known [?].
     public struct ReadOptions: OptionSet, Sendable {
+        /// The raw option bits.
         public let rawValue: UInt32
+        /// Creates the options from their raw bits.
         public init(rawValue: UInt32) { self.rawValue = rawValue }
 
         /// Native option bit 2: the read records a dependency edge. This is also the default, so it changes nothing
@@ -550,12 +552,27 @@ extension Graph {
     /// A rule that reads an input it did not read before reaches this function again from inside the rule; that
     /// nested call still uses the native stack and is the documented limit that M4 removes.
     func update(_ root: UInt32) {
+        // A main-thread rule updated from the top goes through the handler once: native `update_attribute` gets result 3 from
+        // `UpdateStack::update`, calls `call_main_handler`, which turns the handler off while the closure runs (so the rules
+        // read inside do not call it again) and counts one more main update (oracle scenarios `f0` to `f7`, `c1`, `c4`, `c7`).
+        if frames.isEmpty, let handler = mainThreadHandler {
+            mainThreadHandler = nil
+            mainHandlerPasses &+= 1
+            var ran = false
+            handler { ran = true; self.update(root) }
+            mainThreadHandler = handler
+            precondition(ran, "the main thread handler did not run the update")
+            return
+        }
         let base = frames.count
         // An indirect attribute is transparent: the update it starts is counted when it reaches its first rule.
         if base == 0 {
             if table.state[Int(root)] & NodeState.indirect != 0 { countsUpdateOnNextRule = true } else { updateCount &+= 1 }
         }
-        defer { countsUpdateOnNextRule = false }
+        defer {
+            countsUpdateOnNextRule = false
+            if base == 0, !outputScratch.isEmpty { outputScratch.removeAll() }
+        }
         push(root)
         outer: while frames.count > base {
             let top = frames.count - 1
@@ -689,7 +706,8 @@ extension Graph {
         }
 
         recalculationCount &+= 1
-        let changed = table.box(at: node).evaluate(in: self, node: node)
+        var changed = table.box(at: node).evaluate(in: self, node: node)
+        if !outputWrites.isEmpty, outputWrites.remove(node) != nil { changed = true }
 
         currentSubgraph = previousSubgraph
         if swapsGraph { ThreadLocalGraph.set(previousGraph) }

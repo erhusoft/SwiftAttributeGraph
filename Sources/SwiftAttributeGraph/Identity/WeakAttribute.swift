@@ -1,5 +1,6 @@
 /// A weak reference to an attribute: it does not keep the attribute's subgraph alive, and resolves to `nil` once that
 /// subgraph has been invalidated and freed.
+@dynamicMemberLookup
 @propertyWrapper
 public struct WeakAttribute<Value>: Hashable, Sendable {
     /// The underlying attribute ID, or `nil` if initialized empty.
@@ -30,6 +31,12 @@ public struct WeakAttribute<Value>: Hashable, Sendable {
         set {
             id = newValue?.id
         }
+    }
+
+    /// Projects a field of the referenced attribute into a child attribute, or `nil` if the target is not alive
+    /// (`WeakAttribute.subscript(dynamicMember:)` in native AttributeGraph).
+    public subscript<Member>(dynamicMember keyPath: KeyPath<Value, Member>) -> Attribute<Member>? {
+        attribute.map { $0[keyPath: keyPath] }
     }
 
     /// The value of the referenced attribute, bringing it up to date first if needed, or `nil` if the attribute is no

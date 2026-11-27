@@ -2,6 +2,7 @@
 /// in native AttributeGraph).
 public typealias AGSearchOptions = SearchOptions
 
+/// The edges a breadth-first search follows: inputs, outputs or both.
 public struct SearchOptions: OptionSet, Hashable, Sendable {
     /// The underlying option bitmask.
     public var rawValue: UInt32

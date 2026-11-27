@@ -1,4 +1,7 @@
-private struct ProjectedRule<Source, Projected>: StatefulRule {
+/// Marks the rules that stand for offset attributes, which native does not count as direct attributes.
+protocol OffsetProjectionRule {}
+
+private struct ProjectedRule<Source, Projected>: StatefulRule, OffsetProjectionRule {
     typealias Value = Projected
     static var initialValue: Projected? { nil }
     let source: Attribute<Source>

@@ -4,6 +4,9 @@
 /// to a new value whose mapped result `body(arg.value)` is equal to the previous output, downstream dependents of the
 /// `Map` attribute are cut.
 public struct Map<Source, Value>: Rule, _AttributeBody, CustomStringConvertible {
+    /// Not a main-thread body (native raw 0, oracle scenario `f5`).
+    public static var flags: Flags { [] }
+
     /// The source attribute read by the rule.
     public var arg: Attribute<Source>
     /// The transformation applied to `arg.value`.
