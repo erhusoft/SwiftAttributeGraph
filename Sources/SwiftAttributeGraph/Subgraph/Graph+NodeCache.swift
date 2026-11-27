@@ -191,6 +191,24 @@ extension Graph {
         owner: Subgraph? = nil,
         create: () -> Attribute<Value>
     ) -> Attribute<Value> {
+        withoutActuallyEscaping(create) { create in
+            cachedAttribute(typeKey: ObjectIdentifier(Value.self), key: AnyHashable(key), owner: owner, create: create)!
+        }
+    }
+
+    /// Looks up a cached attribute without creating it (`AGGraphReadCachedAttributeIfExists` in native AttributeGraph).
+    func existingCachedAttribute<Value>(typeKey: ObjectIdentifier, key: AnyHashable, owner: Subgraph?) -> Attribute<Value>? {
+        cachedAttribute(typeKey: typeKey, key: key, owner: owner, create: nil)
+    }
+
+    /// The shared body of ``readCachedAttribute(key:owner:create:)`` and the `Rule.cachedValue` family: `typeKey` is what
+    /// the native cache calls the key type, and `key` the key value compared with `==`. With `create == nil` it only looks.
+    func cachedAttribute<Value>(
+        typeKey: ObjectIdentifier,
+        key: AnyHashable,
+        owner: Subgraph?,
+        create: (() -> Attribute<Value>)?
+    ) -> Attribute<Value>? {
         assertOwnThread()
         let ownerSubgraph: Subgraph
         if let owner {
@@ -203,7 +221,7 @@ extension Graph {
         precondition(subgraphs.isLive(ownerSubgraph.id) && !subgraphs.isFalling(index: ownerSubgraph.id.index),
                      "accessing invalidated subgraph")
 
-        let cacheKey = SubgraphNodeCache.Key(typeID: ObjectIdentifier(Value.self), key: AnyHashable(key))
+        let cacheKey = SubgraphNodeCache.Key(typeID: typeKey, key: key)
         if let entry = nodeCaches[ownerSubgraph.id.index]?.lookup(key: cacheKey) {
             let id = AttributeID(index: entry.node, generation: entry.generation)
             if table.isLive(id) {
@@ -213,6 +231,7 @@ extension Graph {
                 return Attribute<Value>(id: id)
             }
         }
+        guard let create else { return nil }
 
         let attribute = withCurrent(ownerSubgraph) { create() }
         let idx = Int(attribute.id.index)
