@@ -122,8 +122,17 @@ extension Graph {
             if needsUpdateFlag { clearNeedsUpdateFlags() }
         }
         if state & NodeState.dirty != 0 {
-            precondition(!isResumingStep, "a resumable rule must poll a dirty input and return needsInput")
+            // Parity with Apple: a dirty input read here, even inside a resumable rule, updates synchronously.
+            // Only a read made while a rule runs nests: the top-level read from outside a rule starts from the loop.
+            let nests = evaluatingNode != Graph.noNode
+            if nests {
+                precondition(!nestedUpdateWouldExhaustStack(),
+                             "a closure rule read a dirty input too deep for the native stack: use makeResumableRule for deep chains")
+                nestedUpdateDepth &+= 1
+                if nestedUpdateDepth > maxNestedUpdateDepth { maxNestedUpdateDepth = nestedUpdateDepth }
+            }
             update(index)
+            if nests { nestedUpdateDepth &-= 1 }
         }
         if evaluatingNode != Graph.noNode { recordRead(of: index) }
         return table.box(at: index)

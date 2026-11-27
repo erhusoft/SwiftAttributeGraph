@@ -118,12 +118,11 @@ import Testing
             return .finished
         }
     }
-    @Test func aDirtySynchronousReadInsideAResumableStepIsRejected() async {
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let source = graph.makeRule { 5 }
-            _ = graph.value(of: graph.makeResumableRule(NestedRead(graph: graph, source: source)))
-        }
+    /// Parity with Apple: a synchronous read of a dirty input inside a resumable step is allowed and returns the value.
+    @Test func aDirtySynchronousReadInsideAResumableStepReturnsTheValue() {
+        let graph = Graph()
+        let source = graph.makeRule { 5 }
+        #expect(graph.value(of: graph.makeResumableRule(NestedRead(graph: graph, source: source))) == 5)
     }
 
     struct Many: ResumableRule {

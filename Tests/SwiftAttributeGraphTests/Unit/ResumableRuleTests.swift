@@ -254,25 +254,20 @@ import Testing
 
     // MARK: M4: coexistence between synchronous and resumable rules
 
-    /// From inside a resumable step, reading a dirty input synchronously is forbidden: the rule must
-    /// ``poll`` it and return ``needsInput`` instead. This is what keeps the native stack bounded.
-    @Test func aResumableRuleReadingADirtyInputSynchronouslyStopsTheProgram() async {
-        await #expect(processExitsWith: .failure) {
-            let graph = Graph()
-            let source = graph.makeRule { 1 }
-            struct ReadDirty: ResumableRule {
-                weak var graph: Graph?
-                let source: Attribute<Int>
-                mutating func resume(_ context: inout ResumableRuleContext<Int>) -> RuleStep {
-                    // Synchronous read of a (now) dirty input from inside a step: forbidden.
-                    _ = graph!.value(of: source)
-                    context.value = source.value
-                    return .finished
-                }
+    /// Parity with Apple: from inside a resumable step, a synchronous read of a dirty input updates it and returns its value.
+    @Test func aResumableRuleReadingADirtyInputSynchronouslyReturnsItsValue() {
+        let graph = Graph()
+        let source = graph.makeRule { 1 }
+        struct ReadDirty: ResumableRule {
+            weak var graph: Graph?
+            let source: Attribute<Int>
+            mutating func resume(_ context: inout ResumableRuleContext<Int>) -> RuleStep {
+                context.value = graph!.value(of: source)
+                return .finished
             }
-            let rule = graph.makeResumableRule(ReadDirty(graph: graph, source: source))
-            _ = graph.value(of: rule)         // resumes; the step tries the forbidden synchronous read
         }
+        let rule = graph.makeResumableRule(ReadDirty(graph: graph, source: source))
+        #expect(graph.value(of: rule) == 1)
     }
 
     /// A resumable rule that polls a dirty input and yields works normally: it suspends, the input is updated,
