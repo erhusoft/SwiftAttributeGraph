@@ -50,3 +50,21 @@ public struct AnyAttribute: Hashable, Sendable {
     /// Creates a handle from an ID.
     @inlinable public init(id: AttributeID) { self.id = id }
 }
+
+extension Attribute {
+    /// The same attribute seen as holding a `V`; nothing is converted (`Attribute.unsafeCast(to:)` in native
+    /// AttributeGraph). The caller is responsible for the type matching the stored value.
+    @inlinable
+    public func unsafeCast<V>(to _: V.Type) -> Attribute<V> {
+        Attribute<V>(id: id)
+    }
+}
+
+extension AnyAttribute {
+    /// The same attribute seen as holding a `Value`; nothing is converted (`AnyAttribute.unsafeCast(to:)` in native
+    /// AttributeGraph). The caller is responsible for the type matching the stored value.
+    @inlinable
+    public func unsafeCast<Value>(to _: Value.Type) -> Attribute<Value> {
+        Attribute<Value>(id: id)
+    }
+}
