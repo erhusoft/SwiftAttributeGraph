@@ -273,11 +273,19 @@ public struct AGUnsafeMutableTuple {
         address(of: index, as: T.self).initialize(to: value)
     }
 
+    /// Destroys the element at `index` with its own type, so a reference-counted element is released
+    /// (`AGUnsafeMutableTuple.deinitialize(at:)` in native AttributeGraph).
     @inlinable
     public func deinitialize(at index: Int) {
-        let offset = tupleType.offset(at: index, as: Any.self)
-        let ptr = buffer.advanced(by: offset)
-        _ = ptr
+        let type = tupleType.type(at: index)
+        let address = buffer.advanced(by: tupleType.offset(at: index, as: Any.self))
+        Self.destroy(type, at: address)
+    }
+
+    /// Opens the element type so the value at `address` is deinitialized as that type.
+    @usableFromInline
+    static func destroy<T>(_ type: T.Type, at address: UnsafeMutableRawPointer) {
+        address.assumingMemoryBound(to: T.self).deinitialize(count: 1)
     }
 
     @inlinable
