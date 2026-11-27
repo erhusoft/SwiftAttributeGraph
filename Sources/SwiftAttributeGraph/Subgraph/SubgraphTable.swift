@@ -309,10 +309,11 @@ struct SubgraphTable {
     /// bumps the generation and queues the slot for reuse.
     mutating func release(index: UInt32) {
         let i = Int(index)
-        for k in 0..<parents[i].count {
-            let p = parents[i][k]
-            let pos = positionInParents[i][k]
-            markChildTombstone(in: p, at: pos)
+        // Native `invalidate_now` removes a dying child from the child list of every other parent with swap-remove, so a
+        // parent that stays alive keeps the swap-remove order (oracle scenario
+        // `sibling-shared-child-cascade-from-parent-death`).
+        while let p = parents[i].first {
+            removeChild(index, from: p)
         }
         for c in rawChildren[i] where c != SubgraphTable.none {
             let ci = Int(c)

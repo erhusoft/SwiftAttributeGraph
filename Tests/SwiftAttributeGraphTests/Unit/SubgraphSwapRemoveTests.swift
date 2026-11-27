@@ -60,4 +60,22 @@ import Testing
         #expect(graph.children(of: parent) == [d, b, c])
         _ = (b, c, d)
     }
+
+    /// A child shared with a parent that stays alive dies together with its first parent; native
+    /// `invalidate_now` then removes it from the other parent's child list with swap-remove. Oracle scenario
+    /// `sibling-shared-child-cascade-from-parent-death` (native `afterInvalidateQ=[P, C, Q, X, Y]`).
+    @Test func aSharedChildThatDiesWithOneParentLeavesTheOtherParentWithTheSwapRemoveOrder() {
+        let graph = Graph()
+        let p = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let q = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let c = graph.makeSubgraph(parent: p)
+        graph.addChild(c, to: q)
+        let x = graph.makeSubgraph(parent: q)
+        let y = graph.makeSubgraph(parent: q)
+        #expect(graph.children(of: q) == [c, x, y])
+
+        graph.invalidate(p)
+
+        #expect(graph.children(of: q) == [y, x])
+    }
 }
