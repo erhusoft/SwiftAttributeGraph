@@ -13,6 +13,11 @@
     /// Returns the boxed value as `Any?` if available.
     func boxedValue() -> Any? { nil }
 
+    /// Hands the stored body of a rule that is a typed ``Rule`` or ``StatefulRule`` to `visitor`, with its real type
+    /// (`AnyAttribute.visitBody` in native AttributeGraph). A node without a typed body, such as an input or a rule given
+    /// as a closure, visits nothing.
+    func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {}
+
     @usableFromInline init() {}
 }
 
@@ -109,6 +114,10 @@
         runTypeRule(self)
     }
 
+    override func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
+        withUnsafePointer(to: &rule) { visitor.visit(body: $0) }
+    }
+
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
         guard R.self == Target.self else { return false }
         return withUnsafeMutablePointer(to: &rule) { ptr in
@@ -133,6 +142,10 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
         var context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
         rule.updateValue(&context)
         return finish(context)
+    }
+
+    override func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
+        withUnsafePointer(to: &rule) { visitor.visit(body: $0) }
     }
 
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {

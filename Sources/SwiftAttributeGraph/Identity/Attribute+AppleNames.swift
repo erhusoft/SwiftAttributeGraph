@@ -52,7 +52,8 @@ extension Attribute {
 
     /// Visits the stored body of this attribute using `visitor` (`Attribute.visitBody`).
     public func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
-        // Body visiting stub for visitor protocol conformance
+        precondition(graph.table.isLive(erased.id), "visitBody: the attribute is dead")
+        graph.table.box(at: erased.id.index).visitBody(&visitor)
     }
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).
@@ -130,7 +131,8 @@ extension AnyAttribute {
 
     /// Visits the stored body of this attribute using `visitor` (`Attribute.visitBody`).
     public func visitBody<V: AttributeBodyVisitor>(_ visitor: inout V) {
-        // Body visiting stub for visitor protocol conformance
+        precondition(graph.table.isLive(id), "visitBody: the attribute is dead")
+        graph.table.box(at: id.index).visitBody(&visitor)
     }
 
     /// The graph value state of the attribute (`AGAttribute.valueState`).
