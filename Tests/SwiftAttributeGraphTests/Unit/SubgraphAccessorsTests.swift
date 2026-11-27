@@ -30,16 +30,58 @@ import Testing
         #expect(parent.child(at: 0).tag == 1)
     }
 
-    @Test func parentsAreListedInLinkOrderWithTheRootFirst() {
+    /// A subgraph created without an explicit parent has no parents in native AttributeGraph (the engine hangs it from
+    /// its root internally, but the root is not reported). Oracle scenarios `parents-lone-default-context`,
+    /// `parents-lone-other-context`.
+    @Test func aSubgraphCreatedWithoutAParentHasNoParents() {
+        let graph = Graph()
+        let contextB = graph.makeSharedContext()
+        let lone = graph.makeSubgraph()
+        #expect(lone.parentCount == 0)
+        #expect(contextB.makeSubgraph().parentCount == 0)
+    }
+
+    /// Oracle scenario `parents-linked-one-parent`: the child has the linked parent, the parent has none.
+    @Test func aLinkedChildHasOnlyItsLinkedParent() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph()
+        let child = graph.makeSubgraph()
+        parent.addChild(child)
+        #expect(child.parentCount == 1)
+        #expect(child.parent(at: 0) == parent)
+        #expect(parent.parentCount == 0)
+    }
+
+    /// Parents are listed in link order and the implicit root is not one of them (oracle scenario
+    /// `parents-two-parents-one-dies`: native counts 2, then 1, then 0 as the parents go away).
+    @Test func parentsAreListedInLinkOrderWithoutTheImplicitRoot() {
         let graph = Graph()
         let first = graph.makeSubgraph()
         let second = graph.makeSubgraph()
-        let child = graph.makeSubgraph()
+        let contextB = graph.makeSharedContext()
+        let child = contextB.makeSubgraph()
         first.addChild(child)
         second.addChild(child)
-        #expect(child.parentCount == 3)
-        #expect(child.parent(at: 0) == graph.rootSubgraph)
-        #expect(child.parent(at: 1) == first)
-        #expect(child.parent(at: 2) == second)
+        #expect(child.parentCount == 2)
+        #expect(child.parent(at: 0) == first)
+        #expect(child.parent(at: 1) == second)
+
+        graph.invalidate(first)
+        #expect(child.parentCount == 1)
+        #expect(child.parent(at: 0) == second)
+
+        graph.invalidate(second)
+        #expect(child.isValid)
+        #expect(child.parentCount == 0)
+    }
+
+    /// A subgraph created under an explicit parent (here the current subgraph) reports it (oracle scenario
+    /// `parents-via-d-makeSubgraph`).
+    @Test func aSubgraphCreatedUnderAnExplicitParentReportsIt() {
+        let graph = Graph()
+        let scope = graph.makeSubgraph()
+        let child = graph.makeSubgraph(parent: scope)
+        #expect(child.parentCount == 1)
+        #expect(child.parent(at: 0) == scope)
     }
 }
