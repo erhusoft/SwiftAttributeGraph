@@ -113,4 +113,44 @@ import Testing
         #expect(notices == ["s1", "s0", "s5", "s4", "s6", "s8", "s7", "s3"])
         #expect(s2.isValid)
     }
+
+    /// The two-bit tag of a child moves with the child when swap-remove fills the freed slot (native moves the whole
+    /// tagged entry, `*slot = last`).
+    @Test func swapRemoveMovesTheTagTogetherWithTheChild() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let a = graph.makeSubgraph(parent: parent)
+        let b = graph.makeSubgraph()
+        let c = graph.makeSubgraph()
+        let d = graph.makeSubgraph()
+        graph.addChild(b, to: parent, tag: 2)
+        graph.addChild(c, to: parent, tag: 3)
+        graph.addChild(d, to: parent, tag: 1)
+        // [a:0, b:2, c:3, d:1]
+        #expect(graph.child(of: parent, at: 3).tag == 1)
+
+        graph.removeChild(b, from: parent)
+
+        let entries = (0..<graph.childCount(of: parent)).map { graph.child(of: parent, at: $0) }
+        #expect(entries.map(\.subgraph) == [a, d, c])
+        #expect(entries.map(\.tag) == [0, 1, 3])
+    }
+
+    @Test func aChildThatDiesLeavesTheOtherTagsWithTheirChildren() {
+        let graph = Graph()
+        let parent = graph.makeSubgraph(parent: graph.rootSubgraph)
+        let a = graph.makeSubgraph(parent: parent)
+        let b = graph.makeSubgraph()
+        let c = graph.makeSubgraph()
+        let d = graph.makeSubgraph()
+        graph.addChild(b, to: parent, tag: 2)
+        graph.addChild(c, to: parent, tag: 3)
+        graph.addChild(d, to: parent, tag: 1)
+
+        graph.invalidate(a)
+
+        let entries = (0..<graph.childCount(of: parent)).map { graph.child(of: parent, at: $0) }
+        #expect(entries.map(\.subgraph) == [d, b, c])
+        #expect(entries.map(\.tag) == [1, 2, 3])
+    }
 }
