@@ -1,14 +1,21 @@
 /// Options of ``Rule/cachedValue(options:owner:)`` (`AGCachedValueOptions` in native AttributeGraph). The bits are defined
 /// by the native header; their effect was not measured: all five behaved like `[]` in the oracle (scenario `c8`).
 public struct AGCachedValueOptions: OptionSet, Sendable {
+    /// The raw option bits.
     public let rawValue: UInt32
 
+    /// Creates the options from their raw bits.
     public init(rawValue: UInt32) { self.rawValue = rawValue }
 
+    /// Native option bit 0 (`1 << 0`); no effect was measured (oracle scenarios `c8`, `c8b`).
     public static let option1 = AGCachedValueOptions(rawValue: 1 << 0)
+    /// Native option bit 1 (`1 << 1`); no effect was measured (oracle scenarios `c8`, `c8b`).
     public static let option2 = AGCachedValueOptions(rawValue: 1 << 1)
+    /// Native option bit 2 (`1 << 2`); no effect was measured (oracle scenarios `c8`, `c8b`).
     public static let option4 = AGCachedValueOptions(rawValue: 1 << 2)
+    /// Native option bit 3 (`1 << 3`); no effect was measured (oracle scenarios `c8`, `c8b`).
     public static let option8 = AGCachedValueOptions(rawValue: 1 << 3)
+    /// Native option bit 4 (`1 << 4`); no effect was measured (oracle scenarios `c8`, `c8b`).
     public static let option16 = AGCachedValueOptions(rawValue: 1 << 4)
 }
 

@@ -38,18 +38,22 @@ extension _AttributeBody {
         [.mainThread]
     }
 
+    /// `false` unless the body asks for its own destruction.
     public static var _hasDestroySelf: Bool {
         false
     }
 
+    /// Destroys the body in place: deinitializes the one value `pointer` holds.
     public static func _destroySelf(_ pointer: UnsafeMutableRawPointer) {
         pointer.assumingMemoryBound(to: Self.self).deinitialize(count: 1)
     }
 
+    /// Does nothing: a body that needs a default update overrides it.
     public static func _updateDefault(_ pointer: UnsafeMutableRawPointer) {
         // Default no-op update pass
     }
 
+    /// `false` unless a body overrides it to report that its update was cancelled.
     public var updateWasCancelled: Bool {
         false
     }

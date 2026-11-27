@@ -108,10 +108,12 @@ public struct IndirectAttribute<Value>: Hashable, Equatable {
 
     // MARK: - Equatable & Hashable
 
+    /// Whether both handles refer to the same attribute.
     public static func == (lhs: IndirectAttribute<Value>, rhs: IndirectAttribute<Value>) -> Bool {
         lhs.attribute == rhs.attribute
     }
 
+    /// Hashes the attribute the handle refers to.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(attribute)
     }

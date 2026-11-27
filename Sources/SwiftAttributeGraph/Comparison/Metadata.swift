@@ -13,8 +13,10 @@ public struct Metadata: Hashable, CustomStringConvertible, @unchecked Sendable {
 
     /// How ``forEachField(options:do:)`` walks a type (`AGTypeApplyOptions` in native AttributeGraph).
     public struct ApplyOptions: OptionSet, Sendable {
+        /// The raw option bits.
         public let rawValue: UInt32
 
+        /// Creates the options from their raw bits.
         public init(rawValue: UInt32) {
             self.rawValue = rawValue
         }
@@ -47,14 +49,17 @@ public struct Metadata: Hashable, CustomStringConvertible, @unchecked Sendable {
         return completed
     }
 
+    /// Whether both metadata describe the same type.
     public static func == (lhs: Metadata, rhs: Metadata) -> Bool {
         lhs.type == rhs.type
     }
 
+    /// Hashes the identity of the type.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(ObjectIdentifier(type))
     }
 
+    /// The name of the type.
     public var description: String {
         String(describing: type)
     }

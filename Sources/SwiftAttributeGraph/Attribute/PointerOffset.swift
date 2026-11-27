@@ -60,6 +60,7 @@ extension PointerOffset where A == B {
 }
 
 extension PointerOffset: CustomStringConvertible {
+    /// A description with both types and the byte offset, such as `PointerOffset<Pair, Int>(8)`.
     public var description: String {
         "PointerOffset<\(A.self), \(B.self)>(\(byteOffset))"
     }

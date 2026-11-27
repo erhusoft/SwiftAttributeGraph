@@ -5,6 +5,7 @@
 /// followed by `hasDestroySelf`, `mainThread`, `external` and `asyncThread`. Native values of `flags` for each kind of body were
 /// measured on macOS 15.8.3 (oracle scenarios `f1` to `f9`).
 public struct AttributeTypeFlags: OptionSet, Hashable, Sendable, CustomStringConvertible {
+    /// The raw bits; see the static members for what each one means.
     public var rawValue: UInt32
 
     /// Creates the flags with the given raw value.
@@ -43,5 +44,7 @@ public enum _AttributeType {
     public typealias Flags = AttributeTypeFlags
 }
 
+/// The name native AttributeGraph gives ``AttributeTypeFlags``.
 public typealias AGAttributeTypeFlags = AttributeTypeFlags
+/// The name native AttributeGraph gives ``ComparisonMode``.
 public typealias AGComparisonMode = ComparisonMode

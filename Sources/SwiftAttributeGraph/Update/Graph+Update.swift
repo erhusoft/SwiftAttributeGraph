@@ -157,7 +157,9 @@ extension Graph {
     /// Values measured on macOS 15.8.3: options `0` and `2` behave the same in every probe [O]; `4` and `6` (`2 | 4`)
     /// also behave the same [O]. What bit `2` means beyond that is not known [?].
     public struct ReadOptions: OptionSet, Sendable {
+        /// The raw option bits.
         public let rawValue: UInt32
+        /// Creates the options from their raw bits.
         public init(rawValue: UInt32) { self.rawValue = rawValue }
 
         /// Native option bit 2: the read records a dependency edge. This is also the default, so it changes nothing

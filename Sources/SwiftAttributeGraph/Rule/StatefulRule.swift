@@ -17,5 +17,6 @@ public protocol StatefulRule: _AttributeBody {
 }
 
 extension StatefulRule {
+    /// No initial value by default: the first run must write one.
     public static var initialValue: Value? { nil }
 }

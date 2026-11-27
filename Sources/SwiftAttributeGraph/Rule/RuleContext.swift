@@ -140,6 +140,7 @@ public struct RuleContext<Value> {
 }
 
 extension RuleContext: Equatable {
+    /// Whether both contexts are for the same node of the same graph.
     public static func == (lhs: RuleContext<Value>, rhs: RuleContext<Value>) -> Bool {
         lhs.graph === rhs.graph && lhs.node == rhs.node
     }
