@@ -14,6 +14,12 @@
     /// Whether this is an offset attribute (`unsafeOffset`), which native does not count as a direct attribute.
     var isOffsetAttribute: Bool { false }
 
+    /// The size and alignment of what native stores in the node after its header: the body of a rule, the value of an input. Only used to
+    /// place the node in a page of its subgraph (`Graph.pageOfNewNode`); a node with no body counts as empty.
+    var layoutOfBody: (size: Int, alignment: Int) { (0, 1) }
+    /// The size and alignment of the value, which native allocates in the page when a rule first runs.
+    var layoutOfValue: (size: Int, alignment: Int) { (0, 1) }
+
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
     func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
     /// Performs one step; only resumable rule nodes override this.
@@ -41,6 +47,7 @@
 /// A box holding a value of a known type.
 @usableFromInline class TypedNode<Value>: NodeBox {
     override func boxedValue() -> Any? { value }
+    override var layoutOfValue: (size: Int, alignment: Int) { (MemoryLayout<Value>.size, MemoryLayout<Value>.alignment) }
     // Release builds skip the dynamic exclusivity check on the value, read on every attribute read (see `Graph`).
     // Every access copies the value in or out; none stays open while user code runs.
     #if DEBUG && !SAG_UNCHECKED
@@ -89,6 +96,7 @@
 /// A leaf whose value is written from outside.
 @usableFromInline final class InputNode<Value>: TypedNode<Value> {
     override var bodyType: Any.Type { External<Value>.self }
+    override var layoutOfBody: (size: Int, alignment: Int) { nativeBodyLayout(of: Value.self) }
 
     /// The body of an input is an `External<Value>`, which stores nothing; native lets `mutateBody(as: External<Value>.self)` run on it [O, `api8d`].
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
@@ -114,6 +122,7 @@
 
 /// A rule given as a closure.
 @usableFromInline final class ClosureRuleNode<Value>: TypedNode<Value> {
+    override var layoutOfBody: (size: Int, alignment: Int) { (16, 8) }
     @usableFromInline let body: () -> Value
 
     override var bodyType: Any.Type { (() -> Value).self }
@@ -140,6 +149,7 @@
 
 /// A rule given as a type that conforms to ``Rule``.
 @usableFromInline final class TypeRuleNode<R: Rule>: TypedNode<R.Value> {
+    override var layoutOfBody: (size: Int, alignment: Int) { nativeBodyLayout(of: R.self) }
     @usableFromInline var rule: R
 
     override var bodyType: Any.Type { R.self }
@@ -177,6 +187,7 @@
 
 /// A rule given as a type that conforms to ``StatefulRule``.
 final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
+    override var layoutOfBody: (size: Int, alignment: Int) { nativeBodyLayout(of: R.self) }
     var rule: R
 
     override var bodyType: Any.Type { R.self }
@@ -241,6 +252,7 @@ final class IndirectNode<Value>: AnyIndirectNode {
 
 /// A stateful rule given as a closure.
 final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
+    override var layoutOfBody: (size: Int, alignment: Int) { (16, 8) }
     let body: (inout RuleContext<Value>) -> Void
 
     override var bodyType: Any.Type { ((inout RuleContext<Value>) -> Void).self }

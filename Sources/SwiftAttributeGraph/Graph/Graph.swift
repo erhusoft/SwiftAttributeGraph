@@ -72,8 +72,14 @@ public final class Graph {
     /// When each attribute that carries flags got them (the moment they went from none to some), which sets the order `forEach` visits them in.
     var flagMarkSequence: [UInt32: UInt64] = [:]
     var flagMarkCounter: UInt64 = 0
-    /// How many attributes native keeps in one page of a subgraph; `forEach` visits the pages from the newest to the oldest.
-    static let attributesPerPage = 12
+    /// The page a new node lands in. Native places a node of 28 bytes plus its body (a body of more than 128 bytes is kept apart and the node holds a
+    /// pointer of 8) in the pages of its subgraph, aligned to the body, and a rule gets room for its value when it first runs (oracle `ver25`: the
+    /// capacity of a page goes from 17 nodes with no body to 3 with a body of 128 bytes; decompiled `Graph::add_attribute`).
+    func pageOfNewNode(_ box: NodeBox, in subgraph: UInt32) -> UInt32 {
+        let (size, alignment) = box.layoutOfBody
+        let mask = max(alignment, 1) - 1
+        return subgraphs.allocateInZone(of: subgraph, size: ((28 + mask) & ~mask) + size, alignment: alignment)
+    }
 
     /// Runs `body` with `context` as the running stateful rule's context, restoring the previous one afterwards.
     func withActiveContext<Value>(_ context: RuleContext<Value>, _ body: () -> Void) {
@@ -338,10 +344,10 @@ public final class Graph {
             // Native keeps the attributes of a subgraph in pages of 12 (`ver19b`: the same for `Int`, `String` and rules; the order starts to
             // differ at the 13th). It visits the newest page first, and inside a page the reverse of the order the flags were set (`ver15b`).
             let members = subgraphs.members[Int(sgIndex)]
-            var matching: [(member: UInt32, page: Int, sequence: UInt64, position: Int)] = []
+            var matching: [(member: UInt32, page: UInt32, sequence: UInt64, position: Int)] = []
             for (creation, member) in members.enumerated() where table.isLive(index: member) {
                 if (table.flags[Int(member)] & flags.rawValue) != 0 {
-                    matching.append((member, creation / Graph.attributesPerPage, flagMarkSequence[member] ?? 0, members.count - creation))
+                    matching.append((member, table.pages[Int(member)], flagMarkSequence[member] ?? 0, members.count - creation))
                 }
             }
             matching.sort {
@@ -725,6 +731,7 @@ public final class Graph {
         precondition(subgraphs.isLive(currentSubgraph), "the current subgraph was invalidated")
         precondition(!subgraphs.isFalling(index: currentSubgraph.index), "the current subgraph is being invalidated")
         let id = table.allocate(owner: currentSubgraph.index, box: box, state: state, version: 1)
+        table.pages[Int(id.index)] = pageOfNewNode(box, in: currentSubgraph.index)
         createdNodeCount &+= 1
         subgraphs.add(member: id.index, to: currentSubgraph)
         return id

@@ -206,3 +206,23 @@ func forEachEnumPayloadCase(of type: Any.Type, do body: (UnsafePointer<CChar>, I
     }
     return true
 }
+
+
+/// The size and alignment native uses to place a body in the page of a node. A type that is not bitwise takable (one with a `weak` reference, for
+/// instance) or that is larger than 128 bytes is kept apart and the node holds a pointer of 8 bytes (decompiled `Graph::add_attribute`; oracle
+/// `ver25`: bodies from 136 bytes up give the capacity of a node with a pointer).
+func nativeBodyLayout<T>(of type: T.Type) -> (size: Int, alignment: Int) {
+    let size = MemoryLayout<T>.size
+    let metadata = unsafeBitCast(type, to: UnsafePointer<UnsafePointer<ValueWitnessTableFlags>>.self)
+    let nonBitwiseTakable = metadata[-1].pointee.flags & 0x100000 != 0
+    if nonBitwiseTakable || size > 128 { return (8, 8) }
+    return (size, MemoryLayout<T>.alignment)
+}
+
+/// The value witness table up to its flags, as `ValueWitnessTable` in `withUnsafePointerToEnumCase` lays it out.
+struct ValueWitnessTableFlags {
+    var p0, p1, p2, p3, p4, p5, p6, p7: UnsafeRawPointer
+    var size: Int
+    var stride: Int
+    var flags: UInt32
+}

@@ -750,6 +750,11 @@ extension Graph {
         }
 
         pruneEdges(of: node)
+        if table.state[n] & NodeState.hasValue == 0 {
+            // Native allocates the room for the value of a rule in the page when it first runs.
+            let (size, alignment) = table.box(at: node).layoutOfValue
+            _ = subgraphs.allocateInZone(of: owner, size: size, alignment: alignment)
+        }
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending | NodeState.selfModified))
             | NodeState.hasValue
         if changed {

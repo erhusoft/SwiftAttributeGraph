@@ -36,6 +36,10 @@ struct SubgraphTable {
     /// It only grows: native does not shrink it when a flag is cleared, when a child is unlinked or when a child dies (oracle scenarios
     /// `ver8c`, `ver9a`, `ver9b`, `ver9d`, `ver9e`, `ver9f`); a child's flags enter its parents when it is linked and when it is marked.
     private(set) var flagSummary: [UInt8] = []
+    /// Where the next allocation of the subgraph goes in its native page: the offset inside the current page and how many pages it has used. Native
+    /// allocates the nodes of a subgraph from pages of 512 bytes whose first 24 are a header; `forEach` visits the newest page first.
+    private var zoneOffset: [Int32] = []
+    private var zonePages: [Int32] = []
     private var visitedEpoch: [UInt32] = []
     private var currentEpoch: UInt32 = 0
     private var freeList: [UInt32] = []
@@ -68,6 +72,8 @@ struct SubgraphTable {
             dirtyOwnFlags.append(0)
             dirtyDescendantFlags.append(0)
             flagSummary.append(0)
+            zoneOffset.append(0)
+            zonePages.append(0)
             visitedEpoch.append(0)
             index = UInt32(generations.count - 1)
         }
@@ -191,6 +197,20 @@ struct SubgraphTable {
         parents[c].append(parent)
         positionInParents[c].append(pos)
         addFlagSummary(flagSummary[c], on: parent)
+    }
+
+    /// Reserves `size` bytes with the given alignment in the pages of subgraph `index` and returns the number of the page they landed in.
+    mutating func allocateInZone(of index: UInt32, size: Int, alignment: Int) -> UInt32 {
+        let i = Int(index)
+        let align = Int32(max(alignment, 4))
+        let bytes = Int32(size)
+        var start = (zoneOffset[i] + align - 1) & ~(align - 1)
+        if zonePages[i] == 0 || start + bytes > 512 {
+            zonePages[i] += 1
+            start = (24 + align - 1) & ~(align - 1)
+        }
+        zoneOffset[i] = start + bytes
+        return UInt32(zonePages[i] - 1)
     }
 
     /// Adds `flags` to the summary of `sgIndex` and of every ancestor.
@@ -365,6 +385,8 @@ struct SubgraphTable {
         dirtyOwnFlags[i] = 0
         dirtyDescendantFlags[i] = 0
         flagSummary[i] = 0
+        zoneOffset[i] = 0
+        zonePages[i] = 0
         if generation & 0xFFFF != 0xFFFF {
             generations[i] = generation + 1
             freeList.append(index)

@@ -606,4 +606,30 @@ import Testing
         _ = graph.value(of: rule)
         #expect(log.flags == [true, false])
     }
+
+    // The number of nodes of one kind that fit in the first page of a subgraph, measured in native (oracle `ver25`).
+    private func firstPageCapacity<R: Rule>(_ make: () -> R) -> Int where R.Value == Int {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let ids = (0..<40).map { _ in graph.withCurrent(sg) { Attribute(make()) } }
+        return ids.filter { graph.table.pages[Int($0.id.index)] == graph.table.pages[Int(ids[0].id.index)] }.count
+    }
+    struct Body0: Rule { var value: Int { 1 } }
+    struct Body8: Rule { var pad: UInt64 = 0; var value: Int { 1 } }
+    struct Body16: Rule { var pad: (UInt64, UInt64) = (0, 0); var value: Int { 1 } }
+    struct Body32: Rule { var pad: (UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0); var value: Int { 1 } }
+    struct Body12Bytes: Rule { var pad: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); var value: Int { 1 } }
+    struct Body136: Rule {
+        var pad: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64) =
+            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        var value: Int { 1 }
+    }
+
+    @Test func aNativePageHoldsAsManyNodesAsTheirBodyAllows() { // ver25-page-sizes: no body 17, 8 bytes align 8 12, 16 bytes 10, 32 bytes 7, 12 bytes align 1 12, 136 bytes 12
+        #expect(firstPageCapacity { Body0() } == 17)
+        #expect(firstPageCapacity { Body8() } == 12)
+        #expect(firstPageCapacity { Body16() } == 10)
+        #expect(firstPageCapacity { Body32() } == 7)
+        #expect(firstPageCapacity { Body12Bytes() } == 12)
+        #expect(firstPageCapacity { Body136() } == 12)
+    }
 }

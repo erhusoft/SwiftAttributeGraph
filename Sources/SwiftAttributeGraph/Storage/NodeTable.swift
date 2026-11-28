@@ -11,6 +11,8 @@ struct NodeTable {
     var versions: [UInt32] = []
     var inputs: [[InputEdge]] = []
     var outputs: [[UInt32]] = []
+    /// The page of its subgraph each node sits in (see `SubgraphTable.allocateInZone`).
+    var pages: [UInt32] = []
     private(set) var owners: [UInt32] = []
     private(set) var boxes: [NodeBox?] = []
     private var freeList: [UInt32] = []
@@ -40,6 +42,7 @@ struct NodeTable {
             versions[i] = version
             owners[i] = owner
             boxes[i] = box
+            pages[i] = 0
             return AttributeID(index: index, generation: generations[i])
         }
         generations.append(generationBase | 1)
@@ -50,6 +53,7 @@ struct NodeTable {
         outputs.append([])
         owners.append(owner)
         boxes.append(box)
+        pages.append(0)
         return AttributeID(index: UInt32(generations.count - 1), generation: generations[generations.count - 1])
     }
 
