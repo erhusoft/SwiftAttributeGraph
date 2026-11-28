@@ -8,14 +8,30 @@ A high-performance, zero-recursion reactive attribute graph engine written in pu
 
 ## Key Highlights
 
-- **100% Native Parity**: Direct semantic and API parity with Apple's `AttributeGraph.framework` (macOS Sequoia 15.5 / 15.8.3, Apple Silicon ARM64), including `_AttributeBody`, `RuleContext`, `ObservedAttribute`, `IndirectAttribute`, `OptionalAttribute`, `PointerOffset`, `withUnsafeTuple`, and Swift runtime enum reflection (`forEachField`, `withUnsafePointerToEnumCase`).
+- **Native parity, measured and reported**: behavior is compared with Apple's `AttributeGraph.framework` (macOS 15.8.3, Apple Silicon) by running the same scenarios against both and diffing the output. The result, per area and with the known differences, is in **[COVERAGE.md](COVERAGE.md)**. The API surface follows the native Swift interface: `_AttributeBody`, `Rule`, `StatefulRule`, `RuleContext`, `ObservedAttribute`, `IndirectAttribute`, `OptionalAttribute`, `WeakAttribute`, `PointerOffset`, `withUnsafeTuple`, cached values, output values, the main-thread handler, and Swift runtime enum reflection (`forEachField`, `withUnsafePointerToEnumCase`).
 - **Zero-Recursion Guarantee**: All graph mounting, traversal, transitive invalidation, breadth-first search, and lifecycle reclamation are implemented iteratively using flat stacks and explicit queues. Verified with deep dependency chains of **$\ge 20,000$ to $100,000$ levels** with zero stack overflow risk.
 - **Ultra-Hot Read Path ($\sim 12\text{ ns}$)**: Calibrated in production release mode (`-c release`) to $\sim 11.8\text{ ns}$ per input read and $\sim 12.2\text{ ns}$ per warm rule read ($\sim 83\text{M}$ reads/sec per thread), matching native C++ memory access speeds.
 - **Deterministic Lifetime & Zero Leaks**: Every attribute is strictly bound to an owning `Subgraph`. Unmounting or invalidating a subgraph instantly detaches and clears all child attributes and dependencies, returning node counts and memory footprint cleanly to baseline.
-- **Cross-Platform by Design**: Fully self-contained pure Swift implementation. Platform-specific concerns (such as Thread-Local Storage and synchronization locks) are cleanly isolated:
+- **Cross-Platform by Design**: Fully self-contained pure Swift implementation. Platform-specific concerns (such as Thread-Local Storage and synchronization locks) are isolated:
   - macOS/Linux: `pthread_key_t` and `pthread_mutex_t`.
-  - Windows: Native Win32 `WinSDK` (`TlsAlloc`/`TlsGetValue`/`TlsSetValue` and lightweight `SRWLOCK`).
-  - Architecture-neutral: Supports both ARM64 and x86_64 with zero fixed pointer-size assumptions.
+  - Windows: Win32 `WinSDK` (`TlsAlloc`/`TlsGetValue`/`TlsSetValue` and `SRWLOCK`).
+  - Architecture-neutral: no fixed pointer-size assumptions.
+  - **Verification status:** the checks described in this repository (test suite, native comparison, fuzzer) were run on **macOS arm64**. The Windows code paths are written but are not covered by those checks.
+
+---
+
+## Status
+
+| | |
+|---|---|
+| Native parity (oracle of 209 scenarios) | **206 identical**, 3 known differences (invalidations requested inside rules are delivered later natively) |
+| Differential fuzzer against the native framework | 0 differences in 55,000 random subgraph hierarchies |
+| Public API of the native Swift interface | 251 of 252 named declarations present (the one left is inherited), every public declaration documented |
+| Unit tests | 777 (`swift test`), including stack-depth and performance tests |
+| Still open or never measured | Listed in [COVERAGE.md](COVERAGE.md): deferred invalidation delivery inside rules, creation with no current subgraph, `Metadata.forEachField` outside structs, the effect of the `cachedValue` options, multi-thread main-thread handling, Windows |
+
+Parity is claimed per behaviour and per evidence level, not for the framework as a whole. Read [COVERAGE.md](COVERAGE.md) before relying on a
+specific API matching Apple's.
 
 ---
 
@@ -45,7 +61,7 @@ A high-performance, zero-recursion reactive attribute graph engine written in pu
 
 ## Comprehensive Benchmark Suites
 
-`SwiftAttributeGraph` includes a comprehensive suite of performance benchmarks covering every critical execution path. All metrics below are measured on Apple Silicon ARM64 under `-c release` (Swift 6 toolchain, median of 5 warm runs):
+`SwiftAttributeGraph` includes a comprehensive suite of performance benchmarks covering every critical execution path. All metrics below are measured on Apple Silicon ARM64 under `-c release` (Swift 6 toolchain, median of 5 warm runs). They come from earlier measurement runs and were **not re-run** for the latest revision; run the commands under *Running the Benchmarks* to reproduce them on your machine.
 
 ### 1. Comparative Engine Benchmarks (Native Apple vs SwiftAttributeGraph)
 
@@ -131,6 +147,21 @@ swift test -c release --filter DynamicEdgePruningPerformanceTests
 cd ../tools/Benchmarks
 swift run -c release StressBenchmark
 ```
+
+---
+
+## Testing
+
+```bash
+swift build
+swift test                                                      # full suite (debug)
+swift test -c release -Xswiftc -enable-testing --filter Depth   # stack-depth contract in release
+swift test -c release -Xswiftc -enable-testing --filter Performance
+```
+
+Requirements: Swift 6 toolchain, macOS 13 or later (see `Package.swift`). The native comparison needs a Mac and a probe that links Apple's
+private framework, so it is a development tool and is not part of this package; its method and results are summarised in
+[COVERAGE.md](COVERAGE.md).
 
 ---
 
