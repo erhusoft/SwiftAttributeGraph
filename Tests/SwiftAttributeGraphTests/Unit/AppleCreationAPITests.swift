@@ -9,7 +9,7 @@ import Testing
     struct PlainRule: Rule { var value: Int { 1 } }
     struct CountingStateful: StatefulRule {
         typealias Value = Int
-        mutating func updateValue(_ context: inout RuleContext<Int>) { context.value = 3 }
+        mutating func updateValue() { context.value = 3 }
     }
 
     @Test func comparisonOptionsTakeTheRawValueOfTheMode() { // mode-options raw=0, 1, 2, 3

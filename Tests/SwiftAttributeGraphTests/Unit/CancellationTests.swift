@@ -173,7 +173,7 @@ struct CooperativeCancellationTests {
             let shouldCancel: () -> Bool
             var attempts = 0
 
-            mutating func updateValue(_ context: inout RuleContext<Int>) {
+            mutating func updateValue() {
                 attempts += 1
                 let v = source.value
                 if shouldCancel() { graph.cancelUpdate() }

@@ -8,7 +8,7 @@ private struct ProjectedRule<Source, Projected>: StatefulRule, OffsetProjectionR
     let project: (Source) -> Projected
     let isEqual: (Projected, Projected) -> Bool
 
-    mutating func updateValue(_ context: inout RuleContext<Projected>) {
+    mutating func updateValue() {
         let next = project(source.value)
         if context.hasValue, isEqual(context.value, next) {
             return

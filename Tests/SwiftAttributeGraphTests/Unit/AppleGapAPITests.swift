@@ -1,0 +1,127 @@
+import Testing
+@testable import SwiftAttributeGraph
+
+/// The declarations the compile audit found missing, spelled as native AttributeGraph spells them. They are specified from the native Swift
+/// interface and covered here; none was compared with the native framework yet (evidence level S in COVERAGE.md).
+@Suite struct AppleGapAPITests {
+    final class Seen { var attribute: AnyAttribute?; var hadValue: [Bool] = []; var initial: [Int?] = [] }
+
+    struct ReadsItself: Rule {
+        let seen: Seen
+        static var initialValue: Int? { 7 }
+        var value: Int {
+            seen.attribute = attribute.erased
+            _ = context
+            return 1
+        }
+    }
+
+    struct Accumulating: StatefulRule {
+        typealias Value = Int
+        let input: Attribute<Int>
+        let seen: Seen
+        static var initialValue: Int? { 100 }
+        mutating func updateValue() {
+            seen.attribute = attribute.erased
+            seen.hadValue.append(hasValue)
+            value = value + input.value
+        }
+    }
+
+    @Test func aRuleSeesItsOwnAttributeAndHasNoInitialValueByDefault() {
+        struct Plain: Rule { var value: Int { 1 } }
+        #expect(Plain.initialValue == nil)
+        #expect(ReadsItself.initialValue == 7)
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let seen = Seen()
+        let a = graph.withCurrent(sg) { Attribute(ReadsItself(seen: seen)) }
+        #expect(graph.value(of: a) == 1)
+        #expect(seen.attribute == a.erased)
+    }
+
+    @Test func aStatefulRuleReadsAndWritesItsValueThroughItsOwnProperties() {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let seen = Seen()
+        let input = graph.makeInput(1)
+        let a = graph.withCurrent(sg) { Attribute(Accumulating(input: input, seen: seen)) }
+        #expect(graph.value(of: a) == 101)
+        graph.setValue(5, for: input)
+        #expect(graph.value(of: a) == 106)
+        #expect(seen.attribute == a.erased)
+        #expect(seen.hadValue == [true, true])
+    }
+
+    @Test func aStatefulRuleContextOutsideTheUpdateStopsTheProgram() async {
+        await #expect(processExitsWith: .failure) {
+            struct Rule1: StatefulRule { typealias Value = Int; mutating func updateValue() {} }
+            _ = Rule1().context
+        }
+    }
+
+    @Test func descriptionsPrintTheRawIdentifier() {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(value: 1) }
+        #expect(a.erased.description == "#\(a.erased.id.rawValue)")
+        #expect(AnyWeakAttribute(a.erased).description == a.erased.description)
+        #expect(AnyWeakAttribute(nil).description == "nil")
+    }
+
+    @Test func applyMakesTheSubgraphCurrentAndReturnsTheResult() {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let inside = sg.apply { Subgraph.current }
+        #expect(inside == sg)
+        #expect(sg.apply { 42 } == 42)
+    }
+
+    @Test func forEachVisitsTheAttributesWhoseFlagsIntersect() {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(value: 1) }
+        let b = graph.withCurrent(sg) { Attribute(value: 2) }
+        a.flags = AnyAttribute.Flags(rawValue: 1)
+        var visited: [AnyAttribute] = []
+        sg.forEach(AnyAttribute.Flags(rawValue: 1)) { visited.append($0) }
+        #expect(visited == [a.erased])
+        _ = b
+    }
+
+    @Test func mutateBodyChangesTheStoredRuleAndInvalidatesOnRequest() {
+        struct Adds: Rule { var amount: Int; var value: Int { amount } }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(Adds(amount: 1)) }
+        #expect(graph.value(of: a) == 1)
+        a.mutateBody(as: Adds.self, invalidating: true) { $0.amount = 5 }
+        #expect(graph.value(of: a) == 5)
+        a.erased.mutateBody(as: Adds.self, invalidating: true) { $0.amount = 9 }
+        #expect(graph.value(of: a) == 9)
+    }
+
+    @Test func addInputWithOptionsAndTokenMakesAnEdge() {
+        struct Constant: Rule { var value: Int { 3 } }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let source = graph.withCurrent(sg) { Attribute(value: 1) }
+        let target = graph.withCurrent(sg) { Attribute(Constant()) }
+        let other = graph.withCurrent(sg) { Attribute(Constant()) }
+        _ = graph.value(of: target)
+        _ = graph.value(of: other)
+        target.addInput(source, options: [.unprefetched], token: 0)
+        other.erased.addInput(source.erased, token: 1)
+        #expect(graph.inputs(of: target.id).contains(source.id))
+        #expect(graph.inputs(of: other.id).contains(source.id))
+    }
+
+    @Test func currentAttributeIsTheRunningRuleOrNil() {
+        #expect(AnyAttribute.current == nil)
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let seen = Seen()
+        let a = graph.withCurrent(sg) { Attribute(ReadsItself(seen: seen)) }
+        _ = graph.value(of: a)
+        #expect(AnyAttribute.current == nil)
+    }
+
+    @Test func anOptionalAttributeReportsChangesAndIsNilWhenEmpty() {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(value: 4) }
+        #expect(OptionalAttribute<Int>().changedValue() == nil)
+        #expect(OptionalAttribute(a).changedValue()?.value == 4)
+    }
+}

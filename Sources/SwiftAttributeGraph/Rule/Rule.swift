@@ -5,8 +5,24 @@
 public protocol Rule: _AttributeBody {
     /// The type of the attribute the rule computes.
     associatedtype Value
+    /// The value before the first run, if the rule has one (`Rule.initialValue` in native AttributeGraph).
+    static var initialValue: Value? { get }
     /// Computes the value. Called lazily, and only when an input changed.
     var value: Value { get }
+}
+
+extension Rule {
+    /// No initial value by default.
+    public static var initialValue: Value? { nil }
+
+    /// The attribute this rule computes: the one being updated (`Rule.attribute` in native AttributeGraph). Only inside ``value``.
+    public var attribute: Attribute<Value> {
+        guard let current = Graph.currentAttribute else { preconditionFailure("Rule.attribute used outside a rule") }
+        return current.unsafeCast(to: Value.self)
+    }
+
+    /// A context for the attribute being updated (`Rule.context` in native AttributeGraph). Only inside ``value``.
+    public var context: RuleContext<Value> { RuleContext(attribute: attribute) }
 }
 
 extension Rule {

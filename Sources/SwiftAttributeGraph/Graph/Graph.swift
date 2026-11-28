@@ -67,6 +67,16 @@ public final class Graph {
     /// Stack that a nested rule update must leave free; see ``nestedUpdateWouldExhaustStack()``.
     var stackMarginBytes = Graph.defaultStackMarginBytes
     @exclusivity(unchecked) @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
+    /// The context of the ``StatefulRule`` whose `updateValue()` is running (what `StatefulRule.context` returns).
+    var activeRuleContext: Any?
+
+    /// Runs `body` with `context` as the running stateful rule's context, restoring the previous one afterwards.
+    func withActiveContext<Value>(_ context: RuleContext<Value>, _ body: () -> Void) {
+        let previous = activeRuleContext
+        activeRuleContext = context
+        defer { activeRuleContext = previous }
+        body()
+    }
     @exclusivity(unchecked) var isResumingStep = false
     /// Number of times a rule has been executed (recalculations) since the graph was created.
     @exclusivity(unchecked) public internal(set) var recalculationCount = 0

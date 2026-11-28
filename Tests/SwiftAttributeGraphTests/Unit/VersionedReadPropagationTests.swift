@@ -47,7 +47,7 @@ extension VersionedReadPropagationTests {
         let version: Attribute<UInt64>
         let counter: Counter
 
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             counter.runs += 1
             let base = source.value
             let v = Int(version.value)

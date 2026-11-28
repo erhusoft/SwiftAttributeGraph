@@ -47,13 +47,14 @@ import Testing
     }
 
     struct SynchronousSelect: StatefulRule {
+        typealias Value = Int
         let selector: Attribute<Int>
         let left: Attribute<Int>
         let right: Attribute<Int>
         let bias: Int
         let index: Int
         let counts: Counts
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             counts.starts[index] += 1
             let selector = selector.value
             context.value = selector &+ (selector % 2 == 0 ? left.value : right.value) &+ bias

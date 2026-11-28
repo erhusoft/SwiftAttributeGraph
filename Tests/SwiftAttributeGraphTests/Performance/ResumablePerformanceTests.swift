@@ -29,10 +29,11 @@ import Testing
         }
     }
     struct SynchronousSum: StatefulRule {
+        typealias Value = Int
         let first: Attribute<Int>
         let second: Attribute<Int>
         static var initialValue: Int? { 0 }
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             let a = first.value, b = second.value
             if context.hasChanged(first) { context.value = a + b }
         }

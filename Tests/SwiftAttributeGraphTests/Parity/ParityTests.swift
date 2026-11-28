@@ -205,7 +205,7 @@ import Testing
             let useB: Attribute<Bool>
             let runs: Counter
 
-            mutating func updateValue(_ context: inout RuleContext<Int>) {
+            mutating func updateValue() {
                 runs.runs += 1
                 if useB.value {
                     _ = b.value
@@ -237,7 +237,7 @@ import Testing
             let input: Attribute<Int>
             let runs: Counter
 
-            mutating func updateValue(_ context: inout RuleContext<Int>) {
+            mutating func updateValue() {
                 runs.runs += 1
                 let x = input.value
                 if x != 10 && x != 15 {
@@ -384,7 +384,7 @@ import Testing
 
     private struct ClosureStateful<Value>: StatefulRule {
         let body: (inout RuleContext<Value>) -> Void
-        mutating func updateValue(_ context: inout RuleContext<Value>) { body(&context) }
+        mutating func updateValue() { var ctx = context; body(&ctx) }
     }
 
     @Test func resetSourceRevertsToInitialAfterMultipleRedirects() {

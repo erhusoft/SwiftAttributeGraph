@@ -12,8 +12,8 @@ public protocol StatefulRule: _AttributeBody {
     associatedtype Value
     /// The value before the first run, if the rule has one. Without it, the first run must write a value.
     static var initialValue: Value? { get }
-    /// Runs when an input changed. Set ``RuleContext/value`` to change the attribute; leave it alone to keep it.
-    mutating func updateValue(_ context: inout RuleContext<Value>)
+    /// Runs when an input changed. Set ``value`` (or ``context``'s value) to change the attribute; leave it alone to keep it.
+    mutating func updateValue()
 }
 
 extension StatefulRule {
@@ -25,7 +25,34 @@ extension StatefulRule {
     /// Runs ``updateValue(_:)`` on the rule stored at `pointer`, with a context for `attribute` (`StatefulRule._update(_:attribute:)` in
     /// native AttributeGraph). What the rule writes to the context becomes the value of `attribute`.
     public static func _update(_ pointer: UnsafeMutableRawPointer, attribute: AnyAttribute) {
-        var context = RuleContext<Value>(attribute: attribute.unsafeCast(to: Value.self))
-        pointer.assumingMemoryBound(to: Self.self).pointee.updateValue(&context)
+        let context = RuleContext<Value>(attribute: attribute.unsafeCast(to: Value.self))
+        guard let graph = ThreadLocalGraph.current() else {
+            pointer.assumingMemoryBound(to: Self.self).pointee.updateValue()
+            return
+        }
+        graph.withActiveContext(context) { pointer.assumingMemoryBound(to: Self.self).pointee.updateValue() }
     }
+}
+
+extension StatefulRule {
+    /// The attribute this rule computes (`StatefulRule.attribute` in native AttributeGraph). Only inside ``updateValue()``.
+    public var attribute: Attribute<Value> { context.attribute }
+
+    /// The context of the running update (`StatefulRule.context` in native AttributeGraph). Only inside ``updateValue()``.
+    public var context: RuleContext<Value> {
+        guard let graph = ThreadLocalGraph.current(), let active = graph.activeRuleContext as? RuleContext<Value> else {
+            preconditionFailure("StatefulRule.context used outside updateValue()")
+        }
+        return active
+    }
+
+    /// The value of the attribute; the previous one when the rule starts. Setting it makes the attribute take the new
+    /// value (`StatefulRule.value` in native AttributeGraph).
+    public var value: Value {
+        get { context.value }
+        nonmutating set { context.value = newValue }
+    }
+
+    /// Whether the attribute has a value to read: false only on a first run without an ``initialValue``.
+    public var hasValue: Bool { context.hasValue }
 }

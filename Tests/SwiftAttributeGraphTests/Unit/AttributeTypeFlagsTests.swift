@@ -8,7 +8,7 @@ import Testing
     struct PlainRule: Rule { var value: Int { 1 } }
     struct PlainStateful: StatefulRule {
         typealias Value = Int
-        mutating func updateValue(_ context: inout RuleContext<Int>) { context.value = 1 }
+        mutating func updateValue() { context.value = 1 }
     }
     struct Watched: ObservedAttribute { mutating func destroy() {} }
     struct FlagsOverride: _AttributeBody { static var flags: AttributeTypeFlags { [.hasDestroySelf] } }

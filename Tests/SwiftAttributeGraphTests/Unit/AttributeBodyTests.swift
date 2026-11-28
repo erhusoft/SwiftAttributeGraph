@@ -64,7 +64,7 @@ struct AttributeBodyTests {
     struct FactorStatefulRule: StatefulRule {
         typealias Value = Int
         let factor: Int
-        mutating func updateValue(_ context: inout RuleContext<Int>) { context.value = factor }
+        mutating func updateValue() { context.value = factor }
     }
 
     struct BodyRecorder: AttributeBodyVisitor {

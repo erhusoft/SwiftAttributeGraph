@@ -19,7 +19,7 @@ import Testing
         typealias Value = Int
         let id: Int
         let counter: Counter
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             counter.runs += 1
             context.value = id * 100
         }

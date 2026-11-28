@@ -42,7 +42,7 @@ import Testing
         typealias Value = Int
         let read: () -> Int
         let runs: Runs
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             runs.count += 1
             context.value = read()
         }

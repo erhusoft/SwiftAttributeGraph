@@ -9,9 +9,10 @@ import Testing
     // MARK: The two acceptance tests of the plan
 
     private struct Sum: StatefulRule {
+        typealias Value = Int
         let input: Attribute<Int>
         static var initialValue: Int? { 0 }
-        mutating func updateValue(_ context: inout RuleContext<Int>) { context.value += input.value }
+        mutating func updateValue() { context.value += input.value }
     }
 
     /// A rule that accumulates: it adds the input to its previous value each time it runs.
@@ -189,9 +190,10 @@ import Testing
     // MARK: The rule's own state
 
     private struct RunCounter: StatefulRule {
+        typealias Value = Int
         let input: Attribute<Int>
         var runs = 0
-        mutating func updateValue(_ context: inout RuleContext<Int>) { _ = input.value; runs += 1; context.value = runs }
+        mutating func updateValue() { _ = input.value; runs += 1; context.value = runs }
     }
 
     @Test func aRuleKeepsItsOwnStateBetweenRuns() {
@@ -250,8 +252,9 @@ import Testing
 
     private final class Tracker { nonisolated(unsafe) static var alive = 0; init() { Self.alive += 1 }; deinit { Self.alive -= 1 } }
     private struct Holding: StatefulRule {
+        typealias Value = Int
         let tracker = Tracker()
-        mutating func updateValue(_ context: inout RuleContext<Int>) { context.value = 1 }
+        mutating func updateValue() { context.value = 1 }
     }
 
     @Test func theStateOfARuleIsReleasedWithItsSubgraph() {

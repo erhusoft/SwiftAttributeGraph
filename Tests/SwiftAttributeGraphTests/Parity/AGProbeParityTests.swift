@@ -35,18 +35,20 @@ import SwiftAttributeGraph
     }
 
     private struct ParityStatefulUnconditional: StatefulRule {
+        typealias Value = Int
         let a: Attribute<Int>
         let counter: Counter
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             counter.value += 1
             context.value = a.value % 2
         }
     }
 
     private struct ParityStatefulConditional: StatefulRule {
+        typealias Value = Int
         let a: Attribute<Int>
         let counter: Counter
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             counter.value += 1
             let next = a.value % 2
             if !context.hasValue || context.value != next {

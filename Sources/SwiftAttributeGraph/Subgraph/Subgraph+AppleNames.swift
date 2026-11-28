@@ -23,7 +23,7 @@ extension Subgraph {
         owningGraph().invalidate(self)
     }
 
-    private func owningGraph() -> Graph {
+    func owningGraph() -> Graph {
         guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
             preconditionFailure("Subgraph used after its graph was released")
         }

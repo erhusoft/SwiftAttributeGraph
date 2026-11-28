@@ -363,7 +363,7 @@ import Testing
         static var initialValue: Int { 0 }
         var source: Attribute<Int>
         var bonus: Int
-        mutating func updateValue(_ context: inout RuleContext<Int>) {
+        mutating func updateValue() {
             context.value = source.value + bonus
         }
     }

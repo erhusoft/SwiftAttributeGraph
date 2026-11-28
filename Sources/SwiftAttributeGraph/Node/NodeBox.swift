@@ -179,8 +179,8 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
-        var context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
-        rule.updateValue(&context)
+        let context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
+        graph.withActiveContext(context) { rule.updateValue() }
         return finish(context)
     }
 
