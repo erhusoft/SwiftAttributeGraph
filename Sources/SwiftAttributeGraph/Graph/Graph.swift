@@ -376,6 +376,9 @@ public final class Graph {
                             if table.state[m] & NodeState.dirty == 0 { updatedAny = true }
                         }
                     }
+                    // Native `Subgraph::update` delivers the pending invalidations after each subgraph it processes, not only at the end
+                    // (decompiled 15.8.3; fuzzer seed 4083).
+                    if !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
                 }
             }
             // Cleared only after the last pass: what became dirty during the walk was updated in this same call.

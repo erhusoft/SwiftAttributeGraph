@@ -423,4 +423,35 @@ import Testing
         s.forEach(AnyAttribute.Flags(rawValue: 8)) { visited.append($0) }
         #expect(visited.isEmpty)
     }
+
+    @Test func aRuleThatNeverRanStillRunsWhenItsOnlyInputDidNotChange() { // fuzzer seed 1046
+        struct Clamp: Rule { let a: Attribute<Int>; var value: Int { min(a.value, 10) } }
+        struct Copy: Rule { let a: Attribute<Int>; var value: Int { a.value } }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let source = graph.withCurrent(sg) { Attribute(value: 20) }
+        let middle = graph.withCurrent(sg) { Attribute(Clamp(a: source)) }
+        let late = graph.withCurrent(sg) { Attribute(Copy(a: source)) }
+        _ = graph.value(of: middle)
+        late.addInput(middle.erased)               // the only input of a rule with no value yet
+        graph.setValue(30, for: source)            // middle runs again and gives 10 again
+        _ = graph.value(of: middle)
+        #expect(graph.value(of: late) == 30)
+    }
+
+    @Test func updateDeliversThePendingInvalidationsAfterEachSubgraphItProcesses() { // fuzzer seed 4083
+        struct InvalidatesParent: Rule {
+            let target: Subgraph
+            var value: Int { target.invalidate(); return 1 }
+        }
+        let graph = Graph()
+        let s0 = graph.makeSubgraph(), child = graph.makeSubgraph(parent: s0), pending = graph.makeSubgraph()
+        var events: [String] = []
+        _ = s0.addObserver { events.append("s0") }
+        _ = pending.addObserver { events.append("pending") }
+        let rule = graph.withCurrent(child) { Attribute(InvalidatesParent(target: s0)) }
+        rule.flags = AnyAttribute.Flags(rawValue: 2)
+        graph.withMainThreadHandler({ $0() }) { pending.invalidate() }
+        s0.update(flags: AnyAttribute.Flags(rawValue: 2))
+        #expect(events == ["pending", "s0"])
+    }
 }

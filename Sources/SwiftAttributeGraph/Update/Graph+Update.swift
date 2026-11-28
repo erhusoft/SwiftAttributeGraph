@@ -742,7 +742,9 @@ extension Graph {
                 for dependent in dependents {
                     let dep = Int(dependent)
                     let depState = table.state[dep]
+                    // A reader that never ran has no value: it must run whatever its inputs did (found by the full-graph fuzzer, seed 1046).
                     if depState & NodeState.dirty != 0,
+                       depState & NodeState.hasValue != 0,
                        depState & (NodeState.pending | NodeState.stateful) == 0,
                        table.inputs[dep].count == 1,
                        table.inputs[dep][0].source == node,
