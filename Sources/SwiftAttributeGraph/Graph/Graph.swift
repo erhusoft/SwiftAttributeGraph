@@ -329,10 +329,10 @@ public final class Graph {
             deferringSubgraphInvalidationDepth -= 1
             if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
         }
+        // Native does not go down into a child that lives in another context, nor into what is below it, although `intersects` counts it
+        // (`ver16`, seed 5022; `Subgraph::apply`).
         let startContext = subgraphs.context(of: subgraph.id.index)
-        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
-            // Native does not go down into a child that lives in another context, although `intersects` counts it (`ver16`, seed 5022).
-            guard subgraphs.context(of: sgIndex) == startContext else { continue }
+        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index, context: startContext) {
             // Native visits the attributes of a subgraph in the reverse of the order their flags were set, not of their creation (`ver15b`).
             let members = subgraphs.members[Int(sgIndex)]
             var matching: [(member: UInt32, sequence: UInt64, position: Int)] = []

@@ -267,7 +267,10 @@ struct SubgraphTable {
     /// The subgraph and all its non-falling descendants in pre-order where child subgraphs are visited in reverse
     /// creation order, matching `Subgraph.forEach` and `Subgraph.update(flags:)` in native AttributeGraph.
     /// Deduplicates DAG diamonds with `visitedEpoch` and uses an explicit stack.
-    mutating func reverseCreationSubgraphOrder(from root: UInt32) -> [UInt32] {
+    ///
+    /// With `context`, a subgraph of another context is skipped together with everything below it, as native `Subgraph::apply` does
+    /// (it pushes the children only of the subgraphs it processes).
+    mutating func reverseCreationSubgraphOrder(from root: UInt32, context: UInt32? = nil) -> [UInt32] {
         guard !falling[Int(root)] else { return [] }
         let epoch = nextEpoch()
         var result: [UInt32] = []
@@ -275,6 +278,7 @@ struct SubgraphTable {
         while let current = stack.popLast() {
             let c = Int(current)
             if falling[c] || visitedEpoch[c] == epoch { continue }
+            if let context, contexts[c] != context { continue }
             visitedEpoch[c] = epoch
             result.append(current)
             for child in rawChildren[c] where child != SubgraphTable.none {

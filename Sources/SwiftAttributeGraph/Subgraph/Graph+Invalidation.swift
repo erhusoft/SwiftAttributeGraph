@@ -64,9 +64,9 @@ extension Graph {
         if evaluatingNode != Graph.noNode || isInvalidating || deferringSubgraphInvalidationDepth > 0 {
             // Only the requested subgraph reads as invalidated until the request is delivered: its children stay valid, and dropping the
             // handle of one of them delivers the pending requests (oracle scenarios `ver14b1a` to `ver14b1d`, `ver14b2`).
-            let plan = subgraphs.invalidationPlan(from: subgraph.id.index)
+            // Native `invalidate_and_delete_` only unlinks the subgraph from its parents (done above), pushes it on the pending stack and marks it;
+            // the children and their other parents are touched when the request is delivered (`invalidate_now`).
             subgraphs.setFalling(index: subgraph.id.index, true)
-            for (p, c) in plan.detachedEdges { subgraphs.removeChild(c, from: p) }
             deferredInvalidations.append(subgraph)
             return
         }

@@ -390,4 +390,37 @@ import Testing
         s0.forEach(mask) { visited.append($0) }
         #expect(visited.isEmpty)
     }
+
+    @Test func aPendingInvalidationLeavesTheTreeAloneUntilItIsDelivered() { // ver16c2
+        let graph = Graph()
+        let ctx = graph.makeSubgraphContext()
+        var s1: SubgraphLease? = SubgraphLease(adopting: graph.makeSubgraph(context: ctx), graph: graph)
+        var s2: SubgraphLease? = SubgraphLease(adopting: graph.makeSubgraph(context: ctx), graph: graph)
+        var s4: SubgraphLease? = SubgraphLease(adopting: graph.makeSubgraph(context: ctx), graph: graph)
+        s1!.subgraph.addChild(s2!.subgraph)
+        s4!.subgraph.addChild(s2!.subgraph)
+        s1!.subgraph.addChild(s4!.subgraph)
+        var events: [String] = []
+        _ = s1!.subgraph.addObserver { events.append("s1") }
+        _ = s2!.subgraph.addObserver { events.append("s2") }
+        _ = s4!.subgraph.addObserver { events.append("s4") }
+        graph.withMainThreadHandler({ $0() }) { s1!.subgraph.invalidate() }
+        s4 = nil
+        s2 = nil
+        s1 = nil
+        #expect(events == ["s4", "s2", "s1"])
+    }
+
+    @Test func forEachDoesNotGoBelowAChildOfAnotherContext() { // Subgraph::apply pushes the children only of the subgraphs it processes
+        let graph = Graph()
+        let b = graph.makeSubgraphContext(), a = graph.makeSubgraphContext()
+        let s = graph.makeSubgraph(context: b)
+        let child = graph.makeSubgraph(parent: s, context: a)
+        let grand = graph.makeSubgraph(parent: child, context: b)
+        let g = graph.withCurrent(grand) { Attribute(value: 1) }
+        g.flags = AnyAttribute.Flags(rawValue: 8)
+        var visited: [AnyAttribute] = []
+        s.forEach(AnyAttribute.Flags(rawValue: 8)) { visited.append($0) }
+        #expect(visited.isEmpty)
+    }
 }
