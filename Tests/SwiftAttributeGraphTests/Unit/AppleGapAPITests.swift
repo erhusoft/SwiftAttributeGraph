@@ -571,4 +571,39 @@ import Testing
             graph.setValue(77, for: rule)
         }
     }
+
+    final class ChangedLog { var flags: [Bool] = [] }
+    struct WatchesTwo: StatefulRule {
+        typealias Value = Int
+        let a: Attribute<Int>, b: Attribute<Int>, log: ChangedLog
+        mutating func updateValue() {
+            let x = context.changedValue(of: a), y = context.changedValue(of: b)
+            log.flags.append(y.changed)
+            value = x.value + y.value
+        }
+    }
+
+    @Test func addInputOnADirtyRuleFlagsTheEdgeAsChanged() { // fuzzer seeds 202062, 208568, 220406; ver24
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(value: 1) }, b = graph.withCurrent(sg) { Attribute(value: 10) }
+        let log = ChangedLog()
+        let rule = graph.withCurrent(sg) { Attribute(WatchesTwo(a: a, b: b, log: log)) }
+        _ = graph.value(of: rule)
+        graph.setValue(5, for: a)                 // the rule is dirty, b did not change
+        rule.addInput(b.erased)                   // b is already an input: native still flags the edge as changed
+        _ = graph.value(of: rule)
+        #expect(log.flags == [true, true])
+    }
+
+    @Test func addInputOnACleanRuleLeavesTheEdgeAsItWas() {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(value: 1) }, b = graph.withCurrent(sg) { Attribute(value: 10) }
+        let log = ChangedLog()
+        let rule = graph.withCurrent(sg) { Attribute(WatchesTwo(a: a, b: b, log: log)) }
+        _ = graph.value(of: rule)
+        rule.addInput(b.erased)                   // not dirty: the edge keeps what it said
+        graph.setValue(5, for: a)
+        _ = graph.value(of: rule)
+        #expect(log.flags == [true, false])
+    }
 }

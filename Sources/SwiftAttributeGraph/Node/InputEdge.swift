@@ -11,6 +11,9 @@ struct InputEdge {
     /// For stateful rules: whether the source's version differed from `seenVersion` when the rule's run began.
     /// A new edge counts as changed.
     var changed: Bool = true
+    /// Set by `addInput` when the consumer is dirty at that moment: the next run sees the edge as changed whatever the version says (native flags the
+    /// edge with the dirty bit of the node, decompiled `Graph::add_input`).
+    var forcedChanged: Bool = false
     /// The position of this node (the consumer) in `outputs[source]`. Kept up to date by `removeOutput`
     /// (swap-with-last) so edge removal is O(1) instead of O(degree). Set by `recordRead`.
     var positionInOutputs: UInt32 = Graph.noNode

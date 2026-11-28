@@ -7,7 +7,8 @@ extension Graph {
             for i in table.inputs[n].indices {
                 let edge = table.inputs[n][i]
                 table.inputs[n][i].read = false
-                table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion
+                table.inputs[n][i].changed = table.versions[Int(edge.source)] != edge.seenVersion || edge.forcedChanged
+                table.inputs[n][i].forcedChanged = false
             }
         }
 

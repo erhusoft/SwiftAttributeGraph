@@ -22,7 +22,17 @@ extension Graph {
             "attribute references can't cross graph namespaces")
         // An edge that already exists is left as it is: adding it again reads nothing, so the version the rule saw must not move (fuzzer seed
         // 19905: the rule would have kept a stale value).
-        if table.inputs[Int(attribute1.id.index)].contains(where: { $0.source == attribute2.id.index }) { return }
+        // Native creates the new edge flagged as changed when the node is dirty at that moment (decompiled `Graph::add_input`; fuzzer seeds 202062,
+        // 208568, 220406 and `ver24`): a stateful rule then sees the source as changed through `changedValue`.
+        let consumer = Int(attribute1.id.index)
+        if let position = table.inputs[consumer].firstIndex(where: { $0.source == attribute2.id.index }) {
+            if table.state[consumer] & NodeState.dirty != 0 { table.inputs[consumer][position].forcedChanged = true }
+            return
+        }
         recordRead(of: attribute2.id.index, by: attribute1.id.index)
+        if table.state[consumer] & NodeState.dirty != 0,
+           let position = table.inputs[consumer].firstIndex(where: { $0.source == attribute2.id.index }) {
+            table.inputs[consumer][position].forcedChanged = true
+        }
     }
 }

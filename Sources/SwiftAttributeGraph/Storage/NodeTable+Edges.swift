@@ -39,7 +39,8 @@ extension NodeTable {
                 let edge = edges[i]
                 edges[i].read = edge.keepForNextPrune
                 edges[i].keepForNextPrune = false
-                edges[i].changed = versions[Int(edge.source)] != edge.seenVersion
+                edges[i].changed = versions[Int(edge.source)] != edge.seenVersion || edge.forcedChanged
+                edges[i].forcedChanged = false
             }
         }
     }
