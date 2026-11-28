@@ -121,7 +121,10 @@ extension Graph {
             transactionCount &+= 1
             if needsUpdateFlag { clearNeedsUpdateFlags() }
         }
-        if state & NodeState.dirty != 0 {
+        // Read from outside a rule, an input that has a value is not brought up to date through the edges `addInput` gave it: native returns what it
+        // holds and leaves its sources alone (fuzzer seeds 1995, 24432, 62457; `ver19a3`).
+        let isPlainInput = state & NodeState.isRule == 0 && state & NodeState.hasValue != 0 && evaluatingNode == Graph.noNode
+        if state & NodeState.dirty != 0 && !isPlainInput {
             // Parity with Apple: a dirty input read here, even inside a resumable rule, updates synchronously.
             // Only a read made while a rule runs nests: the top-level read from outside a rule starts from the loop.
             let nests = evaluatingNode != Graph.noNode
@@ -729,8 +732,7 @@ extension Graph {
             return
         }
 
-        // An input has no rule that reads: the edges `addInput` gave it stay (fuzzer seed 1419: writing it still stops the program, as native does).
-        if table.state[n] & NodeState.isRule != 0 { pruneEdges(of: node) }
+        pruneEdges(of: node)
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending | NodeState.selfModified))
             | NodeState.hasValue
         if changed {

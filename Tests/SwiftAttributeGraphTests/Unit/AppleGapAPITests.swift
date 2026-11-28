@@ -498,4 +498,36 @@ import Testing
         sg.forEach(f) { order.append($0) }
         #expect(order == [13, 3, 12, 2, 1].map { attrs[$0 - 1].erased })
     }
+
+    final class Counter { var runs = 0 }
+    struct Counting: Rule {
+        let source: Attribute<Int>; let counter: Counter
+        var value: Int { counter.runs += 1; return source.value }
+    }
+
+    @Test func readingAnInputFromOutsideDoesNotEvaluateTheSourcesAddInputGaveIt() { // fuzzer seeds 1995, 24432, 62457
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let base = graph.withCurrent(sg) { Attribute(value: 1) }
+        let counter = Counter()
+        let source = graph.withCurrent(sg) { Attribute(Counting(source: base, counter: counter)) }
+        let input = graph.withCurrent(sg) { Attribute(value: 7) }
+        _ = graph.value(of: source)
+        input.addInput(source.erased)
+        graph.setValue(2, for: base)                 // the source is dirty, so the input is dirty through its edge
+        #expect(graph.value(of: input) == 7)
+        #expect(counter.runs == 1)
+    }
+
+    @Test func readingAnInputFromInsideARuleBringsItUpToDateAndItMayBeWrittenAfterwards() { // ver19a4, fuzzer seed 12182
+        struct ReadsInput: Rule { let input: Attribute<Int>; var value: Int { input.value } }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let base = graph.withCurrent(sg) { Attribute(value: 1) }
+        let input = graph.withCurrent(sg) { Attribute(value: 7) }
+        let reader = graph.withCurrent(sg) { Attribute(ReadsInput(input: input)) }
+        input.addInput(base.erased)
+        graph.setValue(2, for: base)
+        _ = graph.value(of: reader)
+        graph.setValue(99, for: input)
+        #expect(graph.value(of: reader) == 99)
+    }
 }
