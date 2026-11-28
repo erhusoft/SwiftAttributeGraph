@@ -8,3 +8,12 @@ public protocol Rule: _AttributeBody {
     /// Computes the value. Called lazily, and only when an input changed.
     var value: Value { get }
 }
+
+extension Rule {
+    /// Runs the rule stored at `pointer` and writes its value to `attribute` (`Rule._update(_:attribute:)` in native AttributeGraph): the
+    /// function `Rule.cachedValue` hands to `_cachedValue` as the body of the attribute it creates.
+    public static func _update(_ pointer: UnsafeMutableRawPointer, attribute: AnyAttribute) {
+        let rule = pointer.assumingMemoryBound(to: Self.self).pointee
+        RuleContext<Value>(attribute: attribute.unsafeCast(to: Value.self)).value = rule.value
+    }
+}

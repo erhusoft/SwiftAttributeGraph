@@ -1,5 +1,5 @@
 extension AnyAttribute {
-    private var introspectedGraph: Graph {
+    fileprivate var introspectedGraph: Graph {
         guard let graph = GraphRegistry.graph(forTag: id.graphTag) else {
             preconditionFailure("the graph of the attribute was released")
         }
@@ -69,5 +69,23 @@ extension Attribute {
                 raw.baseAddress!.advanced(by: offset).assumingMemoryBound(to: Member.self).pointee
             }
         }, isEqual: { _, _ in false })
+    }
+}
+
+extension AnyAttribute {
+    /// An attribute that reads the value `offset` bytes into this attribute's, whose type is given when it is cast
+    /// (`AnyAttribute.unsafeOffset(at:)` in native AttributeGraph; oracle scenarios `u5a` and `u5b`). It is made in the current
+    /// subgraph, and stops the program when there is none (`attempting to create attribute with no subgraph`).
+    ///
+    /// Cast it with ``unsafeCast(to:)``: the cast is the attribute that reads the bytes, as one per type. Reading one whose range lies outside
+    /// the value stops the program (`invalid value size for attribute`), and like any offset attribute it is neither direct nor indirect
+    /// (``valueType``, ``indirectDependency``... stop the program).
+    public func unsafeOffset(at offset: Int) -> AnyAttribute {
+        let graph = introspectedGraph
+        precondition(offset >= 0 && offset < 0x3fff_ffff, "invalid offset: \(offset)")
+        let node = ErasedOffsetNode(source: id, offset: offset)
+        let made = graph.allocate(node, state: 0)
+        erasedOffsetsMade += 1
+        return AnyAttribute(id: made)
     }
 }

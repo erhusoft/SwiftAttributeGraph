@@ -6,6 +6,9 @@ public struct Subgraph: Hashable, Sendable {
     /// Alias matching `Subgraph.Flags` in native AttributeGraph.
     public typealias Flags = AttributeFlags
 
+    /// The flags of a child subgraph, as native names them (`Subgraph.ChildFlags`).
+    public typealias ChildFlags = AnyAttribute.Flags
+
     /// The ID of the subgraph inside its graph.
     public let id: SubgraphID
 

@@ -20,6 +20,10 @@
     func resume(in graph: Graph, node: AttributeID, firstStep: Bool) -> (step: RuleStep, changed: Bool) {
         preconditionFailure("resume() called on a node that is not resumable")
     }
+    /// An attribute holding the `Member` that sits `offset` bytes into the value of `source`, the attribute this node is
+    /// (`Attribute.unsafeOffset(at:as:)`). Only nodes that hold a typed value can make one.
+    func offsetAttribute<Member>(of source: AttributeID, at offset: Int, as _: Member.Type) -> AttributeID? { nil }
+
     /// Mutates the stored rule body in place if its type is `R`, returning `true` when matched.
     func mutateRuleBody<R>(as type: R.Type, _ body: (inout R) -> Void) -> Bool { false }
 
@@ -53,6 +57,10 @@
     @usableFromInline let type: NodeType<Value>
 
     override var valueType: Any.Type { Value.self }
+
+    override func offsetAttribute<Member>(of source: AttributeID, at offset: Int, as member: Member.Type) -> AttributeID? {
+        Attribute<Value>(id: source).unsafeOffset(at: offset, as: member).id
+    }
 
     /// Whether two values count as the same, resolved from the attribute's policy and the type when it was created.
     @inlinable var isEqual: (Value, Value) -> Bool { type.isEqual }
@@ -209,7 +217,11 @@ class AnyIndirectNode: NodeBox {
 
 /// A node that redirects to another attribute. It has no value of its own: reading
 /// it reads the source, and writing it writes to the source (when the terminal source is an input).
-final class IndirectNode<Value>: AnyIndirectNode {}
+final class IndirectNode<Value>: AnyIndirectNode {
+    override func offsetAttribute<Member>(of source: AttributeID, at offset: Int, as member: Member.Type) -> AttributeID? {
+        Attribute<Value>(id: source).unsafeOffset(at: offset, as: member).id
+    }
+}
 
 /// A stateful rule given as a closure.
 final class ClosureStatefulRuleNode<Value>: TypedNode<Value> {
