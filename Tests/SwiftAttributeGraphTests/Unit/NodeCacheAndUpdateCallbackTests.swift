@@ -256,7 +256,7 @@ struct NodeCacheAndUpdateCallbackTests {
         #expect(graph.value(of: a2) == 22)
     }
 
-    @Test func invalidatingGraphContextInsideRuleDefersFreeingUntilRuleExits() {
+    @Test func invalidatingGraphContextInsideRuleDefersFreeingUntilTheNextUpdate() {
         let graph = Graph()
         let ctx = graph.makeContext()
         let sg = ctx.makeSubgraph()
@@ -273,6 +273,8 @@ struct NodeCacheAndUpdateCallbackTests {
         }
 
         #expect(graph.value(of: reader) == 21)
+        #expect(notices == 0)
+        graph.deliverPendingInvalidations()
         #expect(notices == 1)
         #expect(!graph.table.isLive(attr.id))
     }

@@ -134,6 +134,7 @@ import Testing
         for _ in 0..<20_000 { current = graph.makeSubgraph(parent: current) }
         let rule = graph.makeRule { () -> Int in top.invalidate(); return 1 }
         _ = graph.value(of: rule)
+        graph.deliverPendingInvalidations()
         #expect(graph.liveSubgraphCount == 1)
     }
 

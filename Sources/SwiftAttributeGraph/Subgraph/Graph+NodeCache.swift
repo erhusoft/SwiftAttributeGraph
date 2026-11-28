@@ -88,6 +88,8 @@ extension Graph {
                 invalidate(sg)
             }
         }
+        // Native `Context::~Context` calls `invalidate_subgraphs`.
+        flushDeferredInvalidations()
     }
 
     func refreshHasAnyInvalidationCallback() {
