@@ -24,6 +24,7 @@ import Testing
         mutating func updateValue() {
             seen.attribute = attribute.erased
             seen.hadValue.append(hasValue)
+            if !hasValue { value = 100 }   // native does not show `initialValue` inside `updateValue()` (`api3b1`, `api3b2`)
             value = value + input.value
         }
     }
@@ -48,7 +49,7 @@ import Testing
         graph.setValue(5, for: input)
         #expect(graph.value(of: a) == 106)
         #expect(seen.attribute == a.erased)
-        #expect(seen.hadValue == [true, true])
+        #expect(seen.hadValue == [false, true])
     }
 
     @Test func aStatefulRuleContextOutsideTheUpdateStopsTheProgram() async {
@@ -123,5 +124,69 @@ import Testing
         let a = graph.withCurrent(sg) { Attribute(value: 4) }
         #expect(OptionalAttribute<Int>().changedValue() == nil)
         #expect(OptionalAttribute(a).changedValue()?.value == 4)
+    }
+
+    @Test func aStatefulRuleDoesNotSeeItsInitialValueInsideUpdateValue() { // api3b1: hv=false (native)
+        struct Probe: StatefulRule {
+            typealias Value = Int
+            static var initialValue: Int? { 100 }
+            mutating func updateValue() { value = hasValue ? -1 : 5 }
+        }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(Probe()) }
+        #expect(graph.value(of: a) == 5)
+    }
+
+    @Test func readingTheValueOfAStatefulRuleWithNoValueStopsTheProgram() async { // api3b2: native traps even with initialValue
+        await #expect(processExitsWith: .failure) {
+            struct Reads: StatefulRule {
+                typealias Value = Int
+                static var initialValue: Int? { 100 }
+                mutating func updateValue() { _ = value }
+            }
+            let graph = Graph(); let sg = graph.makeSubgraph()
+            let a = graph.withCurrent(sg) { Attribute(Reads()) }
+            _ = graph.value(of: a)
+        }
+    }
+
+    @Test func forEachDefersTheInvalidationsAskedInsideItsCallbackAndDeliversThemMostRecentFirst() { // fup-e1
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let c1 = graph.makeSubgraph(), c2 = graph.makeSubgraph()
+        var events: [String] = []
+        _ = c1.addObserver { events.append("c1") }
+        _ = c2.addObserver { events.append("c2") }
+        let a = graph.withCurrent(sg) { Attribute(value: 1) }
+        a.flags = AnyAttribute.Flags(rawValue: 1)
+        var inCallback: [String] = []
+        sg.forEach(AnyAttribute.Flags(rawValue: 1)) { _ in
+            c1.invalidate(); c2.invalidate()
+            inCallback = events
+        }
+        #expect(inCallback.isEmpty)
+        #expect(events == ["c2", "c1"])
+    }
+
+    @Test func applyDoesNotDeliverInvalidationsRequestedByARuleThatRanInsideIt() { // fup-c
+        struct Invalidates: Rule {
+            let child: Subgraph
+            var value: Int { child.invalidate(); return 1 }
+        }
+        let graph = Graph(); let sg = graph.makeSubgraph(); let child = graph.makeSubgraph()
+        var observed = 0
+        _ = child.addObserver { observed += 1 }
+        _ = sg.apply { graph.value(of: Attribute(Invalidates(child: child))) }
+        #expect(observed == 0)
+        sg.forEach(AnyAttribute.Flags(rawValue: 1)) { _ in }
+        #expect(observed == 1)
+    }
+
+    @Test func mutateBodyAsExternalRunsOnAValueAttribute() { // api8d: v=10
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let a = graph.withCurrent(sg) { Attribute(value: 10) }
+        var ran = false
+        a.mutateBody(as: External<Int>.self, invalidating: true) { _ in ran = true }
+        #expect(ran)
+        #expect(graph.value(of: a) == 10)
     }
 }

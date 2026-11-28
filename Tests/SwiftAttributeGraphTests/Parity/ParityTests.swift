@@ -239,6 +239,8 @@ import Testing
 
             mutating func updateValue() {
                 runs.runs += 1
+                // Native shows no `initialValue` inside `updateValue()`: the oracle probe writes it on the first run.
+                if !hasValue { context.value = 77 }
                 let x = input.value
                 if x != 10 && x != 15 {
                     context.value = x * 2

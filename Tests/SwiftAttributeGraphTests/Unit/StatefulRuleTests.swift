@@ -12,7 +12,7 @@ import Testing
         typealias Value = Int
         let input: Attribute<Int>
         static var initialValue: Int? { 0 }
-        mutating func updateValue() { context.value += input.value }
+        mutating func updateValue() { if !hasValue { value = 0 }; context.value += input.value }
     }
 
     /// A rule that accumulates: it adds the input to its previous value each time it runs.

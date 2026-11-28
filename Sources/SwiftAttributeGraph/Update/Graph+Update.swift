@@ -448,7 +448,8 @@ extension Graph {
         guard box.mutateRuleBody(as: type, body) else {
             preconditionFailure("mutateBody(of:as:invalidating:_:): the attribute does not hold a rule of type \(R.self)")
         }
-        if invalidating {
+        // An input has no rule to re-run: native keeps its value when asked to invalidate it after `mutateBody` (`api8d`, v=10).
+        if invalidating, table.state[Int(attribute.id.index)] & NodeState.isRule != 0 {
             invalidateRuleValue(attribute.erased)
             if evaluatingNode != Graph.noNode {
                 // Readers on the update stack keep this update's value but stay dirty (native parity).

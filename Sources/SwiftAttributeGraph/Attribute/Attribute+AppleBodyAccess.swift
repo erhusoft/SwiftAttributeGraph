@@ -64,11 +64,10 @@ extension OptionalAttribute {
 
 extension Subgraph {
     /// Runs `body` with this subgraph as the current one and returns its result (`Subgraph.apply(_:)` in native
-    /// AttributeGraph). Invalidations requested while it ran are delivered when it ends.
+    /// AttributeGraph). It delivers no pending invalidation when it ends [O, scenario `fup-c`]: those wait for the next `forEach`,
+    /// update or invalidation.
     public func apply<Value>(_ body: () -> Value) -> Value {
-        let graph = owningGraph()
-        defer { if graph.evaluatingNode == Graph.noNode && !graph.deferredInvalidations.isEmpty { graph.flushDeferredInvalidations() } }
-        return graph.withCurrent(self, body)
+        owningGraph().withCurrent(self, body)
     }
 
     /// Calls `callback` on every attribute of this subgraph and its descendants whose flags intersect `flags`

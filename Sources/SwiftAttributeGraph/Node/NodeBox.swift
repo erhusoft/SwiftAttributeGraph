@@ -90,6 +90,16 @@
 @usableFromInline final class InputNode<Value>: TypedNode<Value> {
     override var bodyType: Any.Type { External<Value>.self }
 
+    /// The body of an input is an `External<Value>`, which stores nothing; native lets `mutateBody(as: External<Value>.self)` run on it [O, `api8d`].
+    override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {
+        guard Target.self == External<Value>.self else { return false }
+        var external = External<Value>()
+        withUnsafeMutablePointer(to: &external) { ptr in
+            ptr.withMemoryRebound(to: Target.self, capacity: 1) { body(&$0.pointee) }
+        }
+        return true
+    }
+
     /// An input is never run, except one made with no value (`Attribute.init(type:)`), which is dirty until written: reading it stops the program.
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
         precondition(value != nil, "reading an attribute that has no value yet")
@@ -179,7 +189,7 @@ final class StatefulRuleNode<R: StatefulRule>: TypedNode<R.Value> {
     }
 
     override func evaluate(in graph: Graph, node: UInt32) -> Bool {
-        let context = RuleContext<R.Value>(graph: graph, node: node, value: value ?? R.initialValue)
+        let context = RuleContext<R.Value>(graph: graph, node: node, value: value)   // native ignores `StatefulRule.initialValue` inside `updateValue()` [O, `api3b1`, `api3b2`]
         graph.withActiveContext(context) { rule.updateValue() }
         return finish(context)
     }

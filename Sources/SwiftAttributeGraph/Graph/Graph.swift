@@ -314,8 +314,13 @@ public final class Graph {
     public func forEach(in subgraph: Subgraph, flags: AttributeFlags, _ body: (AnyAttribute) -> Void) {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return }
-        // Native `Subgraph::apply` delivers the pending invalidations when it ends.
-        defer { if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() } }
+        // Native `Subgraph::apply` (the C function behind `forEach`) defers the invalidations asked for inside the callback and delivers
+        // them, most recent first, when it ends (oracle scenarios `fup-e1`, `fup-c`; the Swift `Subgraph.apply(_:)` does not).
+        deferringSubgraphInvalidationDepth += 1
+        defer {
+            deferringSubgraphInvalidationDepth -= 1
+            if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+        }
         for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
             let members = subgraphs.members[Int(sgIndex)]
             for member in members.reversed() where table.isLive(index: member) {
