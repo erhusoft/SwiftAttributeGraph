@@ -8,6 +8,10 @@ public struct ComparisonOptions: OptionSet, Hashable, Sendable {
     /// Creates options from their raw value.
     public init(rawValue: UInt32) { self.rawValue = rawValue }
 
+    /// Options for `mode`: the raw value of the mode, nothing else (`ComparisonOptions.init(mode:)` in native AttributeGraph; measured on macOS 15.8.3:
+    /// raw 0, 1, 2 and 3 for the four modes).
+    public init(mode: ComparisonMode) { self.rawValue = UInt32(mode.rawValue) }
+
     /// Copy on write (`AGComparisonOptionsCopyOnWrite`, bit 8).
     public static let copyOnWrite = ComparisonOptions(rawValue: 1 << 8)
     /// Fetch the layouts synchronously, so mode 3 uses `==` at once (`AGComparisonOptionsFetchLayoutsSynchronously`, bit 9).

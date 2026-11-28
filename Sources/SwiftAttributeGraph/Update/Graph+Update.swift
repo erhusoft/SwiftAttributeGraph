@@ -512,6 +512,7 @@ extension Graph {
     @usableFromInline
     func endWrite(_ node: UInt32) {
         let index = Int(node)
+        markFirstValue(of: index)
         globalVersion &+= 1
         changeCount &+= 1
         table.versions[index] &+= 1
@@ -535,6 +536,7 @@ extension Graph {
 
         let oldValue = hasPartialEdgeComparison ? typedNode(attribute).value : nil
         guard typedNode(attribute).store(value) else { return }
+        markFirstValue(of: index)
         globalVersion &+= 1
         changeCount &+= 1
         table.versions[index] &+= 1

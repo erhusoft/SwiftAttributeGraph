@@ -90,6 +90,12 @@
 @usableFromInline final class InputNode<Value>: TypedNode<Value> {
     override var bodyType: Any.Type { External<Value>.self }
 
+    /// An input is never run, except one made with no value (`Attribute.init(type:)`), which is dirty until written: reading it stops the program.
+    override func evaluate(in graph: Graph, node: UInt32) -> Bool {
+        precondition(value != nil, "reading an attribute that has no value yet")
+        return false
+    }
+
     @inlinable
     override init(value: Value?, type: NodeType<Value>) {
         super.init(value: value, type: type)
