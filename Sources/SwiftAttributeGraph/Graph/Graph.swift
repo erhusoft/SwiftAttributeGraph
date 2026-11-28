@@ -72,6 +72,8 @@ public final class Graph {
     /// When each attribute that carries flags got them (the moment they went from none to some), which sets the order `forEach` visits them in.
     var flagMarkSequence: [UInt32: UInt64] = [:]
     var flagMarkCounter: UInt64 = 0
+    /// How many attributes native keeps in one page of a subgraph; `forEach` visits the pages from the newest to the oldest.
+    static let attributesPerPage = 12
 
     /// Runs `body` with `context` as the running stateful rule's context, restoring the previous one afterwards.
     func withActiveContext<Value>(_ context: RuleContext<Value>, _ body: () -> Void) {
@@ -333,15 +335,19 @@ public final class Graph {
         // (`ver16`, seed 5022; `Subgraph::apply`).
         let startContext = subgraphs.context(of: subgraph.id.index)
         for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index, context: startContext) {
-            // Native visits the attributes of a subgraph in the reverse of the order their flags were set, not of their creation (`ver15b`).
+            // Native keeps the attributes of a subgraph in pages of 12 (`ver19b`: the same for `Int`, `String` and rules; the order starts to
+            // differ at the 13th). It visits the newest page first, and inside a page the reverse of the order the flags were set (`ver15b`).
             let members = subgraphs.members[Int(sgIndex)]
-            var matching: [(member: UInt32, sequence: UInt64, position: Int)] = []
-            for (position, member) in members.reversed().enumerated() where table.isLive(index: member) {
+            var matching: [(member: UInt32, page: Int, sequence: UInt64, position: Int)] = []
+            for (creation, member) in members.enumerated() where table.isLive(index: member) {
                 if (table.flags[Int(member)] & flags.rawValue) != 0 {
-                    matching.append((member, flagMarkSequence[member] ?? 0, position))
+                    matching.append((member, creation / Graph.attributesPerPage, flagMarkSequence[member] ?? 0, members.count - creation))
                 }
             }
-            matching.sort { $0.sequence != $1.sequence ? $0.sequence > $1.sequence : $0.position < $1.position }
+            matching.sort {
+                if $0.page != $1.page { return $0.page > $1.page }
+                return $0.sequence != $1.sequence ? $0.sequence > $1.sequence : $0.position < $1.position
+            }
             for entry in matching {
                 let m = Int(entry.member)
                 guard table.isLive(index: entry.member), (table.flags[m] & flags.rawValue) != 0 else { continue }

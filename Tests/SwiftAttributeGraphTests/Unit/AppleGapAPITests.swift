@@ -478,4 +478,24 @@ import Testing
         rule.addInput(source.erased)                // already an input: nothing is read
         #expect(graph.value(of: rule) == 3)
     }
+
+    @Test func forEachVisitsThePagesOfTwelveFromTheNewestAndEachPageInTheReverseOfTheMarking() { // ver19b
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let attrs = (0..<40).map { _ in graph.withCurrent(sg) { Attribute(value: 0) } }
+        let f = AnyAttribute.Flags(rawValue: 1)
+        for n in [20, 1, 40, 25, 3] { attrs[n - 1].flags = f }
+        var order: [AnyAttribute] = []
+        sg.forEach(f) { order.append($0) }
+        #expect(order == [40, 25, 20, 3, 1].map { attrs[$0 - 1].erased })
+    }
+
+    @Test func theOrderOfForEachChangesAtTheThirteenthAttribute() { // ver19b-threshold
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let attrs = (0..<13).map { _ in graph.withCurrent(sg) { Attribute(value: 0) } }
+        let f = AnyAttribute.Flags(rawValue: 1)
+        for n in [1, 2, 12, 3, 13] { attrs[n - 1].flags = f }
+        var order: [AnyAttribute] = []
+        sg.forEach(f) { order.append($0) }
+        #expect(order == [13, 3, 12, 2, 1].map { attrs[$0 - 1].erased })
+    }
 }
