@@ -338,4 +338,32 @@ import Testing
         s.forEach(AnyAttribute.Flags(rawValue: 0x08)) { _ in }
         #expect(observed == 1)
     }
+
+    @Test func aPendingInvalidationMarksOnlyItsSubgraphAndDroppingAChildDeliversIt() { // ver14b1, ver14b2
+        let graph = Graph()
+        var s0: SubgraphLease? = SubgraphLease(graph: graph), s1: SubgraphLease? = SubgraphLease(graph: graph)
+        s0!.subgraph.addChild(s1!.subgraph)
+        var events: [String] = []
+        _ = s0!.subgraph.addObserver { events.append("s0") }
+        _ = s1!.subgraph.addObserver { events.append("s1") }
+        let other = SubgraphLease(graph: graph)
+        let rule = graph.withCurrent(other.subgraph) { Attribute(InvalidatesOther(other: s0!.subgraph)) }
+        _ = graph.value(of: rule)
+        #expect(!s0!.subgraph.isValid)
+        #expect(s1!.subgraph.isValid)
+        s0 = nil
+        #expect(events.isEmpty)
+        s1 = nil
+        #expect(events == ["s1", "s0"])
+    }
+
+    @Test func writingAValueAttributeThatHasInputsStopsTheProgram() async { // ver14b3b
+        await #expect(processExitsWith: .failure) {
+            let graph = Graph(); let sg = graph.makeSubgraph()
+            let a = graph.withCurrent(sg) { Attribute(value: 1) }
+            let b = graph.withCurrent(sg) { Attribute(value: 2) }
+            b.addInput(a.erased)
+            graph.setValue(3, for: b)
+        }
+    }
 }

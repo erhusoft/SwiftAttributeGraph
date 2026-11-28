@@ -505,6 +505,9 @@ extension Graph {
         let index = Int(id.index)
         precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
         if table.state[index] & NodeState.indirect != 0 || hasPartialEdgeComparison { return nil }
+        // Native stops in `value_set` when the attribute has had an input added (`ver14b3b`); an indirect attribute keeps an edge to its source and
+        // is written through it.
+        precondition(table.inputs[index].isEmpty, "setValue(_:for:): the attribute has inputs")
         return table.box(at: id.index)
     }
 

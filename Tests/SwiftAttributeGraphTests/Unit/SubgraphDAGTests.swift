@@ -87,7 +87,7 @@ struct SubgraphDAGTests {
         graph.withoutSubgraphInvalidation {
             p1.invalidate()
             #expect(!p1.isValid)
-            #expect(!sameCtxChild.isValid)
+            #expect(sameCtxChild.isValid)          // native: only the requested subgraph reads as invalid until delivery (`ver14b1c`)
             #expect(diffCtxChild.isValid)
             #expect(sameNotices == 0)
             #expect(diffNotices == 0)
