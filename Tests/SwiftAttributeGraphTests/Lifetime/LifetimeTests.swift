@@ -95,6 +95,7 @@ import Testing
         for round in 1...200 {
             graph.setValue(round, for: switcher)
             #expect(graph.value(of: host) == round)
+            graph.deliverPendingInvalidations()                                 // the next update delivers what the rule asked for
         }
         branch.invalidate()
         #expect(graph.nodeCount == baseNodes + 1)                               // `host` is the only addition

@@ -154,12 +154,11 @@ extension Graph {
         return value
     }
 
-    /// Runs the subgraph invalidations deferred during the read once no rule is running.
+    /// Ends a read. Native AttributeGraph delivers nothing here: the invalidations a rule asked for wait for the next explicit update or
+    /// invalidation (oracle scenarios `invalidate-graph-list-order`, `invalidate-graph-list-live`, `invalidate-freeing-timing`).
     @inline(__always)
     @usableFromInline
-    func endRead() {
-        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
-    }
+    func endRead() {}
 
     /// Options for ``value(of:options:)`` (the `options` argument of `AGGraphGetValue` in native AttributeGraph).
     ///
@@ -225,7 +224,6 @@ extension Graph {
                 guard let result = reader() as? Value else {
                     preconditionFailure("offsetFieldReaders: projected field type mismatch")
                 }
-                if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
                 return result
             }
             if table.state[Int(resolved.id.index)] & NodeState.dirty != 0 {
@@ -233,7 +231,6 @@ extension Graph {
                 update(resolved.id.index)
             }
             let value = typedNode(resolved).value.unsafelyUnwrapped
-            if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
             return value
         }
 
@@ -373,7 +370,6 @@ extension Graph {
                 }
             }
         }
-        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
     }
 
     /// Asserts that `attribute` is alive and structurally valid in the graph (`Attribute.validate()` in native

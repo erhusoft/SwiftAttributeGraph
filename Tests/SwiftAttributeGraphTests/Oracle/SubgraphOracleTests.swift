@@ -85,6 +85,7 @@ import Testing
                     } else {
                         let trigger = graph.makeRule { () -> Int in handle.invalidate(); return 0 }
                         _ = graph.value(of: trigger)
+                        graph.deliverPendingInvalidations()                // what a rule asked for is delivered by the next update
                         attributes.append(ModelAttribute(owner: 0, isRule: true, source: nil))
                         inputs.append(trigger); ids.append(trigger.id)
                     }

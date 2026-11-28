@@ -129,12 +129,15 @@ import Testing
             graph.setValue(1, for: tick)
             log.events.append("value=\(graph.value(of: reader))")
         }
+        // Queued invalidations are processed most recent first (oracle scenarios `deferred-notice-*`): asking for `b` first makes `a` go first,
+        // so that `a` is already freed when `b` notifies.
         let trigger = graph.makeRule { () -> Int in
-            a.invalidate()
             b.invalidate()
+            a.invalidate()
             return 0
         }
         _ = graph.value(of: trigger)
+        graph.deliverPendingInvalidations()
         #expect(log.events == ["value=99"])
         #expect(graph.nodeCount == 2 && graph.liveSubgraphCount == 1)
     }
@@ -151,19 +154,22 @@ import Testing
             #expect(graph.table.outputs[Int(source.id.index)].isEmpty)
             log.events.append("detached")
         }
+        // Queued invalidations are processed most recent first (oracle scenarios `deferred-notice-*`): asking for `b` first makes `a` go first,
+        // so that `a` is already freed when `b` notifies.
         let trigger = graph.makeRule { () -> Int in
-            a.invalidate()
             b.invalidate()
+            a.invalidate()
             return 0
         }
         _ = graph.value(of: trigger)
+        graph.deliverPendingInvalidations()
         #expect(log.events == ["detached"])
         #expect(graph.nodeCount == 1 && graph.liveSubgraphCount == 1)
     }
 
     // MARK: Invalidating from inside a rule (deferred)
 
-    @Test func theAttributesOfASubgraphInvalidatedByARuleStayReadableUntilTheUpdateEnds() {
+    @Test func theAttributesOfASubgraphInvalidatedByARuleStayReadableUntilTheNextUpdate() {
         let graph = Graph()
         let switcher = graph.makeInput(false)
         let branch = graph.makeSubgraph()
@@ -184,6 +190,10 @@ import Testing
         #expect(log.events == ["subgraph valid right after invalidate: false",
                                "alive right after invalidate: true",
                                "still readable: 7"])
+        // Native frees nothing when the read ends (oracle scenario `invalidate-freeing-timing`): the subgraph is invalid, its attributes stay.
+        #expect(graph.contains(state.id) && !branch.isValid)
+        #expect(graph.nodeCount == 3)                                      // `switcher`, `rule` and `state`
+        graph.deliverPendingInvalidations()
         #expect(!graph.contains(state.id) && !graph.isLive(branch) && !branch.isValid)
         #expect(graph.nodeCount == 2)                                      // `switcher` and `rule`
     }
@@ -207,6 +217,7 @@ import Testing
         graph.withCurrent(branch) { _ = graph.makeInput(1) }
         let rule = graph.makeRule { () -> Int in branch.invalidate(); branch.invalidate(); return 0 }
         _ = graph.value(of: rule)
+        graph.deliverPendingInvalidations()
         #expect(!graph.isLive(branch) && graph.nodeCount == 1)
     }
 
@@ -234,10 +245,11 @@ import Testing
             graph.makeRule { () -> Int in sub.invalidate(); return 5 }
         }
         #expect(graph.value(of: rule) == 5)
+        graph.deliverPendingInvalidations()
         #expect(!graph.contains(rule.id) && graph.nodeCount == 0)
     }
 
-    @Test func noticesOfADeferredInvalidationRunAfterTheUpdateNotInsideIt() {
+    @Test func noticesOfADeferredInvalidationWaitForTheNextUpdate() {
         let graph = Graph()
         let log = Log()
         let branch = graph.makeSubgraph()
@@ -248,6 +260,8 @@ import Testing
             return 0
         }
         _ = graph.value(of: rule)
+        #expect(log.events == ["rule done"])                               // nothing is delivered when the read ends
+        graph.deliverPendingInvalidations()
         #expect(log.events == ["rule done", "notice"])
     }
 
@@ -450,6 +464,7 @@ import Testing
                 }
             }
             precondition(graph.value(of: outer) == 9)
+            graph.deliverPendingInvalidations()
             precondition(!graph.isLive(sub))
             precondition(graph.nodeCount == 1 && graph.liveSubgraphCount == 2)
         }

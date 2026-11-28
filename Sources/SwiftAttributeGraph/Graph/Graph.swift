@@ -304,6 +304,8 @@ public final class Graph {
     public func forEach(in subgraph: Subgraph, flags: AttributeFlags, _ body: (AnyAttribute) -> Void) {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return }
+        // Native `Subgraph::apply` delivers the pending invalidations when it ends.
+        defer { if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() } }
         for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
             let members = subgraphs.members[Int(sgIndex)]
             for member in members.reversed() where table.isLive(index: member) {
@@ -322,8 +324,10 @@ public final class Graph {
     /// call. The ``isDirty(_:flags:)`` bits are cleared for `subgraph` and its descendants once the walk ends.
     public func update(_ subgraph: Subgraph, flags: AttributeFlags = .all) {
         assertOwnThread()
-        guard isValid(subgraph), flags.rawValue != 0 else { return }
+        // Native `Subgraph::update` delivers the pending invalidations on every path, also when there is nothing to update.
         defer { runCachePass() }
+        defer { if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() } }
+        guard isValid(subgraph), flags.rawValue != 0 else { return }
         withoutUpdate {
             var updatedAny = true
             while updatedAny {
@@ -347,9 +351,6 @@ public final class Graph {
                     subgraphs.clearDirtyFlags(flags.rawValue, on: sgIndex)
                 }
             }
-        }
-        if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty {
-            flushDeferredInvalidations()
         }
     }
 

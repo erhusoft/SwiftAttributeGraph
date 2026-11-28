@@ -210,8 +210,10 @@ import Testing
             graph.setValue(1, for: tick)
             seen.append(graph.value(of: reader))
         }
-        let trigger = graph.makeRule { () -> Int in a.invalidate(); b.invalidate(); return 0 }
+        // Processed most recent first (oracle scenarios `deferred-notice-*`): asking for `b` first makes `a` go first.
+        let trigger = graph.makeRule { () -> Int in b.invalidate(); a.invalidate(); return 0 }
         _ = graph.value(of: trigger)
+        graph.deliverPendingInvalidations()
         #expect(seen == [99])
         #expect(graph.nodeCount == 2 && graph.liveSubgraphCount == 1 && graph.frames.isEmpty)
     }

@@ -105,16 +105,15 @@ extension Graph {
         if !wasDeferring { runCachePass() }
     }
 
-    /// Runs the invalidations that were asked for while a rule was running. Called when the outermost update ends.
+    /// Runs the invalidations that were asked for while a rule was running, the most recent request first (native
+    /// `Graph::invalidate_subgraphs` pops its stack; oracle scenarios `invalidate-graph-list-order` and `-live`). Called where native calls it:
+    /// the end of an explicit invalidation, of `update(_:flags:)`, of `forEach`, of a deferral, and when a context is invalidated. Not when
+    /// a read ends. One requested while this runs goes on the stack and is taken next.
     func flushDeferredInvalidations() {
         guard !isInvalidating, evaluatingNode == Graph.noNode, deferringSubgraphInvalidationDepth == 0 else { return }
-        var next = 0
-        while next < deferredInvalidations.count {
-            let subgraph = deferredInvalidations[next]
-            next += 1
+        while let subgraph = deferredInvalidations.popLast() {
             if subgraphs.isLive(subgraph.id) { perform(subgraph) }       // an ancestor may have freed it already
         }
-        deferredInvalidations.removeAll(keepingCapacity: true)
     }
 
     private func perform(_ root: Subgraph) {
