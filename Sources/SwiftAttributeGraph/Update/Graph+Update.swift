@@ -613,7 +613,7 @@ extension Graph {
                 // Native `UpdateStack::update` does not bring up to date an input whose subgraph waits to be invalidated: it counts it as
                 // changed and goes on (fuzzer seeds 76354, 127117; decompiled 15.8.3).
                 while scan.stop < table.inputs[n].count,
-                      subgraphs.isFalling(index: table.owner(at: table.inputs[n][scan.stop].source)) {
+                      Graph.isSkippedInput(table, subgraphs, table.inputs[n][scan.stop].source) {
                     mustRun = true
                     scan = table.scanInputs(of: n, from: scan.stop + 1)
                     if scan.changed { mustRun = true }
@@ -629,7 +629,7 @@ extension Graph {
                     let edge = table.inputs[n][i]
                     let source = Int(edge.source)
                     if table.state[source] & NodeState.dirty != 0 {
-                        if subgraphs.isFalling(index: table.owner(at: edge.source)) {
+                        if Graph.isSkippedInput(table, subgraphs, edge.source) {
                             mustRun = true
                             i += 1
                             continue
@@ -918,5 +918,15 @@ extension Graph {
             }
             if midSource < source { low = mid + 1 } else { high = mid }
         }
+    }
+}
+
+
+extension Graph {
+    /// An input that has no value yet and whose subgraph waits to be invalidated is not brought up to date when the rule that reads it is verified:
+    /// native counts it as changed (fuzzer seeds 76354 and 127117). One that has a value is still updated (seed 1258).
+    @inline(__always)
+    static func isSkippedInput(_ table: NodeTable, _ subgraphs: SubgraphTable, _ source: UInt32) -> Bool {
+        table.state[Int(source)] & NodeState.hasValue == 0 && subgraphs.isFalling(index: table.owner(at: source))
     }
 }
