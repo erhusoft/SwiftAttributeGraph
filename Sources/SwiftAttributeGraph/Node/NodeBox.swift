@@ -19,6 +19,8 @@
     var layoutOfBody: (size: Int, alignment: Int) { (0, 1) }
     /// The size and alignment of the value, which native allocates in the page when a rule first runs.
     var layoutOfValue: (size: Int, alignment: Int) { (0, 1) }
+    /// Whether native allocates the value together with the node (an input has its value from the start), after it and aligned to the value.
+    var allocatesValueAtCreation: Bool { false }
 
     /// Runs the rule, stores its result and reports whether the value changed. Only rules override this.
     func evaluate(in graph: Graph, node: UInt32) -> Bool { fatalError("evaluate() called on a node that is not a rule") }
@@ -47,7 +49,7 @@
 /// A box holding a value of a known type.
 @usableFromInline class TypedNode<Value>: NodeBox {
     override func boxedValue() -> Any? { value }
-    override var layoutOfValue: (size: Int, alignment: Int) { (MemoryLayout<Value>.size, MemoryLayout<Value>.alignment) }
+    override var layoutOfValue: (size: Int, alignment: Int) { nativeBodyLayout(of: Value.self) }
     // Release builds skip the dynamic exclusivity check on the value, read on every attribute read (see `Graph`).
     // Every access copies the value in or out; none stays open while user code runs.
     #if DEBUG && !SAG_UNCHECKED
@@ -96,7 +98,7 @@
 /// A leaf whose value is written from outside.
 @usableFromInline final class InputNode<Value>: TypedNode<Value> {
     override var bodyType: Any.Type { External<Value>.self }
-    override var layoutOfBody: (size: Int, alignment: Int) { nativeBodyLayout(of: Value.self) }
+    override var allocatesValueAtCreation: Bool { true }
 
     /// The body of an input is an `External<Value>`, which stores nothing; native lets `mutateBody(as: External<Value>.self)` run on it [O, `api8d`].
     override func mutateRuleBody<Target>(as type: Target.Type, _ body: (inout Target) -> Void) -> Bool {

@@ -78,7 +78,13 @@ public final class Graph {
     func pageOfNewNode(_ box: NodeBox, in subgraph: UInt32) -> UInt32 {
         let (size, alignment) = box.layoutOfBody
         let mask = max(alignment, 1) - 1
-        return subgraphs.allocateInZone(of: subgraph, size: ((28 + mask) & ~mask) + size, alignment: alignment)
+        let page = subgraphs.allocateInZone(of: subgraph, size: ((28 + mask) & ~mask) + size, alignment: alignment)
+        if box.allocatesValueAtCreation {
+            // An input: its value follows the node, aligned to the value; it may start another page (oracle `ver25`, inputs of 24, 32 and 64 bytes).
+            let value = box.layoutOfValue
+            _ = subgraphs.allocateInZone(of: subgraph, size: value.size, alignment: value.alignment)
+        }
+        return page
     }
 
     /// Runs `body` with `context` as the running stateful rule's context, restoring the previous one afterwards.

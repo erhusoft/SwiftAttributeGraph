@@ -632,4 +632,18 @@ import Testing
         #expect(firstPageCapacity { Body12Bytes() } == 12)
         #expect(firstPageCapacity { Body136() } == 12)
     }
+
+    private struct Pad24 { var a: UInt64 = 0, b: UInt64 = 0, c: UInt64 = 0 }
+    private struct Pad32 { var a: UInt64 = 0, b: UInt64 = 0, c: UInt64 = 0, d: UInt64 = 0 }
+    private func firstPageCapacityOfInputs<V>(_ value: V) -> Int {
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let ids = (0..<40).map { _ in graph.withCurrent(sg) { Attribute(value: value) } }
+        return ids.filter { graph.table.pages[Int($0.id.index)] == graph.table.pages[Int(ids[0].id.index)] }.count
+    }
+
+    @Test func anInputTakesItsNodeAndThenItsValueAndTheNodeMayFitWhenTheValueDoesNot() { // ver25-page-sizes: Int 12, 24 bytes aligned 8 9, 32 bytes aligned 8 8
+        #expect(firstPageCapacityOfInputs(Int(0)) == 12)
+        #expect(firstPageCapacityOfInputs(Pad24()) == 9)
+        #expect(firstPageCapacityOfInputs(Pad32()) == 8)
+    }
 }
