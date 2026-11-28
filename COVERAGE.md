@@ -28,15 +28,14 @@ Every row below carries one of these evidence levels:
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 780 tests, including performance and stack-depth tests |
-| Public declarations of the native Swift interface (252 with a name, 12 operators aside) | **251 present** in the engine (9 of them, `hash` and `hashValue`, come from `Hashable`); `StatefulRule._updateDefault` is inherited from `_AttributeBody` |
-| Declarations mentioned by name in an oracle scenario | **210 of 252 (83.3 %)**, a lower bound (see the note below) |
+| Engine unit tests | 800 tests, including performance and stack-depth tests |
+| Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
-How the counts were made: the public declarations of the native Swift interface were extracted, the categories listed under
-[Out of scope](#out-of-scope) and `Graph.typeIndex` (not present in 15.8.3) were removed, and each remaining declaration was searched by
-container and name in the engine sources and in the probe scenarios. A name search cannot see generic names (`description`, `subscript`,
-`wrappedValue`) and cannot see measurements that live in unit tests, so the 83.3 % is a lower bound, and neither number says the behaviour
-matches. The per-row evidence levels below are the real statement.
+How the API count was made: a Swift file with one reference per function and property of the native Swift interface (with its argument labels) is
+compiled against the engine. An error saying the member does not exist is a gap; any other error (a generic parameter that cannot be inferred, an
+instance member used on its type) means the name resolves. Counting names in the sources does not work for `init`, `subscript` and common names such
+as `description`, and an earlier version of this page used it and claimed 251 of 252; that figure was wrong. Initializers and subscripts are not covered by this compile audit: initializers were checked one by one when the creation API was added (not re-run since), and the `cov79-a-*` oracle scenarios cover the subscripts. A reference that resolves says nothing
+about behaviour: the evidence levels below are the statement about behaviour.
 
 ## Parity by area
 
@@ -57,6 +56,8 @@ matches. The per-row evidence levels below are the real statement.
 | **`Attribute.unsafeOffset(at:as:)`, `AnyAttribute.unsafeOffset(at:)`** | Yes | **M** | The erased variant makes a typeless attribute and materialises the typed one when it is cast, once per type. |
 | **Tuples** (`TupleType`, `UnsafeTuple`, `UnsafeMutableTuple`, `withUnsafeTuple`) | Yes | **O** | Real Swift layout (alignment per element, no trailing padding); destruction releases the elements. |
 | **`Metadata.forEachField`, `withUnsafePointerToEnumCase`** | Yes | **O** for structs | See [Not measured](#not-measured-or-pending) for classes and enums. |
+| **Creation API** (`Attribute(value:)`, `Attribute(type:)`, `Attribute(_:)` for `Rule` and `StatefulRule`, `Attribute(identifier:)`, `WeakAttribute(base:)`) | Yes | **M** | Takes the graph from the current subgraph and stops the program without one, as native does (`attempting to create attribute with no subgraph`). |
+| **`Rule` and `StatefulRule` members** (`attribute`, `context`, `initialValue`, and for stateful rules `value`, `hasValue`, `updateValue()`), **`Subgraph.apply` and `forEach`**, **`mutateBody` and `addInput(_:options:token:)` on `Attribute` and `AnyAttribute`**, `AnyAttribute.current`, `description` of `AnyAttribute` and `AnyWeakAttribute`, `OptionalAttribute.changedValue(options:)` | Yes | **S** | Added from the native Swift interface after the compile audit found them missing. Covered by unit tests only; not compared with the native framework. `StatefulRule` follows the native shape: `updateValue()` takes no parameter and the rule reads `context`. The options and the token of `addInput` are accepted and ignored. |
 | **`Attribute.value` read outside a rule** | Yes | **O** | Evaluates, caches and records no dependency. Two scenarios abort natively and differ (see below). |
 | **`visitBody`, `mutateBody`, `breadthFirstSearch`** | Yes | **O** | |
 | **Documentation** | Yes | n/a | Every public declaration (519 at the time of writing) has a `///` comment. |
@@ -67,7 +68,7 @@ These are behaviours where the engine is known to differ. They are intentional u
 
 | # | Difference | Status |
 |---|---|---|
-| 1 | **Creating an attribute with no current subgraph** aborts natively (`attempting to create attribute with no subgraph`). On a graph whose current subgraph was never set or cleared, the engine creates it. | *Open.* |
+| 1 | **Creating an attribute with no current subgraph** aborts natively (`attempting to create attribute with no subgraph`). The Apple spellings (`Attribute(value:)` and the others) abort too, but the graph-level methods (`Graph.makeInput` and similar) still create the attribute. | *Open* for the graph-level methods. |
 | 2 | **Reading an attribute whose subgraph was invalidated, outside a rule,** crashes natively (a segmentation fault, effectively undefined behaviour). The engine stops with a message. | Intentional. |
 | 3 | **`Graph.outputValue` and `setOutputValue` outside an update** crash natively with no message. The engine stops with `no attribute updating`. | Intentional. |
 | 4 | **`cachedValueIfExists` on a subgraph that never cached a rule of that type** crashes natively (the native code calls a missing closure). The engine returns `nil`. | Intentional. |
@@ -108,7 +109,7 @@ updates, and the performance work behind the benchmarks in the README. They are 
 ## Out of scope
 
 - **Debug, tracing, profiling, archiving and tree recording** (`startProfiling`, `archiveJSON`, `beginTreeElement` and similar).
-- **`Graph.typeIndex`** and 22 other symbols that appear in the Swift interface and header set used for the probe but **do not exist in
+- **`Graph.typeIndex`**, the profiling functions (`startProfiling`, `stopProfiling`, `resetProfile`), `archiveJSON` and the tree-recording functions are the 11 references of the compile audit that do not resolve. `Graph.typeIndex` and 22 other symbols that appear in the Swift interface and header set used for the probe but **do not exist in
   macOS 15.8.3**. The interface came from a newer SDK. Each was checked against the system library of the reference machine. The C functions are
   `AGGraphCreateIndirectAttribute3`, `AGGraphSetIndirectAttribute2`, `AGGraphExternalMallocZone`, `AGGraphVMRegionMallocZone`,
   `AGMallocZoneGetCurrentSwiftMetadata`, `AGOverrideEqualityForTypeDescriptor` and `AGSubgraphMove`; the Swift ones include the `_External` type.
