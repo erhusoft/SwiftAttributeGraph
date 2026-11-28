@@ -81,16 +81,14 @@ These are behaviours where the engine is known to differ. They are intentional u
 
 ## Not measured or pending
 
-- **Deferral of invalidations while a main-thread handler is installed:** measured (`ver11a`, `ver12a`) and implemented (level **M**): everything asked for
-  inside the body of `withMainThreadHandler`, also inside a nested `withoutSubgraphInvalidation`, waits for the next `forEach`, update or invalidation and
-  is not delivered when the body ends. Whether other operations than `forEach` deliver it right after the body (an external invalidation, `update`) was not
-  separated: the scenario probed `forEach` first.
+- **Deferral of invalidations while a main-thread handler is installed:** measured and re-run on both sides (`ver11a`, `ver12a`, `ver13b1` to `ver13b4`,
+  level **O**): everything asked for inside the body of `withMainThreadHandler`, also inside a nested `withoutSubgraphInvalidation` or a nested handler,
+  waits and is not delivered when the body ends. An external invalidation, `update(flags:)` and `forEach` deliver it; reading a trivial rule does not.
 - **Where `Subgraph.update`, `withoutInvalidating` and a context invalidation deliver** is known from the native code; only `forEach` was measured on
   both sides.
-- **`Metadata.forEachField`:** measured for structs, classes (`enumerateClassFields`), enums (`enumerateEnumCases`: payload cases numbered by their
-  position, generic payloads resolved), tuples, closure and existential fields (`ver11d`, `ver12d`) and implemented (level **M**); the default options on
-  a class or an enum give no field and `false`. The free function lists only struct fields. Not found: a field type that makes the walk stop, so
-  `continueAfterUnknownField` has no observed effect.
+- **`Metadata.forEachField`:** measured and re-run on both sides (`ver11d`, `ver12d`, `ver13b6`, `ver13b7`, level **O**) for structs, classes, enums (payload
+  cases numbered by position, no-payload cases skipped, generic, nested and indirect payloads), tuples, closure and existential fields. Not found: a
+  field type that makes the walk stop, so `continueAfterUnknownField` has no observed effect.
 - **`Rule.cachedValue` options.** The five option bits showed no observable effect on values or evaluation counts in any scenario, so the engine
   accepts and ignores them. Whether they matter in other situations (for example while an update is running, on edge flags) is unknown.
   A hash collision with a different body pointer in `_cachedValue` was not measured either.
