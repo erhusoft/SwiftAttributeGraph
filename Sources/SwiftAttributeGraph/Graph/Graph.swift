@@ -316,16 +316,19 @@ public final class Graph {
         guard isValid(subgraph), flags.rawValue != 0 else { return }
         // Native `Subgraph::apply` (the C function behind `forEach`) defers the invalidations asked for inside the callback and delivers
         // them, most recent first, when it ends (oracle scenarios `fup-e1`, `fup-c`; the Swift `Subgraph.apply(_:)` does not).
+        // With no attribute whose flags intersect, native leaves at once and delivers nothing (oracle scenario `ver6c`).
+        var visitedAny = false
         deferringSubgraphInvalidationDepth += 1
         defer {
             deferringSubgraphInvalidationDepth -= 1
-            if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+            if visitedAny && evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
         }
         for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
             let members = subgraphs.members[Int(sgIndex)]
             for member in members.reversed() where table.isLive(index: member) {
                 let m = Int(member)
                 if (table.flags[m] & flags.rawValue) != 0 {
+                    visitedAny = true
                     body(AnyAttribute(id: AttributeID(index: member, generation: table.generations[m])))
                 }
             }

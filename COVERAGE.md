@@ -28,7 +28,7 @@ Every row below carries one of these evidence levels:
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 805 tests, including performance and stack-depth tests |
+| Engine unit tests | 806 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
 How the API count was made: a Swift file with one reference per function and property of the native Swift interface (with its argument labels) is
@@ -83,6 +83,8 @@ These are behaviours where the engine is known to differ. They are intentional u
 - **Deferral of invalidations while a main-thread handler is installed.** Reading the native code, they are deferred and delivered afterwards. The
   engine does not defer them in that case, and it was not measured. (Inside a `forEach` callback they are deferred and delivered most recent first
   when it ends: measured in `fup-e1` and implemented, level **M**.)
+- **`forEach` with flags no attribute matches** delivers no pending invalidation natively (`ver6c`); the engine does the same now (**M**). Whether
+  an attribute with the flag in a *child* subgraph counts for that cut was not measured; the engine counts descendants.
 - **Where `Subgraph.update`, `withoutInvalidating` and a context invalidation deliver** is known from the native code; only `forEach` was measured on
   both sides.
 - **`Metadata.forEachField` outside structs.** Classes, enums and the option `continueAfterUnknownField` are implemented but were never compared

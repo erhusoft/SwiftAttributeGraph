@@ -175,6 +175,8 @@ import Testing
         let graph = Graph(); let sg = graph.makeSubgraph(); let child = graph.makeSubgraph()
         var observed = 0
         _ = child.addObserver { observed += 1 }
+        let flagged = graph.withCurrent(sg) { Attribute(value: 1) }
+        flagged.flags = AnyAttribute.Flags(rawValue: 1)
         _ = sg.apply { graph.value(of: Attribute(Invalidates(child: child))) }
         #expect(observed == 0)
         sg.forEach(AnyAttribute.Flags(rawValue: 1)) { _ in }
@@ -188,5 +190,19 @@ import Testing
         a.mutateBody(as: External<Int>.self, invalidating: true) { _ in ran = true }
         #expect(ran)
         #expect(graph.value(of: a) == 10)
+    }
+
+    @Test func forEachWithNoMatchingFlagsDeliversNoPendingInvalidation() { // ver6c: obs=[0, 0]
+        struct Invalidates: Rule {
+            let child: Subgraph
+            var value: Int { child.invalidate(); return 1 }
+        }
+        let graph = Graph(); let sg = graph.makeSubgraph(); let child = graph.makeSubgraph()
+        var observed = 0
+        _ = child.addObserver { observed += 1 }
+        let r = graph.withCurrent(sg) { Attribute(Invalidates(child: child)) }
+        _ = graph.value(of: r)
+        sg.forEach(AnyAttribute.Flags(rawValue: 8)) { _ in }
+        #expect(observed == 0)
     }
 }
