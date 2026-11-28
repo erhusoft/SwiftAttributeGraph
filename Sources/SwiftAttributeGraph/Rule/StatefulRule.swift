@@ -20,3 +20,12 @@ extension StatefulRule {
     /// No initial value by default: the first run must write one.
     public static var initialValue: Value? { nil }
 }
+
+extension StatefulRule {
+    /// Runs ``updateValue(_:)`` on the rule stored at `pointer`, with a context for `attribute` (`StatefulRule._update(_:attribute:)` in
+    /// native AttributeGraph). What the rule writes to the context becomes the value of `attribute`.
+    public static func _update(_ pointer: UnsafeMutableRawPointer, attribute: AnyAttribute) {
+        var context = RuleContext<Value>(attribute: attribute.unsafeCast(to: Value.self))
+        pointer.assumingMemoryBound(to: Self.self).pointee.updateValue(&context)
+    }
+}

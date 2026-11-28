@@ -44,6 +44,9 @@ public struct Attribute<Value>: Hashable, Sendable {
 
 /// A handle to an attribute whose value type is not known at the use site.
 public struct AnyAttribute: Hashable, Sendable {
+    /// The flags of an attribute, as native names them (`AnyAttribute.Flags`).
+    public typealias Flags = AttributeFlags
+
     /// The ID of the attribute inside its graph.
     public let id: AttributeID
 
@@ -65,6 +68,7 @@ extension AnyAttribute {
     /// AttributeGraph). The caller is responsible for the type matching the stored value.
     @inlinable
     public func unsafeCast<Value>(to _: Value.Type) -> Attribute<Value> {
-        Attribute<Value>(id: id)
+        if erasedOffsetsMade != 0, let made = castOfErasedOffset(to: Value.self) { return Attribute<Value>(id: made) }
+        return Attribute<Value>(id: id)
     }
 }

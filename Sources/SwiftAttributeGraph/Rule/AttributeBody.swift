@@ -65,3 +65,7 @@ public protocol AttributeBodyVisitor {
     /// Visits the typed attribute body stored in memory.
     mutating func visit<Body: _AttributeBody>(body: UnsafePointer<Body>)
 }
+
+/// The type of the closure that builds the body of an attribute: it returns the function that updates the attribute from its body pointer
+/// (`AttributeUpdateBlock` in native AttributeGraph; the `update` of ``Rule/_cachedValue(options:owner:hashValue:bodyPtr:update:)``).
+public typealias AttributeUpdateBlock = () -> (UnsafeMutableRawPointer, AnyAttribute) -> Void
