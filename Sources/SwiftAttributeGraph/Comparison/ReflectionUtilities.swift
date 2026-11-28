@@ -172,9 +172,6 @@ public func withUnsafeMutablePointerToEnumCase<A>(
 }
 
 
-@_silgen_name("swift_getTypeByMangledNameInContext")
-private func typeByMangledName(_ name: UnsafePointer<UInt8>?, _ length: Int, _ context: UnsafeRawPointer?,
-                               _ genericArgs: UnsafePointer<UnsafeRawPointer?>?) -> Any.Type?
 
 /// Calls `body` with the name, position among the payload cases and payload type of each case of the enum `type` that carries a payload, in
 /// declaration order (`AGTypeApplyEnumData`-style enumeration, `Metadata.forEachField(options: .enumerateEnumCases)`;
@@ -203,7 +200,7 @@ func forEachEnumPayloadCase(of type: Any.Type, do body: (UnsafePointer<CChar>, I
             length += 1
             if byte >= 0x01 && byte <= 0x17 { length += 4 } else if byte >= 0x18 && byte <= 0x1F { length += 8 }
         }
-        guard let payload = typeByMangledName(mangled, length, descriptor, genericArguments) else { return false }
+        guard let payload = _getTypeByMangledNameInContext(mangled, UInt(length), genericContext: descriptor, genericArguments: UnsafeRawPointer(genericArguments)) else { return false }
         if !body(namePointer, payloadIndex, payload) { return false }
         payloadIndex += 1
     }
