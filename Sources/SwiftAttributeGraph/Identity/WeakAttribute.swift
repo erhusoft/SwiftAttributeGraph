@@ -11,6 +11,11 @@ public struct WeakAttribute<Value>: Hashable, Sendable {
         self.id = nil
     }
 
+    /// Creates a weak attribute from its erased form (`WeakAttribute.init(base:)` in native AttributeGraph).
+    public init(base: AnyWeakAttribute) {
+        self.id = base.id
+    }
+
     /// Creates a weak reference to `attribute`.
     public init(_ attribute: Attribute<Value>) {
         self.id = attribute.id
