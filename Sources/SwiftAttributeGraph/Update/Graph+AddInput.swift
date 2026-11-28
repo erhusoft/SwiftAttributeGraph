@@ -20,6 +20,9 @@ extension Graph {
             subgraphs.context(of: table.owner(at: attribute1.id.index)) ==
                 subgraphs.context(of: table.owner(at: attribute2.id.index)),
             "attribute references can't cross graph namespaces")
+        // An edge that already exists is left as it is: adding it again reads nothing, so the version the rule saw must not move (fuzzer seed
+        // 19905: the rule would have kept a stale value).
+        if table.inputs[Int(attribute1.id.index)].contains(where: { $0.source == attribute2.id.index }) { return }
         recordRead(of: attribute2.id.index, by: attribute1.id.index)
     }
 }

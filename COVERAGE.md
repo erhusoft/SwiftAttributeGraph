@@ -28,7 +28,7 @@ Every row below carries one of these evidence levels:
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 823 tests, including performance and stack-depth tests |
+| Engine unit tests | 825 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
 How the API count was made: a Swift file with one reference per function and property of the native Swift interface (with its argument labels) is
@@ -63,6 +63,7 @@ about behaviour: the evidence levels below are the statement about behaviour.
 | **Writing an attribute that has an input** | Yes | **M** | Native stops in `value_set` when a value attribute was given an input with `addInput` and is then written (`ver14b3b`); the engine now stops too. Adding the input alone, and writing the source of a rule, are fine in both (`ver14b3a` to `ver14b3d`). |
 | **`Subgraph.forEach` and the order of visit** | Yes | **M** | Measured in `ver15a` and `ver15b`: a flag mask matches when it shares at least one bit with the attribute's flags, in `intersects`, `forEach` and `update` alike (same on both sides). Native visits the attributes of a subgraph in the reverse of the order their flags were set (not of their creation); the engine now does. Setting the flags of an attribute that already has some, or changing them, keeps its place; clearing them and setting them again moves it to the front (`ver16a`, same on both sides). `forEach` does not go down into a child that lives in another context, nor into what is below it, although `intersects` counts it (`ver16`, seed 5022, and the decompiled `Subgraph::apply` of 15.8.3, which pushes the children only of the subgraphs it processes). |
 | **`Subgraph.update(flags:)` delivery** | Yes | **M** | Native delivers the pending invalidations after each subgraph the walk processes, not only at the end (decompiled `Subgraph::update` of 15.8.3; fuzzer seed 4083). Implemented; the update walk of the engine is still not the stack walk of native, and the context rule of `forEach` was not checked for `update`. |
+| **`addInput` on inputs and on existing edges** | Yes | **M** | Found by the full-graph fuzzer (seeds 1419 and 19905). An input keeps the edges `addInput` gave it when it is brought up to date, so writing it still stops the program (`ver14b3b`); adding an edge that already exists moves nothing, so the rule still runs again after its input changed. Implemented from the fuzzer traces; not isolated in an oracle scenario yet. |
 | **`Subgraph.apply(_:)`** | Yes | **M** | Makes the subgraph current and delivers no pending invalidation when it ends (`fup-c`). Invalidations asked for inside a rule wait for the next `forEach`, update or invalidation. |
 | **`Attribute.value` read outside a rule** | Yes | **O** | Evaluates, caches and records no dependency. Two scenarios abort natively and differ (see below). |
 | **`visitBody`, `mutateBody`, `breadthFirstSearch`** | Yes | **O** | |

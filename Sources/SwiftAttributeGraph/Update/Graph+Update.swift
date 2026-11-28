@@ -729,7 +729,8 @@ extension Graph {
             return
         }
 
-        pruneEdges(of: node)
+        // An input has no rule that reads: the edges `addInput` gave it stay (fuzzer seed 1419: writing it still stops the program, as native does).
+        if table.state[n] & NodeState.isRule != 0 { pruneEdges(of: node) }
         table.state[n] = (table.state[n] & ~(NodeState.dirty | NodeState.evaluating | NodeState.pending | NodeState.selfModified))
             | NodeState.hasValue
         if changed {

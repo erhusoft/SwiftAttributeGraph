@@ -454,4 +454,28 @@ import Testing
         s0.update(flags: AnyAttribute.Flags(rawValue: 2))
         #expect(events == ["pending", "s0"])
     }
+
+    @Test func anInputKeepsTheEdgesAddInputGaveItAfterItIsReadOnceDirty() async { // fuzzer seed 1419
+        await #expect(processExitsWith: .failure) {
+            struct Adds: Rule { var amount: Int; var value: Int { amount } }
+            let graph = Graph(); let sg = graph.makeSubgraph()
+            let rule = graph.withCurrent(sg) { Attribute(Adds(amount: 1)) }
+            let input = graph.withCurrent(sg) { Attribute(value: 9) }
+            input.addInput(rule.erased)
+            rule.mutateBody(as: Adds.self, invalidating: true) { $0.amount = 2 }   // the input becomes dirty through its edge
+            _ = graph.value(of: input)                                              // reading it brings it up to date
+            graph.setValue(12, for: input)                                          // native stops: it still has an input
+        }
+    }
+
+    @Test func addingAnInputThatIsAlreadyOneKeepsTheRuleStaleUntilItRunsAgain() { // fuzzer seed 19905
+        struct Copy: Rule { let a: Attribute<Int>; var value: Int { a.value } }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let source = graph.withCurrent(sg) { Attribute(value: 13) }
+        let rule = graph.withCurrent(sg) { Attribute(Copy(a: source)) }
+        #expect(graph.value(of: rule) == 13)
+        graph.setValue(3, for: source)
+        rule.addInput(source.erased)                // already an input: nothing is read
+        #expect(graph.value(of: rule) == 3)
+    }
 }
