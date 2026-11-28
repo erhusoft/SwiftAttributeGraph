@@ -176,7 +176,7 @@ public func withUnsafeMutablePointerToEnumCase<A>(
 private func typeByMangledName(_ name: UnsafePointer<UInt8>?, _ length: Int, _ context: UnsafeRawPointer?,
                                _ genericArgs: UnsafePointer<UnsafeRawPointer?>?) -> Any.Type?
 
-/// Calls `body` with the name, offset (zero) and payload type of each case of the enum `type` that carries a payload, in
+/// Calls `body` with the name, position among the payload cases and payload type of each case of the enum `type` that carries a payload, in
 /// declaration order (`AGTypeApplyEnumData`-style enumeration, `Metadata.forEachField(options: .enumerateEnumCases)`;
 /// native lists `payload@0:Int` for `enum { case payload(Int); case empty }`, oracle scenario `ver11d3`). Returns `false` when
 /// `body` stopped it or a payload type could not be resolved.
@@ -186,6 +186,8 @@ func forEachEnumPayloadCase(of type: Any.Type, do body: (UnsafePointer<CChar>, I
     let fieldsOffset = descriptor.advanced(by: 16).assumingMemoryBound(to: Int32.self).pointee
     let fields = descriptor.advanced(by: 16 + Int(fieldsOffset))
     let count = Int(fields.advanced(by: 12).assumingMemoryBound(to: UInt32.self).pointee)
+    let genericArguments = meta.advanced(by: 16).assumingMemoryBound(to: UnsafeRawPointer?.self)
+    var payloadIndex = 0               // the number native prints after `@` is the position among the payload cases (`ver12d2`)
     for index in 0..<count {
         let record = fields.advanced(by: 16 + index * 12)
         let typeField = record.advanced(by: 4)
@@ -201,8 +203,9 @@ func forEachEnumPayloadCase(of type: Any.Type, do body: (UnsafePointer<CChar>, I
             length += 1
             if byte >= 0x01 && byte <= 0x17 { length += 4 } else if byte >= 0x18 && byte <= 0x1F { length += 8 }
         }
-        guard let payload = typeByMangledName(mangled, length, descriptor, nil) else { return false }
-        if !body(namePointer, 0, payload) { return false }
+        guard let payload = typeByMangledName(mangled, length, descriptor, genericArguments) else { return false }
+        if !body(namePointer, payloadIndex, payload) { return false }
+        payloadIndex += 1
     }
     return true
 }

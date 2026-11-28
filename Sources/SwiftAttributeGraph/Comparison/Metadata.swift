@@ -42,11 +42,15 @@ public struct Metadata: Hashable, CustomStringConvertible, @unchecked Sendable {
         options: ApplyOptions,
         do body: (UnsafePointer<Int8>, Int, Any.Type) -> Bool
     ) -> Bool {
+        // Each kind needs its own option: without it native gives no field and returns `false` (`ver11d4`, `ver12d1`).
         switch MetadataKind(of: type) {
         case .tuple:
-            return false           // native gives no field and reports failure for a tuple (`ver11d4`)
-        case .enumeration where options.contains(.enumerateEnumCases), .optional where options.contains(.enumerateEnumCases):
+            return false
+        case .enumeration, .optional:
+            guard options.contains(.enumerateEnumCases) else { return false }
             return forEachEnumPayloadCase(of: type, do: body)
+        case .class:
+            guard options.contains(.enumerateClassFields) else { return false }
         default:
             break
         }

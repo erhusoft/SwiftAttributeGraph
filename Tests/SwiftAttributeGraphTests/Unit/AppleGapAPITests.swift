@@ -308,4 +308,34 @@ import Testing
         #expect(tuple.0.isEmpty)
         #expect(!tuple.1)
     }
+
+    enum FieldsMulti { case first(Int); case second(String); case none }
+    enum FieldsGeneric<T> { case a(T); case b }
+
+    @Test func enumCasesNumberThePayloadCasesAndResolveGenericPayloads() { // ver12d2
+        #expect(names(FieldsMulti.self, .enumerateEnumCases).0 == ["first@0:Int", "second@1:String"])
+        let generic = names(FieldsGeneric<Int>.self, .enumerateEnumCases)
+        #expect(generic.0 == ["a@0:Int"])
+        #expect(generic.1)
+    }
+
+    @Test func defaultOptionsOnAClassOrAnEnumGiveNothingAndFail() { // ver12d1
+        let cls = names(FieldsSub.self, [])
+        #expect(cls.0.isEmpty)
+        #expect(!cls.1)
+        let en = names(FieldsEnum.self, [])
+        #expect(en.0.isEmpty)
+        #expect(!en.1)
+    }
+
+    @Test func invalidationsAskedInsideAMainThreadHandlerBodyWaitForTheNextForEach() { // ver12a1
+        let graph = Graph(); let s = graph.makeSubgraph(); let child = graph.makeSubgraph()
+        _ = flagged(graph, in: s)
+        var observed = 0
+        _ = child.addObserver { observed += 1 }
+        graph.withMainThreadHandler({ $0() }) { child.invalidate() }
+        #expect(observed == 0)
+        s.forEach(AnyAttribute.Flags(rawValue: 0x08)) { _ in }
+        #expect(observed == 1)
+    }
 }

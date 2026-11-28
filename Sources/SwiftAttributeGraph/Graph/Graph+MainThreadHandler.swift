@@ -19,7 +19,13 @@ extension Graph {
         withoutActuallyEscaping(handler) { handler in
             let previous = mainThreadHandler
             mainThreadHandler = handler
-            defer { mainThreadHandler = previous }
+            // While a handler is installed native defers every invalidation asked for inside the body and delivers none when the body
+            // ends: the next explicit `forEach`, update or invalidation does (oracle scenarios `ver12a1`, `ver12a3`, `ver12a4`).
+            deferringSubgraphInvalidationDepth += 1
+            defer {
+                deferringSubgraphInvalidationDepth -= 1
+                mainThreadHandler = previous
+            }
             body()
         }
     }
