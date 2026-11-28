@@ -27,7 +27,7 @@ Every row below carries one of these evidence levels:
 | Measure | Result |
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
-| Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
+| Differential fuzzer of the whole graph (subgraphs, attributes, rules, flags, invalidations, deferrals; 2 contexts) | **0 differences in 20,000 sequences of 40 operations** (debug and release), 2 in the next 30,000 (0.007 %), 2 in 5,000 sequences of 80 operations; four defective older engines are detected in 32 to 46 % of the sequences. The older fuzzer of subgraphs alone had 0 differences in 55,000. See the fuzzer notes below |
 | Engine unit tests | 827 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
@@ -36,6 +36,10 @@ compiled against the engine. An error saying the member does not exist is a gap;
 instance member used on its type) means the name resolves. Counting names in the sources does not work for `init`, `subscript` and common names such
 as `description`, and an earlier version of this page used it and claimed 251 of 252; that figure was wrong. Initializers and subscripts are not covered by this compile audit: initializers were checked one by one when the creation API was added (not re-run since), and the `cov79-a-*` oracle scenarios cover the subscripts. A reference that resolves says nothing
 about behaviour: the evidence levels below are the statement about behaviour.
+
+## Fuzzer notes
+
+The full-graph fuzzer (`GraphFuzzer.swift` of the probe, run by Gemini and audited here) generates deterministic sequences from a seed, runs them on native and on the engine, and compares the whole trace; an abort counts as the same result when it happens in the same operation. It keeps away from the behaviours accepted as differences (reading an attribute of an invalidated subgraph, writing an attribute that was given an input). What it does not generate: indirect and offset attributes, values other than integers, resumable rules, cancellation, reflection, and the cached values. Three sequences of the 50,000 still differ and have not been isolated (the number of evaluations after `addInput` in seed 1995, the subgraph a new rule is created in after a pending invalidation in seed 24432, and the two `forEach` orders above).
 
 ## Parity by area
 
@@ -86,6 +90,7 @@ These are behaviours where the engine is known to differ. They are intentional u
 | 9 | **Reading, from a live rule, an attribute whose subgraph was invalidated** stops the program in the engine. Native stops, crashes (`SIGBUS`, `SIGSEGV`) or reports a false cycle in nine scenarios built for it (`ver17a0` to `ver17a9`), and returns `0` only for a rule with no inputs; the fuzzer found sequences where it returns `0` or the previous value. What it does depends on what is left in the freed slot: undefined behaviour. | Intentional. |
 | 10 | **Order of the notices when pending invalidations and handle drops mix in a tree with shared children** (`ver15c2` to `ver15c5`, `ver16c1` to `ver16c4`). Cause found for the diamond (`ver16c2`): the engine rearranged the children at the moment of the request, and native only does it when it delivers it (`invalidate_and_delete_` and `invalidate_now` of 15.8.3). Fixed and covered by a unit test; the other three cases have not been re-run on both sides. | *Open* until re-run. |
 | 11 | **Writing an attribute that was given an input with `addInput`**: native stops with `can only set initial value of computed attributes`, except in two sequences (`ver19a4`, `ver19a12`: the source changed and the attribute was read from inside another rule before). The engine stops in all of them. The condition natively depends on internal node fields not decoded; the case is rare (nothing writes an attribute it gave an input). | Accepted. |
+| 12 | **Order of `forEach` when the attributes of a subgraph take more than one native page**: native pages hold 12 attributes when nothing else is allocated, but input edges and other records take room in the same pages, so with rules that have inputs the page boundaries move (fuzzer seeds 4863, 37437). The engine counts 12 attributes per page. | Accepted: exact for subgraphs of up to 12 attributes and for plain attributes. |
 
 ## Not measured or pending
 
