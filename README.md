@@ -177,7 +177,7 @@ private framework, so it is a development tool and is not part of this package; 
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026 Jonathan Anderson and the SwiftAttributeGraph project authors.
+Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026 erhusoft and the SwiftAttributeGraph project authors.
 
 You may use, modify and redistribute this software, including in commercial products, provided that you keep the copyright
 notices and the [NOTICE](NOTICE) file, state the changes you made to modified files, and include a copy of the license. Contributions
