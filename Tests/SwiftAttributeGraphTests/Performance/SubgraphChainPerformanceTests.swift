@@ -83,7 +83,8 @@ import Testing
         // 2. Cost scaling across 1,000, 5,000, and 20,000 siblings must be linear, not O(N^2) (~297 ms in release before fix).
         var times: [Int: Double] = [:]
         for count in [1_000, 5_000, 20_000] {
-            times[count] = invalidateSiblings(count)
+            // The best of three: a load spike (the whole suite running at once) must not look like a quadratic cost.
+            times[count] = (0..<3).map { _ in invalidateSiblings(count) }.min()!
             print("PERF invalidate \(count) siblings: \(times[count]!) ms")
         }
         #if !DEBUG

@@ -26,9 +26,9 @@ Every row below carries one of these evidence levels:
 
 | Measure | Result |
 |---|---|
-| Oracle scenarios (209) | **206 identical**, 3 differ (listed below); stable over 3 repeats, debug and release |
+| Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 777 tests, including performance and stack-depth tests |
+| Engine unit tests | 780 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface (252 with a name, 12 operators aside) | **251 present** in the engine (9 of them, `hash` and `hashValue`, come from `Hashable`); `StatefulRule._updateDefault` is inherited from `_AttributeBody` |
 | Declarations mentioned by name in an oracle scenario | **210 of 252 (83.3 %)**, a lower bound (see the note below) |
 
@@ -42,7 +42,7 @@ matches. The per-row evidence levels below are the real statement.
 
 | Area | Implemented | Evidence | Notes |
 |---|---|---|---|
-| **Subgraph lifetime, hierarchy and invalidation order** (create, link, unlink, release of the last handle, shared children, children in other contexts, tags, parents, observers) | Yes | **O** | Hundreds of observations in the scenarios plus the fuzzer. Releasing the last handle invalidates the subgraph, as natively. Three scenarios differ (see below). |
+| **Subgraph lifetime, hierarchy and invalidation order** (create, link, unlink, release of the last handle, shared children, children in other contexts, tags, parents, observers) | Yes | **O** | Hundreds of observations in the scenarios plus the fuzzer. Releasing the last handle invalidates the subgraph, as natively. Invalidations a rule asks for are delivered where native delivers them: not when the read ends, but in the next explicit update, invalidation, `forEach`, end of a deferral or invalidation of a context, most recent request first. |
 | **Graph contexts** (shared contexts, context ids, update and invalidation callbacks, needs-update state) | Yes | **O** | |
 | **Reads, writes, dirty and pending state, version cuts, prefetch, transactions, deadline, cooperative cancellation, diamonds** | Yes | **O** | |
 | **Cold dependency chains** (first evaluation of a deep chain) | Yes | **O**, plus engine depth tests | The engine adds a stack-budget guard and resumable rules, which have no native counterpart (see [Engine-only features](#engine-only-features)). |
@@ -67,17 +67,19 @@ These are behaviours where the engine is known to differ. They are intentional u
 
 | # | Difference | Status |
 |---|---|---|
-| 1 | **Invalidations requested inside a rule are delivered to observers differently.** Natively they are delivered on the next update, in reverse order; the engine delivers them during the read. Three oracle scenarios differ (`invalidate-graph-list-order`, `invalidate-graph-list-live`, `invalidate-freeing-timing`) and two more agree on order but not on timing. | *Open.* Planned as a later phase. |
-| 2 | **Creating an attribute with no current subgraph** aborts natively (`attempting to create attribute with no subgraph`). On a graph whose current subgraph was never set or cleared, the engine creates it. | *Open.* |
-| 3 | **Reading an attribute whose subgraph was invalidated, outside a rule,** crashes natively (a segmentation fault, effectively undefined behaviour). The engine stops with a message. | Intentional. |
-| 4 | **`Graph.outputValue` and `setOutputValue` outside an update** crash natively with no message. The engine stops with `no attribute updating`. | Intentional. |
-| 5 | **`cachedValueIfExists` on a subgraph that never cached a rule of that type** crashes natively (the native code calls a missing closure). The engine returns `nil`. | Intentional. |
-| 6 | **A handler for `withMainThreadHandler` that runs its closure twice** crashes natively. The engine does not guard against it. A handler that never runs it stops the program in both. | Intentional. |
-| 7 | **Recycling a cache entry** reuses the node natively; the engine frees it and makes a fresh one. Values and the number of evaluations agree; only the attribute identity differs. | Intentional, observable only through identifiers. |
-| 8 | **Casting an erased offset attribute** returns another identifier than the erased attribute. Natively the identifier was not compared. | Not measured. |
+| 1 | **Creating an attribute with no current subgraph** aborts natively (`attempting to create attribute with no subgraph`). On a graph whose current subgraph was never set or cleared, the engine creates it. | *Open.* |
+| 2 | **Reading an attribute whose subgraph was invalidated, outside a rule,** crashes natively (a segmentation fault, effectively undefined behaviour). The engine stops with a message. | Intentional. |
+| 3 | **`Graph.outputValue` and `setOutputValue` outside an update** crash natively with no message. The engine stops with `no attribute updating`. | Intentional. |
+| 4 | **`cachedValueIfExists` on a subgraph that never cached a rule of that type** crashes natively (the native code calls a missing closure). The engine returns `nil`. | Intentional. |
+| 5 | **A handler for `withMainThreadHandler` that runs its closure twice** crashes natively. The engine does not guard against it. A handler that never runs it stops the program in both. | Intentional. |
+| 6 | **Recycling a cache entry** reuses the node natively; the engine frees it and makes a fresh one. Values and the number of evaluations agree; only the attribute identity differs. | Intentional, observable only through identifiers. |
+| 7 | **Casting an erased offset attribute** returns another identifier than the erased attribute. Natively the identifier was not compared. | Not measured. |
 
 ## Not measured or pending
 
+- **Deferral of invalidations in two more situations.** Reading the native code, invalidations requested inside a `forEach` callback and while a
+  main-thread handler is installed are also deferred and delivered afterwards. The engine does not defer them in those two cases (it does deliver at
+  the end of `forEach`), and neither was measured against the framework.
 - **`Metadata.forEachField` outside structs.** Classes, enums and the option `continueAfterUnknownField` are implemented but were never compared
   with the native framework.
 - **`Rule.cachedValue` options.** The five option bits showed no observable effect on values or evaluation counts in any scenario, so the engine
