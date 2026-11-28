@@ -167,8 +167,20 @@ private framework, so it is a development tool and is not part of this package; 
 
 ## SDK Integration
 
-`SwiftAttributeGraph` is the foundation layer of the open-source declarative UI SDK:
+`SwiftAttributeGraph` is the foundation layer of the declarative UI SDK:
 
 1. **`AttributeGraph`** (This project): Reactive computation DAG, change detection, and memory isolation.
 2. **`SwiftUICore`**: Pure declarative types (`View`, `State`, `Binding`, `Environment`, `Layout`).
 3. **`SwiftUI`**: High-level controls, scenes, and windowing backends (Direct2D/Win32 on Windows).
+
+---
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026 Jonathan Anderson and the SwiftAttributeGraph project authors.
+
+You may use, modify and redistribute this software, including in commercial products, provided that you keep the copyright
+notices and the [NOTICE](NOTICE) file, state the changes you made to modified files, and include a copy of the license. Contributions
+are welcome under the same license with a `Signed-off-by` line; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+This project is independent of Apple Inc. Apple, macOS, Swift, SwiftUI and AttributeGraph are trademarks of Apple Inc.

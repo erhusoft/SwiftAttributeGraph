@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the SwiftAttributeGraph open source project
-//
-// Copyright (c) 2026 Jonathan Anderson and the SwiftAttributeGraph project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See https://swift.org/LICENSE.txt for license information
-//
-//===----------------------------------------------------------------------===//
-
 import Testing
 @testable import SwiftAttributeGraph
 
