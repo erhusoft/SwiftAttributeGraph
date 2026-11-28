@@ -34,15 +34,24 @@ public struct Metadata: Hashable, CustomStringConvertible, @unchecked Sendable {
     /// Calls `body` with the name, byte offset and type of each stored field, stopping early when it returns `false`
     /// (`Metadata.forEachField(options:do:)` in native AttributeGraph). Returns `true` if every field was visited.
     ///
-    /// Verified against native only for a struct with the default options (oracle scenario
-    /// `cov79-e-metadata-for-each-field`). The class, enum and unknown-field options are accepted but not measured yet.
+    /// Verified against native for a struct with the default options (`cov79-e-metadata-for-each-field`), for a class with
+    /// `enumerateClassFields` (`ver11d1`, `ver11d2`), for the payload cases of an enum with `enumerateEnumCases` (`ver11d3`) and for a
+    /// tuple, which gives no field and returns `false` (`ver11d4`). The unknown-field option is accepted and was not found to change anything.
     @discardableResult
     public func forEachField(
         options: ApplyOptions,
         do body: (UnsafePointer<Int8>, Int, Any.Type) -> Bool
     ) -> Bool {
+        switch MetadataKind(of: type) {
+        case .tuple:
+            return false           // native gives no field and reports failure for a tuple (`ver11d4`)
+        case .enumeration where options.contains(.enumerateEnumCases), .optional where options.contains(.enumerateEnumCases):
+            return forEachEnumPayloadCase(of: type, do: body)
+        default:
+            break
+        }
         var completed = true
-        forEachStoredField(of: type) { name, offset, fieldType in
+        forEachRuntimeField(of: type) { name, offset, fieldType in
             guard completed else { return }
             if !body(name, offset, fieldType) { completed = false }
         }

@@ -23,6 +23,33 @@ public func forEachField(
     of type: Any.Type,
     do body: (UnsafePointer<CChar>, Int, Any.Type) -> Void
 ) {
+    // Native lists only the fields of a struct here: a class, an enum and a tuple give nothing [O, `ver11d1` to `ver11d4`].
+    guard MetadataKind(of: type) == .structure else { return }
+    forEachRuntimeField(of: type, do: body)
+}
+
+/// The kind of a type's metadata, read from its first word.
+enum MetadataKind {
+    case structure, enumeration, optional, tuple, `class`, other
+
+    init(of type: Any.Type) {
+        let word = unsafeBitCast(type, to: UnsafePointer<Int>.self).pointee
+        switch word {
+        case 0x200: self = .structure
+        case 0x201: self = .enumeration
+        case 0x202: self = .optional
+        case 0x301: self = .tuple
+        case let w where w > 0x7FF: self = .class
+        default: self = .other
+        }
+    }
+}
+
+/// The fields the runtime reports for `type`, in declaration order (a class lists those of its superclasses first).
+func forEachRuntimeField(
+    of type: Any.Type,
+    do body: (UnsafePointer<CChar>, Int, Any.Type) -> Void
+) {
     let count = recursiveChildCount(type)
     for i in 0..<count {
         var metadata = FieldReflectionMetadata()
@@ -141,5 +168,41 @@ public func withUnsafeMutablePointerToEnumCase<A>(
     }
 
     body(tag, payloadType, payloadPtr)
+    return true
+}
+
+
+@_silgen_name("swift_getTypeByMangledNameInContext")
+private func typeByMangledName(_ name: UnsafePointer<UInt8>?, _ length: Int, _ context: UnsafeRawPointer?,
+                               _ genericArgs: UnsafePointer<UnsafeRawPointer?>?) -> Any.Type?
+
+/// Calls `body` with the name, offset (zero) and payload type of each case of the enum `type` that carries a payload, in
+/// declaration order (`AGTypeApplyEnumData`-style enumeration, `Metadata.forEachField(options: .enumerateEnumCases)`;
+/// native lists `payload@0:Int` for `enum { case payload(Int); case empty }`, oracle scenario `ver11d3`). Returns `false` when
+/// `body` stopped it or a payload type could not be resolved.
+func forEachEnumPayloadCase(of type: Any.Type, do body: (UnsafePointer<CChar>, Int, Any.Type) -> Bool) -> Bool {
+    let meta = unsafeBitCast(type, to: UnsafeRawPointer.self)
+    let descriptor = meta.advanced(by: 8).assumingMemoryBound(to: UnsafeRawPointer.self).pointee
+    let fieldsOffset = descriptor.advanced(by: 16).assumingMemoryBound(to: Int32.self).pointee
+    let fields = descriptor.advanced(by: 16 + Int(fieldsOffset))
+    let count = Int(fields.advanced(by: 12).assumingMemoryBound(to: UInt32.self).pointee)
+    for index in 0..<count {
+        let record = fields.advanced(by: 16 + index * 12)
+        let typeField = record.advanced(by: 4)
+        let typeOffset = typeField.assumingMemoryBound(to: Int32.self).pointee
+        guard typeOffset != 0 else { continue }                       // a case without payload
+        let nameField = record.advanced(by: 8)
+        let nameOffset = nameField.assumingMemoryBound(to: Int32.self).pointee
+        let namePointer = nameField.advanced(by: Int(nameOffset)).assumingMemoryBound(to: CChar.self)
+        let mangled = typeField.advanced(by: Int(typeOffset)).assumingMemoryBound(to: UInt8.self)
+        var length = 0
+        while mangled[length] != 0 {
+            let byte = mangled[length]
+            length += 1
+            if byte >= 0x01 && byte <= 0x17 { length += 4 } else if byte >= 0x18 && byte <= 0x1F { length += 8 }
+        }
+        guard let payload = typeByMangledName(mangled, length, descriptor, nil) else { return false }
+        if !body(namePointer, 0, payload) { return false }
+    }
     return true
 }

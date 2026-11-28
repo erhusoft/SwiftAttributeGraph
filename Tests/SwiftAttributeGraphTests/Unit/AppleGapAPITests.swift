@@ -270,4 +270,42 @@ import Testing
         s.forEach(AnyAttribute.Flags(rawValue: 0x08)) { _ in }
         #expect(observed == 1)
     }
+
+    class FieldsBase { var base = 1 }
+    final class FieldsSub: FieldsBase { var sub = 2.0 }
+    enum FieldsEnum { case payload(Int); case empty }
+    struct FieldsStruct { var a = 1; var b = "x" }
+
+    private func names(_ type: Any.Type, _ options: Metadata.ApplyOptions) -> ([String], Bool) {
+        var out: [String] = []
+        let ok = Metadata(type).forEachField(options: options) { name, offset, fieldType in
+            out.append("\(String(cString: name))@\(offset):\(fieldType)"); return true
+        }
+        return (out, ok)
+    }
+
+    @Test func theFreeFunctionListsOnlyTheFieldsOfAStruct() { // ver11d1 to ver11d6
+        func collect(_ type: Any.Type) -> [String] {
+            var free: [String] = []
+            forEachField(of: type) { name, _, _ in free.append(String(cString: name)) }
+            return free
+        }
+        #expect(collect(FieldsStruct.self) == ["a", "b"])
+        #expect(collect(FieldsSub.self).isEmpty)
+        #expect(collect(FieldsEnum.self).isEmpty)
+        #expect(collect((Int, String).self).isEmpty)
+        #expect(collect(Optional<Int>.self).isEmpty)
+    }
+
+    @Test func metadataFieldsOfAClassAnEnumAndATuple() { // ver11d1 to ver11d4
+        let cls = names(FieldsSub.self, .enumerateClassFields)
+        #expect(cls.0 == ["base@16:Int", "sub@24:Double"])
+        #expect(cls.1)
+        let en = names(FieldsEnum.self, .enumerateEnumCases)
+        #expect(en.0 == ["payload@0:Int"])
+        #expect(en.1)
+        let tuple = names((Int, String).self, [])
+        #expect(tuple.0.isEmpty)
+        #expect(!tuple.1)
+    }
 }

@@ -28,7 +28,7 @@ Every row below carries one of these evidence levels:
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 810 tests, including performance and stack-depth tests |
+| Engine unit tests | 812 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
 How the API count was made: a Swift file with one reference per function and property of the native Swift interface (with its argument labels) is
@@ -81,13 +81,16 @@ These are behaviours where the engine is known to differ. They are intentional u
 
 ## Not measured or pending
 
-- **Deferral of invalidations while a main-thread handler is installed.** Reading the native code, they are deferred and delivered afterwards. The
-  engine does not defer them in that case, and it was not measured. (Inside a `forEach` callback they are deferred and delivered most recent first
+- **Deferral of invalidations while a main-thread handler is installed.** Measured (`ver11a2`, `ver11a4`): an invalidation asked for directly inside
+  `withMainThreadHandler`'s body is not delivered, neither inside nor when the body ends; the engine delivers it at once. Where native delivers it
+  was not measured, so the engine was not changed. A rule read inside the body behaves as without the handler (`ver11a1`). (Inside a `forEach` callback they are deferred and delivered most recent first
   when it ends: measured in `fup-e1` and implemented, level **M**.)
 - **Where `Subgraph.update`, `withoutInvalidating` and a context invalidation deliver** is known from the native code; only `forEach` was measured on
   both sides.
-- **`Metadata.forEachField` outside structs.** Classes, enums and the option `continueAfterUnknownField` are implemented but were never compared
-  with the native framework.
+- **`Metadata.forEachField`:** measured for structs, classes with `enumerateClassFields`, the payload cases of an enum with `enumerateEnumCases`
+  and tuples (`ver11d1` to `ver11d7`), and the free function `forEachField(of:)`, which lists only the fields of a struct. Implemented from those
+  measurements (level **M**). Not measured: the default options on a class or an enum, an unknown field that stops the walk (the existential tried
+  did not), and enums with several payload cases or generic payloads.
 - **`Rule.cachedValue` options.** The five option bits showed no observable effect on values or evaluation counts in any scenario, so the engine
   accepts and ignores them. Whether they matter in other situations (for example while an update is running, on edge flags) is unknown.
   A hash collision with a different body pointer in `_cachedValue` was not measured either.
