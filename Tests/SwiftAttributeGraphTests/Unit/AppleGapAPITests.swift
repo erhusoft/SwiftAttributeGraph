@@ -550,4 +550,25 @@ import Testing
         #expect(counterR.runs == 1)
         #expect(counterS.runs == 0)               // s2 was asked to be invalidated: its attribute is not evaluated for the reader
     }
+
+    @Test func aRuleThatHasNotRunCanBeGivenAValueAndStillRuns() { // matrix A, action setValue on a rule: native keeps running it
+        struct Seven: Rule { let counter: Counter; var value: Int { counter.runs += 1; return 7 } }
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let counter = Counter()
+        let rule = graph.withCurrent(sg) { Attribute(Seven(counter: counter)) }
+        graph.setValue(77, for: rule)
+        #expect(graph.value(of: rule) == 7)
+        #expect(counter.runs == 1)
+    }
+
+    @Test func aRuleThatAlreadyReadSomethingCannotBeWritten() async { // native: can only set initial value of computed attributes
+        await #expect(processExitsWith: .failure) {
+            struct Copy: Rule { let a: Attribute<Int>; var value: Int { a.value } }
+            let graph = Graph(); let sg = graph.makeSubgraph()
+            let source = graph.withCurrent(sg) { Attribute(value: 1) }
+            let rule = graph.withCurrent(sg) { Attribute(Copy(a: source)) }
+            _ = graph.value(of: rule)
+            graph.setValue(77, for: rule)
+        }
+    }
 }

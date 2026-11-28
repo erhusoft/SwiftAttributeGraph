@@ -246,10 +246,12 @@ import Testing
         #expect(counter.runs == 2)
     }
 
-    @Test func writingToARuleStopsTheProgram() async {
+    @Test func writingToARuleThatAlreadyReadAnInputStopsTheProgram() async { // native: can only set initial value of computed attributes
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
-            let rule = graph.makeRule { 1 }
+            let input = graph.makeInput(1)
+            let rule = graph.makeRule { graph.value(of: input) }
+            _ = graph.value(of: rule)
             graph.setValue(2, for: rule)
         }
     }

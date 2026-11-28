@@ -86,10 +86,12 @@ import Testing
         #expect(graph.value(of: sum) == 23 && runs == 3)
     }
 
-    @Test func aWriteToARuleStillStopsTheProgram() async {
+    @Test func aWriteToARuleThatReadAnInputStillStopsTheProgram() async {
         await #expect(processExitsWith: .failure) {
             let graph = Graph()
-            let rule = graph.makeRule { Int64(1) }
+            let input = graph.makeInput(Int64(1))
+            let rule = graph.makeRule { graph.value(of: input) }
+            _ = graph.value(of: rule)
             graph.setValue(2, for: rule)
         }
     }

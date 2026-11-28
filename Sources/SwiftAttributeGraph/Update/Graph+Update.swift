@@ -506,11 +506,13 @@ extension Graph {
         precondition(evaluatingNode == Graph.noNode, "setting value during update: \(id.rawValue)")
         precondition(table.isLive(id), "setValue(_:for:): the attribute is dead (its subgraph was invalidated)")
         let index = Int(id.index)
-        precondition(table.state[index] & NodeState.isRule == 0, "setValue(_:for:): cannot write to a rule")
         if table.state[index] & NodeState.indirect != 0 || hasPartialEdgeComparison { return nil }
-        // Native stops in `value_set` when the attribute has had an input added (`ver14b3b`); an indirect attribute keeps an edge to its source and
-        // is written through it.
-        precondition(table.inputs[index].isEmpty, "setValue(_:for:): the attribute has inputs")
+        // Native `value_set` stops when the attribute has at least one input edge and already has a value (`can only set initial value of computed
+        // attributes`, decompiled 15.8.3; `ver14b3b`, matrix A of the oracle). So an input that was given an edge cannot be written, a rule
+        // that has not run can (it keeps running on its next read), and a rule that read something cannot. An indirect attribute keeps an edge to
+        // its source and is written through it.
+        precondition(table.inputs[index].isEmpty || table.state[index] & NodeState.hasValue == 0,
+                     "setValue(_:for:): can only set initial value of computed attributes")
         return table.box(at: id.index)
     }
 
@@ -520,6 +522,8 @@ extension Graph {
     func endWrite(_ node: UInt32) {
         let index = Int(node)
         markFirstValue(of: index)
+        // A rule that was given its initial value still runs on its next read, and its result replaces that value (matrix A: `ecDst=1`).
+        if table.state[index] & NodeState.isRule != 0 { table.state[index] |= NodeState.dirty | NodeState.pending }
         globalVersion &+= 1
         changeCount &+= 1
         table.versions[index] &+= 1
