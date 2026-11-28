@@ -530,4 +530,24 @@ import Testing
         graph.setValue(99, for: input)
         #expect(graph.value(of: reader) == 99)
     }
+
+    @Test func anInputInASubgraphThatWaitsToBeInvalidatedIsNotBroughtUpToDate() { // fuzzer seeds 76354, 127117
+        struct ReadsThenInvalidates: Rule {
+            let target: Subgraph, other: Attribute<Int>
+            var value: Int { target.invalidate(); return other.value }
+        }
+        struct Counted: Rule {
+            let counter: Counter
+            var value: Int { counter.runs += 1; return 1 }
+        }
+        let graph = Graph(); let s1 = graph.makeSubgraph(), s2 = graph.makeSubgraph()
+        let counterS = Counter(), counterR = Counter()
+        let source = graph.withCurrent(s2) { Attribute(Counted(counter: counterS)) }       // never evaluated, in s2
+        let reader = graph.withCurrent(s1) { Attribute(Counted(counter: counterR)) }
+        reader.addInput(source.erased)
+        let outer = graph.withCurrent(s1) { Attribute(ReadsThenInvalidates(target: s2, other: reader)) }
+        _ = graph.value(of: outer)
+        #expect(counterR.runs == 1)
+        #expect(counterS.runs == 0)               // s2 was asked to be invalidated: its attribute is not evaluated for the reader
+    }
 }

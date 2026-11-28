@@ -608,8 +608,16 @@ extension Graph {
             // Common case: no partial edge comparator on this node and no offset attribute in the graph, so any changed
             // version means "must run" and the scan needs no dictionary lookup.
             if offsetIndirects.isEmpty && (edgeComparators.isEmpty || edgeComparators[node] == nil) {
-                let scan = table.scanInputs(of: n, from: i)
+                var scan = table.scanInputs(of: n, from: i)
                 if scan.changed { mustRun = true }
+                // Native `UpdateStack::update` does not bring up to date an input whose subgraph waits to be invalidated: it counts it as
+                // changed and goes on (fuzzer seeds 76354, 127117; decompiled 15.8.3).
+                while scan.stop < table.inputs[n].count,
+                      subgraphs.isFalling(index: table.owner(at: table.inputs[n][scan.stop].source)) {
+                    mustRun = true
+                    scan = table.scanInputs(of: n, from: scan.stop + 1)
+                    if scan.changed { mustRun = true }
+                }
                 if scan.stop < table.inputs[n].count {
                     frames[top].next = Int32(scan.stop)
                     frames[top].inputChanged = mustRun
@@ -621,6 +629,11 @@ extension Graph {
                     let edge = table.inputs[n][i]
                     let source = Int(edge.source)
                     if table.state[source] & NodeState.dirty != 0 {
+                        if subgraphs.isFalling(index: table.owner(at: edge.source)) {
+                            mustRun = true
+                            i += 1
+                            continue
+                        }
                         frames[top].next = Int32(i)
                         frames[top].inputChanged = mustRun
                         push(edge.source)
