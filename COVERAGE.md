@@ -28,7 +28,7 @@ Every row below carries one of these evidence levels:
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 806 tests, including performance and stack-depth tests |
+| Engine unit tests | 810 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
 How the API count was made: a Swift file with one reference per function and property of the native Swift interface (with its argument labels) is
@@ -58,6 +58,7 @@ about behaviour: the evidence levels below are the statement about behaviour.
 | **`Metadata.forEachField`, `withUnsafePointerToEnumCase`** | Yes | **O** for structs | See [Not measured](#not-measured-or-pending) for classes and enums. |
 | **Creation API** (`Attribute(value:)`, `Attribute(type:)`, `Attribute(_:)` for `Rule` and `StatefulRule`, `Attribute(identifier:)`, `WeakAttribute(base:)`) | Yes | **M** | Takes the graph from the current subgraph and stops the program without one, as native does (`attempting to create attribute with no subgraph`). |
 | **`Rule` and `StatefulRule` members** (`attribute`, `context`, `initialValue`, and for stateful rules `value`, `hasValue`, `updateValue()`), **`Subgraph.forEach`**, **`mutateBody` and `addInput(_:options:token:)` on `Attribute` and `AnyAttribute`**, `AnyAttribute.current`, `description` of `AnyAttribute` and `AnyWeakAttribute`, `OptionalAttribute.changedValue(options:)` | Yes | **O** | Round `api17` and its follow-up: the same scenarios ran on both sides with identical output, except the `valueState` raw numbers (native 83 and 88, engine 1 and 8: a different encoding, not compared). `StatefulRule.initialValue` is not visible inside `updateValue()`, as natively (`hasValue` is false on the first run and reading `value` stops the program), and `mutateBody(as: External<Value>.self)` runs on a value attribute. After these three differences were found the engine was changed and covered by unit tests; those scenarios were not re-run on both sides (**M**). `addInput` options and token showed no effect on the number of evaluations; the order of the inputs was not measured. |
+| **`Subgraph.intersects(flags:)` and the cut of `forEach`** | Yes | **M** | Native reads a summary of flags per subgraph that only grows: it includes the descendants, it is not reduced by clearing a flag, unlinking a child or the death of a child, and a child that waits to be invalidated still answers `true` while one that was invalidated answers `false` (its parents keep the bit). `forEach` leaves at once when the summary does not intersect and otherwise delivers the pending invalidations at its end even if it visits nothing. Measured in `ver6c` to `ver9g`, then implemented; not re-run on both sides. Unmeasured: whether anything ever clears the summary (an update, a long-lived graph). |
 | **`Subgraph.apply(_:)`** | Yes | **M** | Makes the subgraph current and delivers no pending invalidation when it ends (`fup-c`). Invalidations asked for inside a rule wait for the next `forEach`, update or invalidation. |
 | **`Attribute.value` read outside a rule** | Yes | **O** | Evaluates, caches and records no dependency. Two scenarios abort natively and differ (see below). |
 | **`visitBody`, `mutateBody`, `breadthFirstSearch`** | Yes | **O** | |
@@ -83,8 +84,6 @@ These are behaviours where the engine is known to differ. They are intentional u
 - **Deferral of invalidations while a main-thread handler is installed.** Reading the native code, they are deferred and delivered afterwards. The
   engine does not defer them in that case, and it was not measured. (Inside a `forEach` callback they are deferred and delivered most recent first
   when it ends: measured in `fup-e1` and implemented, level **M**.)
-- **`forEach` with flags no attribute matches** delivers no pending invalidation natively (`ver6c`); the engine does the same now (**M**). Whether
-  an attribute with the flag in a *child* subgraph counts for that cut was not measured; the engine counts descendants.
 - **Where `Subgraph.update`, `withoutInvalidating` and a context invalidation deliver** is known from the native code; only `forEach` was measured on
   both sides.
 - **`Metadata.forEachField` outside structs.** Classes, enums and the option `continueAfterUnknownField` are implemented but were never compared

@@ -205,4 +205,69 @@ import Testing
         sg.forEach(AnyAttribute.Flags(rawValue: 8)) { _ in }
         #expect(observed == 0)
     }
+
+    struct InvalidatesOther: Rule {
+        let other: Subgraph
+        var value: Int { other.invalidate(); return 1 }
+    }
+    private func flagged(_ graph: Graph, in sg: Subgraph, _ raw: UInt8 = 0x08) -> Attribute<Int> {
+        let a = graph.withCurrent(sg) { Attribute(value: 1) }
+        a.flags = AnyAttribute.Flags(rawValue: raw)
+        return a
+    }
+
+    @Test func theSummaryOfFlagsIncludesTheDescendantsAndSurvivesClearingUnlinkingAndRemoval() { // ver8c, ver8d, ver8e, ver9a, ver9d, ver9e
+        let graph = Graph(); let s = graph.makeSubgraph(); let child = graph.makeSubgraph(); let grand = graph.makeSubgraph()
+        s.addChild(child); child.addChild(grand)
+        let a = flagged(graph, in: grand)
+        let b = flagged(graph, in: grand, 0x10)
+        let f = AnyAttribute.Flags(rawValue: 0x08), g = AnyAttribute.Flags(rawValue: 0x10)
+        #expect(s.intersects(flags: f) && child.intersects(flags: f) && grand.intersects(flags: f))
+        a.flags = []                                         // clearing does not reduce it
+        #expect(s.intersects(flags: f) && s.intersects(flags: g))
+        s.removeChild(child)                                 // unlinking does not reduce it
+        #expect(s.intersects(flags: f))
+        _ = b
+    }
+
+    @Test func aLinkedChildMarkedBeforeOrAfterEntersTheSummaryOfItsParent() { // ver8e1, ver8e2
+        let graph = Graph(); let s1 = graph.makeSubgraph(); let c1 = graph.makeSubgraph()
+        let s2 = graph.makeSubgraph(); let c2 = graph.makeSubgraph()
+        _ = flagged(graph, in: c1)
+        s1.addChild(c1)
+        s2.addChild(c2)
+        _ = flagged(graph, in: c2)
+        #expect(s1.intersects(flags: AnyAttribute.Flags(rawValue: 0x08)))
+        #expect(s2.intersects(flags: AnyAttribute.Flags(rawValue: 0x08)))
+    }
+
+    @Test func aChildThatWaitsToBeInvalidatedStillIntersectsAndOneThatDiedDoesNot() { // ver8g, ver9c, ver9f
+        let graph = Graph(); let s = graph.makeSubgraph(); var child: Subgraph? = graph.makeSubgraph()
+        s.addChild(child!)
+        let a = flagged(graph, in: child!)
+        let f = AnyAttribute.Flags(rawValue: 0x08)
+        var observed = 0
+        let other = graph.makeSubgraph()
+        _ = other.addObserver { observed += 1 }
+        let r = graph.withCurrent(s) { Attribute(InvalidatesOther(other: child!)) }
+        _ = graph.value(of: r)                               // child is asked to die inside a rule: it is pending
+        #expect(s.intersects(flags: f) && child!.intersects(flags: f))
+        s.forEach(f) { _ in }                                // delivered here
+        #expect(s.intersects(flags: f))
+        #expect(!child!.intersects(flags: f))
+        _ = (a, observed); child = nil
+    }
+
+    @Test func forEachDeliversEvenWhenNoAttributeIsVisitedIfTheSummaryIntersects() { // ver8c
+        let graph = Graph(); let s = graph.makeSubgraph(); let child = graph.makeSubgraph(); let other = graph.makeSubgraph()
+        s.addChild(child)
+        _ = flagged(graph, in: child)
+        var observed = 0
+        _ = other.addObserver { observed += 1 }
+        let r = graph.withCurrent(s) { Attribute(InvalidatesOther(other: other)) }
+        _ = graph.value(of: r)
+        s.removeChild(child)
+        s.forEach(AnyAttribute.Flags(rawValue: 0x08)) { _ in }
+        #expect(observed == 1)
+    }
 }

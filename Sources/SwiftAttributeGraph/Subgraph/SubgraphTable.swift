@@ -32,6 +32,10 @@ struct SubgraphTable {
     private var falling: [Bool] = []
     var dirtyOwnFlags: [UInt8] = []
     var dirtyDescendantFlags: [UInt8] = []
+    /// The attribute flags a subgraph and its descendants have ever carried (what `Subgraph.intersects(flags:)` and the cut of `forEach` read).
+    /// It only grows: native does not shrink it when a flag is cleared, when a child is unlinked or when a child dies (oracle scenarios
+    /// `ver8c`, `ver9a`, `ver9b`, `ver9d`, `ver9e`, `ver9f`); a child's flags enter its parents when it is linked and when it is marked.
+    private(set) var flagSummary: [UInt8] = []
     private var visitedEpoch: [UInt32] = []
     private var currentEpoch: UInt32 = 0
     private var freeList: [UInt32] = []
@@ -63,6 +67,7 @@ struct SubgraphTable {
             falling.append(false)
             dirtyOwnFlags.append(0)
             dirtyDescendantFlags.append(0)
+            flagSummary.append(0)
             visitedEpoch.append(0)
             index = UInt32(generations.count - 1)
         }
@@ -185,6 +190,20 @@ struct SubgraphTable {
         if rawTags[p] != nil { rawTags[p]!.append(tag & 0x3) }
         parents[c].append(parent)
         positionInParents[c].append(pos)
+        addFlagSummary(flagSummary[c], on: parent)
+    }
+
+    /// Adds `flags` to the summary of `sgIndex` and of every ancestor.
+    mutating func addFlagSummary(_ flags: UInt8, on sgIndex: UInt32) {
+        guard flags != 0 else { return }
+        var queue = [sgIndex]
+        var head = 0
+        while head < queue.count {
+            let i = Int(queue[head]); head += 1
+            if (flagSummary[i] & flags) == flags { continue }
+            flagSummary[i] |= flags
+            queue.append(contentsOf: parents[i])
+        }
     }
 
     /// Unlinks `child` from `parent` without invalidating `child`. Native `AG::Subgraph::remove_child` moves the last child
@@ -341,6 +360,7 @@ struct SubgraphTable {
         let generation = generations[i]
         dirtyOwnFlags[i] = 0
         dirtyDescendantFlags[i] = 0
+        flagSummary[i] = 0
         if generation & 0xFFFF != 0xFFFF {
             generations[i] = generation + 1
             freeList.append(index)

@@ -281,22 +281,20 @@ public final class Graph {
         precondition(table.isLive(attribute.id), "setFlags(_:for:): the attribute is dead")
         let n = Int(attribute.id.index)
         table.flags[n] = flags.rawValue
+        subgraphs.addFlagSummary(flags.rawValue, on: table.owner(at: attribute.id.index))
         if flags.rawValue != 0 && (table.state[n] & NodeState.dirty) != 0 {
             subgraphs.markDirtyFlags(flags.rawValue, on: table.owner(at: attribute.id.index))
         }
     }
 
-    /// Whether `subgraph` or any of its valid descendant subgraphs owns a live attribute whose flags intersect `flags`
-    /// (`Subgraph.intersects(flags:)` in native AttributeGraph).
+    /// Whether `subgraph` or any of its descendants has ever carried an attribute whose flags intersect `flags`
+    /// (`Subgraph.intersects(flags:)` in native AttributeGraph). Native reads a summary that only grows: clearing a flag, unlinking a child
+    /// or the death of a child does not reduce it, and a subgraph that waits to be invalidated still answers; one that was
+    /// invalidated answers `false` [O, `ver8g`, `ver9a` to `ver9f`].
     public func intersects(_ subgraph: Subgraph, flags: AttributeFlags) -> Bool {
         assertOwnThread()
-        guard isValid(subgraph), flags.rawValue != 0 else { return false }
-        for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
-            for member in subgraphs.members[Int(sgIndex)] where table.isLive(index: member) {
-                if (table.flags[Int(member)] & flags.rawValue) != 0 { return true }
-            }
-        }
-        return false
+        guard isLive(subgraph), flags.rawValue != 0 else { return false }
+        return (subgraphs.flagSummary[Int(subgraph.id.index)] & flags.rawValue) != 0
     }
 
     /// Whether `subgraph` or any of its valid descendant subgraphs owns a live **dirty** attribute whose flags
@@ -314,21 +312,21 @@ public final class Graph {
     public func forEach(in subgraph: Subgraph, flags: AttributeFlags, _ body: (AnyAttribute) -> Void) {
         assertOwnThread()
         guard isValid(subgraph), flags.rawValue != 0 else { return }
+        // When the summary of flags does not intersect, native leaves at once and delivers nothing (`ver6c`); when it does, it delivers
+        // at the end even if no attribute is visited (`ver8c`).
+        guard (subgraphs.flagSummary[Int(subgraph.id.index)] & flags.rawValue) != 0 else { return }
         // Native `Subgraph::apply` (the C function behind `forEach`) defers the invalidations asked for inside the callback and delivers
         // them, most recent first, when it ends (oracle scenarios `fup-e1`, `fup-c`; the Swift `Subgraph.apply(_:)` does not).
-        // With no attribute whose flags intersect, native leaves at once and delivers nothing (oracle scenario `ver6c`).
-        var visitedAny = false
         deferringSubgraphInvalidationDepth += 1
         defer {
             deferringSubgraphInvalidationDepth -= 1
-            if visitedAny && evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
+            if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
         }
         for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
             let members = subgraphs.members[Int(sgIndex)]
             for member in members.reversed() where table.isLive(index: member) {
                 let m = Int(member)
                 if (table.flags[m] & flags.rawValue) != 0 {
-                    visitedAny = true
                     body(AnyAttribute(id: AttributeID(index: member, generation: table.generations[m])))
                 }
             }
