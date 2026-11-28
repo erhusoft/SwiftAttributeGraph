@@ -27,7 +27,7 @@ A high-performance, zero-recursion reactive attribute graph engine written in pu
 | Native parity (oracle of 211 scenarios) | **All 211 identical** (debug and release, 3 repeats each) |
 | Differential fuzzer against the native framework | 0 differences in 55,000 random subgraph hierarchies |
 | Public API of the native Swift interface | Compile audit: 177 of the 188 function and property references of the native interface resolve; the other 11 are debug, profiling, tracing and tree recording, and `Graph.typeIndex`, which are out of scope. Every public declaration is documented. See [COVERAGE.md](COVERAGE.md) |
-| Unit tests | 818 (`swift test`), including stack-depth and performance tests |
+| Unit tests | 819 (`swift test`), including stack-depth and performance tests |
 | Still open or never measured | Listed in [COVERAGE.md](COVERAGE.md): creation with no current subgraph, deferral of invalidations during `forEach` and main-thread handlers, `Metadata.forEachField` outside structs, the effect of the `cachedValue` options, multi-thread main-thread handling, Windows |
 
 Parity is claimed per behaviour and per evidence level, not for the framework as a whole. Read [COVERAGE.md](COVERAGE.md) before relying on a

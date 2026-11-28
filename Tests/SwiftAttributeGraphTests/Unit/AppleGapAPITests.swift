@@ -376,4 +376,18 @@ import Testing
         sg.forEach(f) { order.append($0) }
         #expect(order == [3, 4, 1, 2, 0].map { attrs[$0].erased })
     }
+
+    @Test func forEachDoesNotVisitAChildThatLivesInAnotherContextButIntersectsCountsIt() { // seed 5022
+        let graph = Graph()
+        let other = graph.makeSubgraphContext()
+        let s0 = graph.makeSubgraph(context: other)
+        let s1 = graph.makeSubgraph(parent: s0, context: graph.makeSubgraphContext())
+        let a = graph.withCurrent(s1) { Attribute(value: 1) }
+        a.flags = AnyAttribute.Flags(rawValue: 2)
+        let mask = AnyAttribute.Flags(rawValue: 0x0A)
+        #expect(s0.intersects(flags: mask))
+        var visited: [AnyAttribute] = []
+        s0.forEach(mask) { visited.append($0) }
+        #expect(visited.isEmpty)
+    }
 }
