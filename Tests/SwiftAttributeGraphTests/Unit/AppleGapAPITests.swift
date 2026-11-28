@@ -366,4 +366,14 @@ import Testing
             graph.setValue(3, for: b)
         }
     }
+
+    @Test func forEachVisitsInTheReverseOfTheOrderTheFlagsWereSet() { // ver15b
+        let graph = Graph(); let sg = graph.makeSubgraph()
+        let attrs = (0..<5).map { _ in graph.withCurrent(sg) { Attribute(value: 0) } }
+        let f = AnyAttribute.Flags(rawValue: 1)
+        for i in [0, 2, 1, 4, 3] { attrs[i].flags = f }
+        var order: [AnyAttribute] = []
+        sg.forEach(f) { order.append($0) }
+        #expect(order == [3, 4, 1, 2, 0].map { attrs[$0].erased })
+    }
 }

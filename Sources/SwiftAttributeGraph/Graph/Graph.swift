@@ -69,6 +69,9 @@ public final class Graph {
     @exclusivity(unchecked) @usableFromInline var evaluatingNode: UInt32 = Graph.noNode
     /// The context of the ``StatefulRule`` whose `updateValue()` is running (what `StatefulRule.context` returns).
     var activeRuleContext: Any?
+    /// When each attribute that carries flags got them (the moment they went from none to some), which sets the order `forEach` visits them in.
+    var flagMarkSequence: [UInt32: UInt64] = [:]
+    var flagMarkCounter: UInt64 = 0
 
     /// Runs `body` with `context` as the running stateful rule's context, restoring the previous one afterwards.
     func withActiveContext<Value>(_ context: RuleContext<Value>, _ body: () -> Void) {
@@ -280,6 +283,10 @@ public final class Graph {
         assertOwnThread()
         precondition(table.isLive(attribute.id), "setFlags(_:for:): the attribute is dead")
         let n = Int(attribute.id.index)
+        if table.flags[n] == 0 && flags.rawValue != 0 {
+            flagMarkCounter &+= 1
+            flagMarkSequence[attribute.id.index] = flagMarkCounter
+        }
         table.flags[n] = flags.rawValue
         subgraphs.addFlagSummary(flags.rawValue, on: table.owner(at: attribute.id.index))
         if flags.rawValue != 0 && (table.state[n] & NodeState.dirty) != 0 {
@@ -323,12 +330,19 @@ public final class Graph {
             if evaluatingNode == Graph.noNode && !deferredInvalidations.isEmpty { flushDeferredInvalidations() }
         }
         for sgIndex in subgraphs.reverseCreationSubgraphOrder(from: subgraph.id.index) {
+            // Native visits the attributes of a subgraph in the reverse of the order their flags were set, not of their creation (`ver15b`).
             let members = subgraphs.members[Int(sgIndex)]
-            for member in members.reversed() where table.isLive(index: member) {
-                let m = Int(member)
-                if (table.flags[m] & flags.rawValue) != 0 {
-                    body(AnyAttribute(id: AttributeID(index: member, generation: table.generations[m])))
+            var matching: [(member: UInt32, sequence: UInt64, position: Int)] = []
+            for (position, member) in members.reversed().enumerated() where table.isLive(index: member) {
+                if (table.flags[Int(member)] & flags.rawValue) != 0 {
+                    matching.append((member, flagMarkSequence[member] ?? 0, position))
                 }
+            }
+            matching.sort { $0.sequence != $1.sequence ? $0.sequence > $1.sequence : $0.position < $1.position }
+            for entry in matching {
+                let m = Int(entry.member)
+                guard table.isLive(index: entry.member), (table.flags[m] & flags.rawValue) != 0 else { continue }
+                body(AnyAttribute(id: AttributeID(index: entry.member, generation: table.generations[m])))
             }
         }
     }

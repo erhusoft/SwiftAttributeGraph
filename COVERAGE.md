@@ -28,7 +28,7 @@ Every row below carries one of these evidence levels:
 |---|---|
 | Oracle scenarios (211) | **All 211 identical**; stable over 3 repeats, debug and release |
 | Differential fuzzer (random subgraph hierarchies, 2 to 3 contexts) | **0 differences in 55,000 sequences** against the native framework |
-| Engine unit tests | 817 tests, including performance and stack-depth tests |
+| Engine unit tests | 818 tests, including performance and stack-depth tests |
 | Public declarations of the native Swift interface | **Compile audit:** 177 of 188 function and property references resolve against the engine. The other 11 are out of scope (see [Out of scope](#out-of-scope)) |
 
 How the API count was made: a Swift file with one reference per function and property of the native Swift interface (with its argument labels) is
@@ -61,6 +61,7 @@ about behaviour: the evidence levels below are the statement about behaviour.
 | **`Subgraph.intersects(flags:)` and the cut of `forEach`** | Yes | **O** | Native reads a summary of flags per subgraph that only grows: it includes the descendants, it is not reduced by clearing a flag, unlinking a child or the death of a child, and a child that waits to be invalidated still answers `true` while one that was invalidated answers `false` (its parents keep the bit). `forEach` leaves at once when the summary does not intersect and otherwise delivers the pending invalidations at its end even if it visits nothing. Measured in `ver6c` to `ver9g`, implemented, and re-run on both sides in `ver6c` to `ver10f` (30 scenarios, debug and release, 3 repeats, identical). `Subgraph.update(flags:)` does not reduce the summary. A shared child unlinked from one parent leaves that parent's summary. A subgraph invalidated for real answers `false` and visits nothing. |
 | **Pending invalidations and `isValid`** | Yes | **M** | Found by the full-graph fuzzer. While an invalidation waits (inside a rule, a `forEach` callback, `withoutSubgraphInvalidation` or `withMainThreadHandler`), only the requested subgraph reads as invalid; its children stay valid until delivery (`ver14b1a` to `ver14b1d`). Dropping the handle of a pending subgraph delivers nothing; dropping the handle of one of its children delivers the pending request (`ver14b2`). Implemented from those measurements, not re-run on both sides. |
 | **Writing an attribute that has an input** | Yes | **M** | Native stops in `value_set` when a value attribute was given an input with `addInput` and is then written (`ver14b3b`); the engine now stops too. Adding the input alone, and writing the source of a rule, are fine in both (`ver14b3a` to `ver14b3d`). |
+| **`Subgraph.forEach` and the order of visit** | Yes | **M** | Measured in `ver15a` and `ver15b`: a flag mask matches when it shares at least one bit with the attribute's flags, in `intersects`, `forEach` and `update` alike (same on both sides). Native visits the attributes of a subgraph in the reverse of the order their flags were set (not of their creation); the engine now does. Unmeasured: whether setting the flags of an already flagged attribute, clearing and setting them again, or changing them, moves the attribute in that order. |
 | **`Subgraph.apply(_:)`** | Yes | **M** | Makes the subgraph current and delivers no pending invalidation when it ends (`fup-c`). Invalidations asked for inside a rule wait for the next `forEach`, update or invalidation. |
 | **`Attribute.value` read outside a rule** | Yes | **O** | Evaluates, caches and records no dependency. Two scenarios abort natively and differ (see below). |
 | **`visitBody`, `mutateBody`, `breadthFirstSearch`** | Yes | **O** | |
@@ -80,6 +81,7 @@ These are behaviours where the engine is known to differ. They are intentional u
 | 6 | **Recycling a cache entry** reuses the node natively; the engine frees it and makes a fresh one. Values and the number of evaluations agree; only the attribute identity differs. | Intentional, observable only through identifiers. |
 | 8 | **`Rule.attribute`, `Rule.context`, `StatefulRule.attribute` and `StatefulRule.context` read outside a rule** return a meaningless identifier natively (`#4235821056` in the runs, no abort). The engine stops with a message. | Intentional. |
 | 7 | **Casting an erased offset attribute** returns another identifier than the erased attribute. Natively the identifier was not compared. | Not measured. |
+| 9 | **Reading, from a live rule, an attribute whose subgraph was invalidated** stops the program in the engine. Native stops too in the scenarios built for it (`ver15d1a` to `ver15d1g`), but the fuzzer found sequences, with subgraphs in a second context, where native returns `0` or the previous value. The condition is not known. | *Open.* |
 
 ## Not measured or pending
 

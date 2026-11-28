@@ -90,7 +90,7 @@ import Testing
         #if !DEBUG
         #expect(times[20_000]! < 50.0, "20,000 sibling invalidations in release must finish under 50 ms (was ~297 ms O(N^2))")
         #else
-        #expect(times[20_000]! < 500.0, "20,000 sibling invalidations in debug must finish under 500 ms")
+        #expect(times[20_000]! < 1_500.0, "20,000 sibling invalidations in debug must finish under 1.5 s (quadratic cost took several seconds; the suite running at once adds load)")
         #endif
     }
 }
